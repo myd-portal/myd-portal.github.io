@@ -43,7 +43,7 @@ function certificateDateRange(from?: string, to?: string) {
 }
 
 const eventFontFamily = 'Cambria, "Times New Roman", serif';
-type CanvasTextRun = { text: string; bold?: boolean };
+type CanvasTextRun = { text: string; bold?: boolean; italic?: boolean };
 
 function wrapCanvasText(context: CanvasRenderingContext2D, text: string, width: number, size: number) {
   context.font = `${size}px ${eventFontFamily}`;
@@ -78,18 +78,18 @@ function wrapCanvasRuns(context: CanvasRenderingContext2D, runs: CanvasTextRun[]
   let lineWidth = 0;
   let pendingSpace = false;
   const currentLine = () => lines[lines.length - 1];
-  const append = (text: string, bold: boolean) => {
+  const append = (text: string, bold: boolean, italic: boolean) => {
     const line = currentLine();
     const previous = line[line.length - 1];
-    if (previous?.bold === bold) previous.text += text;
-    else line.push({ text, bold });
+    if (previous?.bold === bold && previous.italic === italic) previous.text += text;
+    else line.push({ text, bold, italic });
   };
-  const setFont = (bold: boolean) => {
-    context.font = `${bold ? "bold " : ""}${size}px ${eventFontFamily}`;
+  const setFont = (run: CanvasTextRun) => {
+    context.font = `${run.italic ? "italic " : ""}${run.bold ? "bold " : ""}${size}px ${eventFontFamily}`;
   };
 
   for (const run of runs) {
-    setFont(Boolean(run.bold));
+    setFont(run);
     for (const token of run.text.match(/\s+|\S+/g) ?? []) {
       if (/^\s+$/.test(token)) {
         pendingSpace = currentLine().length > 0;
@@ -103,12 +103,12 @@ function wrapCanvasRuns(context: CanvasRenderingContext2D, runs: CanvasTextRun[]
         lines.push([]);
         lineWidth = 0;
       } else if (space) {
-        append(space, Boolean(run.bold));
+        append(space, Boolean(run.bold), Boolean(run.italic));
         lineWidth += spaceWidth;
       }
 
       if (tokenWidth <= width) {
-        append(token, Boolean(run.bold));
+        append(token, Boolean(run.bold), Boolean(run.italic));
         lineWidth += tokenWidth;
         continue;
       }
@@ -119,7 +119,7 @@ function wrapCanvasRuns(context: CanvasRenderingContext2D, runs: CanvasTextRun[]
           lines.push([]);
           lineWidth = 0;
         }
-        append(character, Boolean(run.bold));
+        append(character, Boolean(run.bold), Boolean(run.italic));
         lineWidth += characterWidth;
       }
     }
@@ -131,6 +131,7 @@ async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, he
   await Promise.all([
     document.fonts.load(`${fontSize}px Cambria`),
     document.fonts.load(`bold ${fontSize}px Cambria`),
+    document.fonts.load(`italic bold ${fontSize}px Cambria`),
   ]);
   const scale = 4;
   const canvas = document.createElement("canvas");
@@ -145,7 +146,7 @@ async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, he
   context.textBaseline = "alphabetic";
   let x = 1;
   for (const run of runs) {
-    context.font = `${run.bold ? "bold " : ""}${fontSize}px ${eventFontFamily}`;
+    context.font = `${run.italic ? "italic " : ""}${run.bold ? "bold " : ""}${fontSize}px ${eventFontFamily}`;
     context.fillText(run.text, x, baseline);
     x += context.measureText(run.text).width;
   }
@@ -163,7 +164,7 @@ async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCe
   const dateRange = certificateDateRange(record.eventDateFrom, record.eventDateTo);
   const eventRuns: CanvasTextRun[] = [
     { text: "attended the “" },
-    ...(title ? [{ text: title, bold: true }] : []),
+    ...(title ? [{ text: title, bold: true, italic: true }] : []),
     ...(title ? [{ text: "”" }] : []),
     ...(destination ? [{ text: " held in " }, { text: destination, bold: true }] : []),
     ...(dateRange ? [{ text: " on " }, { text: dateRange, bold: true }] : []),
