@@ -75,6 +75,10 @@
   background: #f8f9f8;
 }
 
+.cleaning-task-photo.has-outdated-warning {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
 .cleaning-task-photo-heading {
   display: grid;
   min-height: 74px;
@@ -154,18 +158,16 @@
 }
 
 .cleaning-task-outdated {
-  position: absolute;
-  top: .9rem;
-  left: 1.1rem;
   display: flex;
   align-items: center;
   gap: .6rem;
-  padding: .55rem .75rem;
-  border-radius: 6px;
-  color: #fff;
-  background: #c9262d;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+  padding: .55rem .9rem;
+  border-bottom: 1px solid #f2cbc5;
+  color: #9e2927;
+  background: #fff0ed;
+  font-size: clamp(.75rem, .95vw, .9rem);
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .cleaning-task-outdated span {

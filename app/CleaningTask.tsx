@@ -328,11 +328,12 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
     <div className="cleaning-task-layout">
       <section className="cleaning-task-photos" aria-label="Latest cleaning task photos">
         {loading ? <p className="muted">Loading Cleaning Task posts...</p> : images.length === 0 ? <div className="cleaning-task-empty"><strong>No photos posted yet</strong><span>The first assigned team photo will appear here.</span></div> : images.map((image) => {
-          return <article className="cleaning-task-photo" key={image.id}>
+          const outdated = !loading && isCleaningTaskImageOutdated(image, assignments);
+          return <article className={`cleaning-task-photo${outdated ? " has-outdated-warning" : ""}`} key={image.id}>
             <header className="cleaning-task-photo-heading"><h3>Cleaning Task Photo Verification</h3></header>
+            {outdated && <div className="cleaning-task-outdated" role="status"><span aria-hidden="true">!</span> Means of Verification is outdated!</div>}
             <div className="cleaning-task-photo-visual">
               <img src={image.imageURL} alt={`Four-photo ${image.unit} Cleaning Task collage uploaded by ${image.uploaderName}`} loading="lazy" />
-              {!loading && isCleaningTaskImageOutdated(image, assignments) && <div className="cleaning-task-outdated" role="status"><span aria-hidden="true">!</span> Means of Verification is outdated!</div>}
             </div>
             <footer className="cleaning-task-photo-meta">
               <div><strong>Uploader:</strong><span>{image.uploaderName} - {image.unit}</span></div>
