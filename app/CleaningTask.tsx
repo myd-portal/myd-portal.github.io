@@ -328,7 +328,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
     <div className="cleaning-task-layout">
       <section className="cleaning-task-photos" aria-label="Latest cleaning task photos">
         {loading ? <p className="muted">Loading Cleaning Task posts...</p> : images.length === 0 ? <div className="cleaning-task-empty"><strong>No photos posted yet</strong><span>The first assigned team photo will appear here.</span></div> : images.map((image) => {
-          const outdated = !loading && isCleaningTaskImageOutdated(image, assignments);
+          const outdated = !loading && isCleaningTaskImageOutdated(image, currentWeekStart);
           return <article className={`cleaning-task-photo${outdated ? " has-outdated-warning" : ""}`} key={image.id}>
             <header className="cleaning-task-photo-heading"><h3>Cleaning Task Photo Verification</h3></header>
             {outdated && <div className="cleaning-task-outdated" role="status"><span aria-hidden="true">!</span> Means of Verification is outdated!</div>}
