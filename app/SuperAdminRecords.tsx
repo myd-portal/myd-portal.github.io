@@ -19,6 +19,7 @@ import { sendPasswordResetEmail, type User } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase";
 import { accountProfileSelection } from "@/lib/account-profile";
+import { tevDivisions } from "@/lib/mytev";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./super-admin-records.css";
@@ -54,7 +55,7 @@ type NtaBatch = {
 type NtaRecord = RecordBase & {
   mode?: "individual" | "batch" | "multiple"; to?: string; toUserId?: string; toUnit?: string;
   positionDesignation?: string; subject?: string; activityTitle?: string; organizer?: string;
-  signatoryName?: string; signatoryDesignation?: string; dateFrom?: string; dateTo?: string;
+  signatoryName?: string; signatoryDesignation?: string; signatoryDivision?: string; dateFrom?: string; dateTo?: string;
   timeFrom?: string; timeTo?: string; venueType?: "physical" | "virtual"; venue?: string; link?: string;
   batches?: NtaBatch[]; recipientIds?: string[]; ownerId?: string; ownerUnit?: string;
 };
@@ -382,14 +383,18 @@ function NtaManager() {
   const { records, loading, error, setError } = useAdminCollection<NtaRecord>("ntaRecords");
   const [editing, setEditing] = useState<NtaRecord | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NtaRecord | null>(null);
-  const [values, setValues] = useState({ mode: "individual" as "individual" | "batch" | "multiple", subject: "", activityTitle: "", organizer: "", dateFrom: "", dateTo: "", venueType: "physical" as "physical" | "virtual", venue: "", link: "", to: "", positionDesignation: "", toUnit: "", signatoryName: "", signatoryDesignation: "" });
+  const [values, setValues] = useState({ mode: "individual" as "individual" | "batch" | "multiple", subject: "", activityTitle: "", organizer: "", dateFrom: "", dateTo: "", venueType: "physical" as "physical" | "virtual", venue: "", link: "", to: "", positionDesignation: "", toUnit: "", signatoryName: "", signatoryPosition: "", signatoryDivision: "" });
   const [batches, setBatches] = useState<NtaBatch[]>([newNtaBatch()]);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
 
   function edit(record: NtaRecord) {
     const mode = record.mode ?? "individual";
-    setValues({ mode, subject: text(record.subject), activityTitle: text(record.activityTitle), organizer: text(record.organizer), dateFrom: text(record.dateFrom), dateTo: text(record.dateTo), venueType: record.venueType ?? "physical", venue: text(record.venue), link: text(record.link), to: text(record.to), positionDesignation: text(record.positionDesignation), toUnit: text(record.toUnit), signatoryName: text(record.signatoryName), signatoryDesignation: text(record.signatoryDesignation) });
+    const signatoryDesignation = text(record.signatoryDesignation);
+    const designationDivision = tevDivisions.find((division) => signatoryDesignation.endsWith(`, ${division}`)) ?? "";
+    const signatoryPosition = designationDivision ? signatoryDesignation.slice(0, -(designationDivision.length + 2)).trim() : signatoryDesignation;
+    const signatoryDivision = text(record.signatoryDivision) || designationDivision;
+    setValues({ mode, subject: text(record.subject), activityTitle: text(record.activityTitle), organizer: text(record.organizer), dateFrom: text(record.dateFrom), dateTo: text(record.dateTo), venueType: record.venueType ?? "physical", venue: text(record.venue), link: text(record.link), to: text(record.to), positionDesignation: text(record.positionDesignation), toUnit: text(record.toUnit), signatoryName: text(record.signatoryName), signatoryPosition, signatoryDivision });
     const savedBatches = (record.batches ?? []).map((batch, index) => ({ ...batch, number: batch.number ?? String(index + 1), attendees: batch.attendees?.map((attendee) => ({ ...attendee })) ?? [] }));
     setBatches(savedBatches.length ? savedBatches : [newNtaBatch()]);
     setEditing(record); setMessage(""); setError("");
@@ -414,9 +419,12 @@ function NtaManager() {
     if (values.mode !== "individual" && !normalizedBatches.some((batch) => batch.attendees.length)) { setError("Add at least one named attendee to a group schedule."); return; }
     setBusyId(editing.id); setError(""); setMessage("");
     const individual = values.mode === "individual";
+    const signatoryPosition = values.signatoryPosition.trim();
+    const signatoryDivision = values.signatoryDivision.trim();
+    const signatoryDesignation = [signatoryPosition, signatoryDivision].filter(Boolean).join(", ");
     const patch = {
       mode: values.mode, subject, activityTitle, organizer: values.organizer.trim(),
-      signatoryName: values.signatoryName.trim(), signatoryDesignation: values.signatoryDesignation.trim(),
+      signatoryName: values.signatoryName.trim(), signatoryDesignation, signatoryDivision,
       ...(individual ? {
         to: values.to.trim(), positionDesignation: values.positionDesignation.trim(), toUnit: values.toUnit.trim(),
         dateFrom: values.dateFrom, dateTo: values.dateTo || values.dateFrom, venueType: values.venueType,
@@ -454,17 +462,17 @@ function NtaManager() {
     {!editing && <AdminFrame title="Users' NTA" description="Edit or remove Individual, Group, and Multiple Notices to Attend." count={records.length} loading={loading} error={error} message={message}>
       <AdminTable rows={records} label="Notices to Attend" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={columns} />
     </AdminFrame>}
-    {editing && <AdminEditForm title="Edit Notice to Attend" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
-      <label className="wide-field">Mode<select value={values.mode} onChange={(event) => setValues({ ...values, mode: event.target.value as typeof values.mode })}><option value="individual">Individual</option><option value="batch">Group</option><option value="multiple">Multiple</option></select></label>
+    {editing && <AdminEditForm title="Edit Notice to Attend" busy={busyId === editing.id} error={error} message={message} className="super-admin-nta-edit-form" onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
+      <label>Mode<select value={values.mode} onChange={(event) => setValues({ ...values, mode: event.target.value as typeof values.mode })}><option value="individual">Individual</option><option value="batch">Group</option><option value="multiple">Multiple</option></select></label>
       <label>Subject<input value={values.subject} onChange={(event) => setValues({ ...values, subject: event.target.value })} required /></label>
       <label>Activity Title<input value={values.activityTitle} onChange={(event) => setValues({ ...values, activityTitle: event.target.value })} required /></label>
       {values.mode === "individual" ? <>
         <label>Date From<input type="date" value={values.dateFrom} onChange={(event) => setValues({ ...values, dateFrom: event.target.value })} required /></label>
         <label>Date To<input type="date" min={values.dateFrom} value={values.dateTo} onChange={(event) => setValues({ ...values, dateTo: event.target.value })} /></label>
+        <label>Organizer<input value={values.organizer} onChange={(event) => setValues({ ...values, organizer: event.target.value })} /></label>
         <label>Venue Type<select value={values.venueType} onChange={(event) => setValues({ ...values, venueType: event.target.value as typeof values.venueType })}><option value="physical">Physical</option><option value="virtual">Virtual</option></select></label>
         <label>Venue<input value={values.venue} onChange={(event) => setValues({ ...values, venue: event.target.value })} required /></label>
         <label>Link<input type="url" value={values.link} onChange={(event) => setValues({ ...values, link: event.target.value })} /></label>
-        <label className="wide-field">Organizer<input value={values.organizer} onChange={(event) => setValues({ ...values, organizer: event.target.value })} /></label>
         <label>To<input value={values.to} onChange={(event) => setValues({ ...values, to: event.target.value })} required /></label>
         <label>Position<input value={values.positionDesignation} onChange={(event) => setValues({ ...values, positionDesignation: event.target.value })} /></label>
         <label>Unit<input value={values.toUnit} onChange={(event) => setValues({ ...values, toUnit: event.target.value })} /></label>
@@ -479,7 +487,7 @@ function NtaManager() {
         </fieldset>)}
       </div></>}
       <label>Signatory Name<input value={values.signatoryName} onChange={(event) => setValues({ ...values, signatoryName: event.target.value })} /></label>
-      <label>Signatory Designation<input value={values.signatoryDesignation} onChange={(event) => setValues({ ...values, signatoryDesignation: event.target.value })} /></label>
+      <label>Signatory Division<input value={values.signatoryDivision} onChange={(event) => setValues({ ...values, signatoryDivision: event.target.value })} /></label>
     </AdminEditForm>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this Notice to Attend?" description={`Delete “${text(pendingDelete?.activityTitle) || "this Notice to Attend"}”? Linked document notifications will also be removed.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
   </>;
