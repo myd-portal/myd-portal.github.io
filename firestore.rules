@@ -697,7 +697,7 @@ service cloud.firestore {
         || (isSuperAdmin()
           && userId != request.auth.uid
           && resource.data.get("isRootSuperAdmin", false) != true
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "firstName", "middleName", "lastName", "address", "position", "designation", "office", "division", "unit", "profileFieldsVersion"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "firstName", "middleName", "lastName", "address", "taxIdentificationNo", "position", "designation", "office", "division", "unit", "profileFieldsVersion"])
           && request.resource.data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion"])
           && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
           && request.resource.data.position is string && request.resource.data.position.size() <= 120
@@ -709,6 +709,7 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["middleName"]) || (request.resource.data.middleName is string && request.resource.data.middleName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["lastName"]) || (request.resource.data.lastName is string && request.resource.data.lastName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() <= 200))
+          && (!request.resource.data.keys().hasAny(["taxIdentificationNo"]) || (request.resource.data.taxIdentificationNo is string && request.resource.data.taxIdentificationNo.size() <= 30))
           && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))
         || (isEmailVerified()
           && request.auth.token.email == "rjamescute2@gmail.com"

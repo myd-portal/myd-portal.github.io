@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   collection,
   deleteDoc,
@@ -29,6 +29,7 @@ type RecordBase = { id: string; [key: string]: unknown };
 type ProfileRecord = RecordBase & {
   name?: string; firstName?: string; middleName?: string; lastName?: string; address?: string;
   position?: string; designation?: string; office?: string; division?: string; unit?: string;
+  taxIdentificationNo?: string; email?: string;
   assignment?: string; projectProgram?: string; profileFieldsVersion?: number; isRootSuperAdmin?: boolean;
 };
 type TravelPerson = { name: string; userId?: string; position?: string; salary?: string; toNumber?: string };
@@ -128,14 +129,14 @@ function AdminTable<T extends RecordBase>({ rows, columns, label, busy, onEdit, 
   </>;
 }
 
-function AdminEditForm({ title, busy, error, message, onCancel, onSubmit, children }: {
-  title: string; busy: boolean; error: string; message: string; onCancel: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode;
+function AdminEditForm({ title, busy, error, message, className, onCancel, onSubmit, children }: {
+  title: string; busy: boolean; error: string; message: string; className?: string; onCancel: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode;
 }) {
   return <section className="content-section form-section super-admin-edit-section">
     <div className="section-heading"><div><p className="eyebrow">Super Admin · Edit record</p><h2>{title}</h2><p className="muted">Update the saved record details.</p></div><button type="button" className="ghost-button" disabled={busy} onClick={onCancel}>Cancel</button></div>
     {error && <p className="super-admin-records-message is-error" role="alert">{error}</p>}
     {message && <p className="super-admin-records-message" role="status">{message}</p>}
-    <form className="permit-form super-admin-edit-form" onSubmit={onSubmit}>
+    <form className={`permit-form super-admin-edit-form ${className ?? ""}`} onSubmit={onSubmit}>
       {children}
       <div className="form-actions"><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button></div>
     </form>
@@ -168,15 +169,42 @@ function UserProfilesManager({ user }: { user: User }) {
   const [busyId, setBusyId] = useState("");
   const [resettingId, setResettingId] = useState("");
   const [message, setMessage] = useState("");
-  const [values, setValues] = useState({ firstName: "", middleName: "", lastName: "", address: "", position: "", designation: "", office: "", division: "", unit: "" });
+  const [values, setValues] = useState({ firstName: "", middleName: "", lastName: "", taxIdentificationNo: "", address: "", position: "", designation: "", office: "", division: "", unit: "" });
+  const [emailAddress, setEmailAddress] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const emailRequestId = useRef(0);
   const profiles = useMemo(() => records.filter((record) => record.emailVerified === true), [records]);
 
   function edit(record: ProfileRecord) {
     const names = accountNameParts(record);
     const scope = accountProfileSelection(record);
-    setValues({ firstName: names.firstName, middleName: names.middleName, lastName: names.lastName, address: text(record.address), position: text(record.position), designation: text(record.designation), office: scope.office, division: scope.division, unit: scope.unit });
+    setValues({ firstName: names.firstName, middleName: names.middleName, lastName: names.lastName, taxIdentificationNo: text(record.taxIdentificationNo), address: text(record.address), position: text(record.position), designation: text(record.designation), office: scope.office, division: scope.division, unit: scope.unit });
+    const requestId = ++emailRequestId.current;
+    const functionClient = functions;
+    setEmailAddress(text(record.email));
+    setEmailLoading(Boolean(functionClient));
     setEditing(record);
     setMessage("");
+    setError("");
+    if (functionClient) {
+      void (async () => {
+        try {
+          const getAccountEmail = httpsCallable<{ userId: string }, { email: string }>(functionClient, "getUserEmailForPasswordReset");
+          const { data } = await getAccountEmail({ userId: record.id });
+          if (emailRequestId.current === requestId) setEmailAddress(data.email.trim());
+        } catch {
+          if (emailRequestId.current === requestId && !text(record.email)) setEmailAddress("");
+        } finally {
+          if (emailRequestId.current === requestId) setEmailLoading(false);
+        }
+      })();
+    }
+  }
+
+  function cancelEdit() {
+    emailRequestId.current += 1;
+    setEditing(null);
+    setEmailLoading(false);
     setError("");
   }
 
@@ -194,8 +222,9 @@ function UserProfilesManager({ user }: { user: User }) {
     const name = [firstName, middleInitial, lastName].filter(Boolean).join(" ");
     setBusyId(editing.id); setError(""); setMessage("");
     try {
-      await updateDoc(doc(db, "users", editing.id), { name, firstName, middleName, lastName, address: values.address.trim(), position: values.position.trim(), designation: values.designation.trim(), office, division, unit, profileFieldsVersion: 4 });
+      await updateDoc(doc(db, "users", editing.id), { name, firstName, middleName, lastName, taxIdentificationNo: values.taxIdentificationNo.trim() || deleteField(), address: values.address.trim(), position: values.position.trim(), designation: values.designation.trim(), office, division, unit, profileFieldsVersion: 4 });
       setMessage(`${name} updated.`);
+      emailRequestId.current += 1;
       setEditing(null);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
@@ -249,11 +278,14 @@ function UserProfilesManager({ user }: { user: User }) {
         { label: "Unit", render: (record) => accountProfileSelection(record).unit },
       ]} />
     </AdminFrame>}
-    {editing && <AdminEditForm title="Edit User Profile" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
+    {editing && <AdminEditForm title="Edit User Profile" busy={busyId === editing.id} error={error} message={message} className="super-admin-profile-edit-form" onCancel={cancelEdit} onSubmit={(event) => void save(event)}>
+      <label className="wide-field">Name<input value={[values.firstName.trim(), values.middleName.trim() ? `${values.middleName.trim().charAt(0).toLocaleUpperCase("en")}.` : "", values.lastName.trim()].filter(Boolean).join(" ")} readOnly /></label>
       <label>First Name<input maxLength={60} value={values.firstName} onChange={(event) => setValues({ ...values, firstName: event.target.value })} required /></label>
       <label>Middle Name<input maxLength={60} value={values.middleName} onChange={(event) => setValues({ ...values, middleName: event.target.value })} /></label>
       <label>Last Name<input maxLength={60} value={values.lastName} onChange={(event) => setValues({ ...values, lastName: event.target.value })} required /></label>
-      <label className="wide-field">Address<textarea rows={2} maxLength={200} value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} /></label>
+      <label>TIN<input maxLength={30} value={values.taxIdentificationNo} onChange={(event) => setValues({ ...values, taxIdentificationNo: event.target.value })} /></label>
+      <label>Address<textarea rows={2} maxLength={200} value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} /></label>
+      <label>Email Address<input type="email" value={emailAddress} placeholder={emailLoading ? "Loading email address..." : "Email address unavailable"} readOnly /></label>
       <label>Position<input maxLength={120} value={values.position} onChange={(event) => setValues({ ...values, position: event.target.value })} /></label>
       <label>Designation<input maxLength={2000} value={values.designation} onChange={(event) => setValues({ ...values, designation: event.target.value })} /></label>
       <label>Office<input maxLength={120} value={values.office} onChange={(event) => setValues({ ...values, office: event.target.value })} required /></label>

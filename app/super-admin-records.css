@@ -82,6 +82,10 @@
   width: 100%;
 }
 
+.super-admin-profile-edit-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .content-section.form-section.super-admin-edit-section {
   box-sizing: border-box;
   max-width: 1100px;
@@ -244,5 +248,11 @@
 
   .super-admin-attendee-row {
     align-items: stretch;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 960px) {
+  .super-admin-profile-edit-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
