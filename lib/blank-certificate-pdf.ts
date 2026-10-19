@@ -183,13 +183,13 @@ async function makeSignatoryBlockImage(name: string, designation: string, divisi
 export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord) {
   const response = await fetch(blankCertificatePdfAsset);
   if (!response.ok) throw new Error("The Certificate of Appearance PDF could not be loaded.");
-  const { PDFDocument, rgb } = await import("pdf-lib");
+  const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
   const pdf = await PDFDocument.load(await response.arrayBuffer());
   const page = pdf.getPages()[0];
   if (!page) throw new Error("The Certificate of Appearance PDF has no pages.");
 
   const division = record.division as TevDivision;
-  const eventFont = await pdf.embedFont("TimesRoman");
+  const eventFont = await pdf.embedFont(StandardFonts.TimesRoman);
   drawEventDetails(page, record, eventFont, rgb(1, 1, 1));
   const templateSignatory = divisionSignatory(division);
   const signatory = appearanceCertificateSignatory(record, templateSignatory.name, templateSignatory.position);
