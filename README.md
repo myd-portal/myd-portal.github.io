@@ -93,4 +93,4 @@ NEXT_PUBLIC_GIPHY_API_KEY
 
 Enable **Settings > Pages > Source: GitHub Actions**. Pushes to `master` then publish the app at:
 
-`https://my-desk-portal.github.io/`
+`https://myd-portal.github.io/`

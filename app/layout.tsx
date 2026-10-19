@@ -8,7 +8,7 @@ import "./special-order-form.css";
 import SystemBackground from "./SystemBackground";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://my-desk-portal.github.io"),
+  metadataBase: new URL("https://myd-portal.github.io"),
   title: "My Desk",
   description: "where your docs meet automation",
   icons: { icon: "/my%20desk%20logo.png" },
