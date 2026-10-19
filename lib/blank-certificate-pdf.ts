@@ -1,12 +1,118 @@
+import type { Color, PDFFont, PDFPage } from "pdf-lib";
 import { divisionSignatory, type TevDivision } from "@/lib/mytev";
 import { appearanceCertificateSignatory, certificateDisapprovalStampDetails, fieldOperationsAppearanceApprovalSignatureAsset, type CertificateWorkflowFields } from "@/app/CertificateWorkflow";
 
 type BlankCertificatePdfRecord = CertificateWorkflowFields & {
   division: string;
+  eventTitle?: string;
+  purpose?: string;
+  destination?: string;
+  eventDateFrom?: string;
+  eventDateTo?: string;
 };
 
 const publicAsset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 const blankCertificatePdfAsset = publicAsset("/certificate-of-appearance.pdf");
+const legacyBlankTitle = "Blank Certificate of Appearance";
+
+function certificateDate(value: string, includeMonth = true) {
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: "UTC",
+    ...(includeMonth ? { month: "short" as const } : {}),
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function certificateDateRange(from?: string, to?: string) {
+  const start = from?.trim() ?? "";
+  const end = to?.trim() || start;
+  if (!start) return "";
+  if (start === end) return certificateDate(start);
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return `${start} - ${end}`;
+  if (startDate.getUTCFullYear() === endDate.getUTCFullYear()
+    && startDate.getUTCMonth() === endDate.getUTCMonth()) {
+    const month = new Intl.DateTimeFormat("en-PH", { month: "long", timeZone: "UTC" }).format(startDate);
+    return `${month} ${startDate.getUTCDate()}-${endDate.getUTCDate()}, ${endDate.getUTCFullYear()}`;
+  }
+  return `${certificateDate(start)}-${certificateDate(end)}`;
+}
+
+function fitFontSize(text: string, width: number, font: { widthOfTextAtSize: (value: string, size: number) => number }, maxSize: number, minSize: number) {
+  for (let size = maxSize; size >= minSize; size -= 0.25) {
+    if (font.widthOfTextAtSize(text, size) <= width) return size;
+  }
+  return minSize;
+}
+
+function wrapText(text: string, width: number, font: { widthOfTextAtSize: (value: string, size: number) => number }, size: number) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= width) {
+      line = candidate;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = word;
+    if (font.widthOfTextAtSize(line, size) > width) {
+      let chunk = "";
+      for (const character of word) {
+        if (chunk && font.widthOfTextAtSize(`${chunk}${character}`, size) > width) {
+          lines.push(chunk);
+          chunk = character;
+        } else chunk += character;
+      }
+      line = chunk;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawEventDetails(page: PDFPage, record: BlankCertificatePdfRecord, font: PDFFont, white: Color) {
+  const legacyTitle = record.eventTitle?.trim() === legacyBlankTitle;
+  const title = (legacyTitle ? record.purpose : record.eventTitle)?.trim() || "";
+  const destination = record.destination?.trim() || "";
+  const dateRange = certificateDateRange(record.eventDateFrom, record.eventDateTo);
+  for (const offset of [0, -413.2864]) {
+    const titleRows = [
+      { x: 137.019, y: 646.26 + offset, width: 389.2 },
+      { x: 63.76, y: 621.99 + offset, width: 461 },
+    ];
+    for (const row of titleRows) {
+      page.drawRectangle({ x: row.x - 1, y: row.y - 3.7, width: row.width + 2, height: 16.2, color: white });
+    }
+    page.drawRectangle({ x: 106.5, y: 603.8 + offset, width: 236, height: 16.2, color: white });
+    page.drawRectangle({ x: 363.2, y: 603.8 + offset, width: 146.5, height: 16.2, color: white });
+
+    let titleSize = 11.5;
+    let titleLines = wrapText(title, 388, font, titleSize);
+    while (titleLines.length > 2 && titleSize > 8.5) {
+      titleSize -= 0.25;
+      titleLines = wrapText(title, 388, font, titleSize);
+    }
+    titleLines.slice(0, 2).forEach((line, index) => {
+      page.drawText(line, { x: titleRows[index].x, y: titleRows[index].y, size: titleSize, font });
+    });
+
+    if (destination) {
+      const destinationSize = fitFontSize(destination, 230, font, 11.5, 7.5);
+      page.drawText(destination, { x: 108, y: 607.49 + offset, size: destinationSize, font });
+    }
+    if (dateRange) {
+      const dateSize = fitFontSize(dateRange, 140, font, 10.5, 8);
+      page.drawText(dateRange, { x: 364.5, y: 607.49 + offset, size: dateSize, font });
+    }
+  }
+}
+
 function approvalDate(value: unknown) {
   if (value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
     const date = value.toDate();
@@ -83,6 +189,8 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
   if (!page) throw new Error("The Certificate of Appearance PDF has no pages.");
 
   const division = record.division as TevDivision;
+  const eventFont = await pdf.embedFont("TimesRoman");
+  drawEventDetails(page, record, eventFont, rgb(1, 1, 1));
   const templateSignatory = divisionSignatory(division);
   const signatory = appearanceCertificateSignatory(record, templateSignatory.name, templateSignatory.position);
   const signatoryImage = await pdf.embedPng(await makeSignatoryBlockImage(signatory.name, signatory.position, division, signatory.isProfileSignatory ? signatory.designation : undefined));

@@ -9,7 +9,6 @@ import { accountDivision, accountDivisionForApproval, accountOffice, hasAccountD
 import { certificateAppearanceSignatoryForOwner, fieldOperationsAppearanceUnitsForApprover, isFieldOperationsAppearanceApprover } from "@/lib/certificate-signatory";
 import { normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { makeDocumentNotification } from "@/lib/document-notifications";
-import { blankAppearancePurpose } from "@/lib/certificate-title";
 import { makeBlankCertificatePdf } from "@/lib/blank-certificate-pdf";
 import { tevDivisions, type TevDivision } from "@/lib/mytev";
 import { loadPdfTools } from "@/lib/pdf-tools";
@@ -368,7 +367,7 @@ export default function CertificateApproval({ user, role, office, division, unit
             certificateOffice,
             certificateDivision,
             certificateUnit,
-            destination: certificateOffice || "",
+            destination: record.destination || certificateOffice || "",
             ...(attachCurrentProjectLeader && currentProjectLeader ? {
               signatoryName: currentProjectLeader.name,
               designation: currentProjectLeader.designation,
@@ -743,17 +742,18 @@ export default function CertificateApproval({ user, role, office, division, unit
           const rowKey = `${record.collectionName}:${record.id}`;
           const canManage = role === "superadmin" || isAppearanceApprovalAdmin;
           const isAppearanceCertificate = record.collectionName === "certificatesOfAppearance";
-          const isBlankAppearanceTitle = isAppearanceCertificate && record.eventTitle === "Blank Certificate of Appearance";
-          const purpose = blankAppearancePurpose(record.purpose);
+          const isBlankAppearance = isAppearanceCertificate && record.recordType === "blank";
+          const isLegacyBlankTitle = isBlankAppearance && record.eventTitle === "Blank Certificate of Appearance";
+          const displayTitle = isLegacyBlankTitle ? record.purpose?.trim() || "Blank Certificate of Appearance" : record.eventTitle;
           return <div className="certificate-approval-row" key={rowKey}>
             <strong>{record.certificateType}</strong>
-            {isBlankAppearanceTitle
-              ? <span><strong>Blank CA</strong>{purpose ? ` - Purpose: ${purpose}` : ""}</span>
+            {isBlankAppearance
+              ? <span>{displayTitle || "Blank Certificate of Appearance"}</span>
               : <span>{record.eventTitle || `Certificate of ${record.certificateType}`}</span>}
             <span>{displaySchedule(record)}</span>
             <span>{record.destination || record.eventDestination || "—"}</span>
             <span><CertificateStatusBadge record={record} /></span>
-            <div className="certificate-approval-actions">{isAppearanceCertificate && <button type="button" className="row-action" disabled={blankPreviewLoading} onClick={() => isBlankAppearanceTitle ? void viewBlankAppearance(record) : viewAppearance(record)}>View</button>}{canManage && status === "Pending" && <>
+            <div className="certificate-approval-actions">{isAppearanceCertificate && <button type="button" className="row-action" disabled={blankPreviewLoading} onClick={() => isBlankAppearance ? void viewBlankAppearance(record) : viewAppearance(record)}>View</button>}{canManage && status === "Pending" && <>
               <button type="button" className="row-action" disabled={savingKey !== null || deleting} onClick={() => void decide(record, "Approved")}>{savingKey === rowKey ? "Saving..." : "Approve"}</button>
               <button type="button" className="row-action" disabled={savingKey !== null || deleting} onClick={() => void decide(record, "Disapproved")}>Disapprove</button>
               <button type="button" className="delete-button" disabled={savingKey !== null || deleting} onClick={() => setPendingDelete(record)}>Delete</button>

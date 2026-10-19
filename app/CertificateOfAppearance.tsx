@@ -8,7 +8,6 @@ import { db } from "@/lib/firebase";
 import { accountOffice, accountOfficeOptions, accountProfileSelection, divisionsForOffice, hasAccountDesignation, unitsForOfficeDivision } from "@/lib/account-profile";
 import { certificateAppearanceSignatoryForOwner, isFieldOperationsAppearanceApprover } from "@/lib/certificate-signatory";
 import { makeDocumentNotification } from "@/lib/document-notifications";
-import { blankAppearancePurpose } from "@/lib/certificate-title";
 import { makeBlankCertificatePdf as createBlankCertificatePdf } from "@/lib/blank-certificate-pdf";
 import { normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { loadPdfTools } from "@/lib/pdf-tools";
@@ -50,7 +49,10 @@ type BlankCertificateSubmission = {
   certificateDivision: string;
   certificateUnit: string;
   pdfDivision: TevDivision;
-  purpose: string;
+  eventTitle: string;
+  destination: string;
+  eventDateFrom: string;
+  eventDateTo: string;
 };
 
 const publicAsset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
@@ -66,13 +68,6 @@ type AppearanceApprovalAdmin = { id: string; name: string; designation: string; 
 function displayDate(value: string) {
   if (!value) return "";
   return new Intl.DateTimeFormat("en-PH", { month: "long", day: "numeric", year: "numeric" }).format(new Date(`${value}T00:00:00`));
-}
-
-function displaySavedDate(createdAt?: CertificateRecord["createdAt"]) {
-  const savedAt = createdAt?.toDate?.() ?? (createdAt?.toMillis ? new Date(createdAt.toMillis()) : null);
-  return savedAt
-    ? `Saved ${new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(savedAt)}`
-    : "Saved just now";
 }
 
 function displayDateRange(from?: string, to?: string) {
@@ -242,7 +237,7 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
           return {
             id: item.id,
             ...data,
-            ...(blankOffice ? { certificateOffice: blankOffice, destination: blankOffice } : {}),
+            ...(blankOffice ? { certificateOffice: blankOffice, ...(!data.destination ? { destination: blankOffice } : {}) } : {}),
           } as CertificateRecord;
         });
         const signatoryByScope = new Map<string, Promise<AppearanceApprovalAdmin | undefined>>();
@@ -632,8 +627,18 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
       setBlankError("Select a valid Certificate Office, Division, Unit / Program / Project, and template division.");
       return;
     }
-    const normalizedPurpose = submission.purpose.trim();
-    if (!normalizedPurpose) { setBlankError("Enter the purpose for this blank certificate request."); return; }
+    const eventTitle = submission.eventTitle.trim();
+    const destination = submission.destination.trim();
+    const eventDateFrom = submission.eventDateFrom.trim();
+    const eventDateTo = submission.eventDateTo.trim();
+    if (!eventTitle || !destination || !eventDateFrom || !eventDateTo) {
+      setBlankError("Enter the event title, destination, and both event dates.");
+      return;
+    }
+    if (eventDateTo < eventDateFrom) {
+      setBlankError("The event end date must be on or after the start date.");
+      return;
+    }
     setBlankError("");
     setImportMessage("");
     if (!db) { setBlankError("Certificate storage is unavailable."); return; }
@@ -662,15 +667,14 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
       }
       const recordData = {
         recordType: "blank" as const,
-        eventTitle: "Blank Certificate of Appearance",
-        destination: certificateOffice,
-        purpose: normalizedPurpose,
+        eventTitle,
+        destination,
         ownerRole: role,
         certificateOffice,
         certificateDivision,
         certificateUnit,
-        eventDateFrom: "",
-        eventDateTo: "",
+        eventDateFrom,
+        eventDateTo,
         people: [] as CertificatePerson[],
         signatoryName: assignedProjectLeader?.name || signatory.name,
         designation: assignedProjectLeader?.designation || signatory.position,
@@ -696,11 +700,10 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
             documentId: reference.id,
             documentType: "Certificate Approval",
             certificateType: "Appearance",
-            activityTitle: recordData.eventTitle,
+            activityTitle: eventTitle,
             dateFrom: recordData.eventDateFrom,
             dateTo: recordData.eventDateTo,
-            destination: recordData.destination,
-            purpose: recordData.purpose,
+            destination,
           });
           notificationBatch.set(notification.reference, notification.data);
         }
@@ -709,11 +712,11 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
           await notificationBatch.commit();
         }
       }
-      setImportMessage(`Saved a blank Certificate of Appearance for ${certificateUnit}.`);
+      setImportMessage(`Saved a blank Certificate of Appearance for ${eventTitle}.`);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       if (certificateSaved) {
-        setImportMessage(`The blank Certificate of Appearance for ${certificateUnit} was saved, but Firestore denied ${saveStage}. The assigned approver can still review it in Certificate Approval.`);
+        setImportMessage(`The blank Certificate of Appearance for ${eventTitle} was saved, but Firestore denied ${saveStage}. The assigned approver can still review it in Certificate Approval.`);
       } else setBlankError(cause instanceof Error && cause.message.startsWith("No approved Certificate of Appearance signatory")
         ? cause.message
         : cause instanceof Error && cause.message.startsWith("Firebase does not currently mark")
@@ -783,7 +786,11 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
     <input ref={importInputRef} className="coa-import-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importCertificates(event)} aria-label="Import Certificate of Appearance workbook" />
     {error && <p className="coa-error" role="alert">{error}</p>}
     {importMessage && <p className="coa-success" role="status">{importMessage}</p>}
-    {loading ? <p className="muted">Loading certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No certificates yet</h3><p>Add appearance details manually or import the completed CA_Importing_Template.xlsx workbook.</p><div className="coa-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add Appearance Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="coa-record-list"><div className="coa-record-head"><span>Event&apos;s Title</span><span>Event&apos;s Destination</span><span>Event&apos;s Date</span><span>Status</span><span></span></div>{records.map((record) => <div className="coa-record-row" key={record.id}>{record.eventTitle === "Blank Certificate of Appearance" ? <span><strong>Blank CA</strong>{blankAppearancePurpose(record.purpose) ? ` - Purpose: ${blankAppearancePurpose(record.purpose)}` : ""}</span> : <strong>{record.eventTitle}</strong>}<span>{record.destination}</span><span>{record.recordType === "blank" ? displaySavedDate(record.createdAt) : displayDateRange(record.eventDateFrom ?? record.eventDate, record.eventDateTo ?? record.eventDateFrom ?? record.eventDate)}</span><span><CertificateStatusBadge record={record} /></span><div className="coa-record-actions">{record.recordType === "blank" ? <button type="button" className="row-action" onClick={() => viewSavedBlankCertificate(record)}>View</button> : <>{certificateWorkflowStatus(record.status) === "Pending" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button></>}{certificateWorkflowStatus(record.status) === "Pending" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
+    {loading ? <p className="muted">Loading certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No certificates yet</h3><p>Add appearance details manually or import the completed CA_Importing_Template.xlsx workbook.</p><div className="coa-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add Appearance Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="coa-record-list"><div className="coa-record-head"><span>Event&apos;s Title</span><span>Event&apos;s Destination</span><span>Event&apos;s Date</span><span>Status</span><span></span></div>{records.map((record) => {
+      const legacyBlankTitle = record.recordType === "blank" && record.eventTitle === "Blank Certificate of Appearance";
+      const displayTitle = legacyBlankTitle ? record.purpose?.trim() || "Blank Certificate of Appearance" : record.eventTitle;
+      return <div className="coa-record-row" key={record.id}><strong>{displayTitle}</strong><span>{record.destination || record.certificateOffice || "—"}</span><span>{displayDateRange(record.eventDateFrom ?? record.eventDate, record.eventDateTo ?? record.eventDateFrom ?? record.eventDate) || "—"}</span><span><CertificateStatusBadge record={record} /></span><div className="coa-record-actions">{record.recordType === "blank" ? <button type="button" className="row-action" onClick={() => viewSavedBlankCertificate(record)}>View</button> : <>{certificateWorkflowStatus(record.status) === "Pending" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button></>}{certificateWorkflowStatus(record.status) === "Pending" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>;
+    })}</div>}
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Certificate of Appearance Deletion?" description="Are you sure you want to delete this Certificate of Appearance? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;
@@ -799,7 +806,8 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
   const [certificateDivision, setCertificateDivision] = useState(initialDivision);
   const [certificateUnit, setCertificateUnit] = useState(initialUnit);
   const [templateDivision, setTemplateDivision] = useState<TevDivision | "">(() => tevDivisions.includes(initialDivision as TevDivision) ? initialDivision as TevDivision : tevDivisions[0]);
-  const [purpose, setPurpose] = useState("");
+  const [eventDateFrom, setEventDateFrom] = useState("");
+  const [eventDateTo, setEventDateTo] = useState("");
   const certificateDivisionOptions = divisionsForOffice(certificateOffice);
   const certificateUnitOptions = unitsForOfficeDivision(certificateOffice, certificateDivision);
   const selectedPdfDivision = tevDivisions.includes(certificateDivision as TevDivision)
@@ -825,11 +833,21 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (selectedPdfDivision) onSave({ certificateOffice, certificateDivision, certificateUnit, pdfDivision: selectedPdfDivision, purpose });
+    const form = new FormData(event.currentTarget);
+    if (selectedPdfDivision) onSave({
+      certificateOffice,
+      certificateDivision,
+      certificateUnit,
+      pdfDivision: selectedPdfDivision,
+      eventTitle: String(form.get("event-title") ?? ""),
+      destination: String(form.get("destination") ?? ""),
+      eventDateFrom,
+      eventDateTo,
+    });
   }
 
   return <section className="content-section form-section coa-form-section coa-blank-section">
-    <div className="section-heading"><div><p className="eyebrow">Blank certificate</p><h2>Save a Blank Certificate of Appearance</h2><p className="muted">Choose the certificate office, division, unit or program, and purpose. The saved certificate will appear in Appearance Generated Reports.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
+    <div className="section-heading"><div><p className="eyebrow">Blank certificate</p><h2>Save a Blank Certificate of Appearance</h2><p className="muted">Choose the certificate office, division, and unit or program, then enter the event details. The saved certificate will appear in Appearance Generated Reports.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     {error && <p className="coa-error" role="alert">{error}</p>}
     <form className="permit-form coa-blank-form" onSubmit={submit}>
       <div className="wide-field coa-blank-profile-row" aria-label="Certificate Office, Certificate Division, and Certificate Unit / Program / Project">
@@ -838,7 +856,9 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
         <label>Certificate Unit / Program / Project<select value={certificateUnit} onChange={(event) => setCertificateUnit(event.target.value)} required><option value="" disabled>Select a Unit / Program / Project</option>{certificateUnitOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       </div>
       {!tevDivisions.includes(certificateDivision as TevDivision) && <label className="wide-field">Certificate Template Signatory Division<select value={templateDivision} onChange={(event) => setTemplateDivision(event.target.value as TevDivision | "")} required><option value="" disabled>Select a template division</option>{tevDivisions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
-      <label className="wide-field">Purpose<textarea value={purpose} onChange={(event) => setPurpose(event.target.value)} maxLength={500} rows={3} required /></label>
+      <label>Event&apos;s Title<input name="event-title" maxLength={240} required /></label>
+      <label>Event&apos;s Destination<input name="destination" maxLength={180} required /></label>
+      <div className="wide-field coa-date-range"><label>Event&apos;s Date (From)<input type="date" value={eventDateFrom} onChange={(event) => { setEventDateFrom(event.target.value); if (eventDateTo && event.target.value && eventDateTo < event.target.value) setEventDateTo(""); }} required /></label><span>to</span><label>Event&apos;s Date (To)<input type="date" min={eventDateFrom || undefined} value={eventDateTo} onChange={(event) => setEventDateTo(event.target.value)} required /></label></div>
       <div className="wide-field form-actions"><button type="submit" className="primary-button" disabled={!certificateOffice || !certificateDivision || !certificateUnit || !selectedPdfDivision || saving}>{saving ? "Saving..." : "Save"}</button></div>
     </form>
   </section>;

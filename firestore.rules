@@ -396,15 +396,18 @@ service cloud.firestore {
         && data.certificateOffice == "Division"
         && data.certificateDivision == "Field Operations Division"
         && data.certificateUnit == signedInUnit()
-        && data.keys().hasOnly(["recordType", "eventTitle", "destination", "purpose", "ownerRole", "ownerOffice", "ownerDivision", "ownerUnit", "certificateOffice", "certificateDivision", "certificateUnit", "eventDateFrom", "eventDateTo", "people", "signatoryName", "designation", "signatoryPosition", "signatoryAdminId", "division", "ownerId", "createdAt", "status"])
+        && data.keys().hasOnly(["recordType", "eventTitle", "destination", "ownerRole", "ownerOffice", "ownerDivision", "ownerUnit", "certificateOffice", "certificateDivision", "certificateUnit", "eventDateFrom", "eventDateTo", "people", "signatoryName", "designation", "signatoryPosition", "signatoryAdminId", "division", "ownerId", "createdAt", "status"])
         && data.recordType == "blank"
-        && data.eventTitle == "Blank Certificate of Appearance"
-        && data.destination == data.certificateOffice
-        && data.purpose is string
-        && data.purpose.size() > 0
-        && data.purpose.size() <= 500
-        && data.eventDateFrom == ""
-        && data.eventDateTo == ""
+        && data.eventTitle is string
+        && data.eventTitle.size() > 0
+        && data.eventTitle.size() <= 240
+        && data.destination is string
+        && data.destination.size() > 0
+        && data.destination.size() <= 180
+        && data.eventDateFrom is string
+        && data.eventDateFrom.size() == 10
+        && data.eventDateTo is string
+        && data.eventDateTo.size() == 10
         && data.people is list
         && data.people.size() == 0
         && data.signatoryName is string
@@ -1208,15 +1211,13 @@ service cloud.firestore {
             && request.resource.data.certificateUnit.size() > 0))
         && (request.resource.data.get("recordType", "appearance") == "blank"
           ? request.resource.data.people.size() == 0
-            && request.resource.data.eventTitle == "Blank Certificate of Appearance"
+            && request.resource.data.eventTitle.size() > 0
+            && request.resource.data.eventTitle.size() <= 240
             && request.resource.data.keys().hasAll(["ownerRole", "certificateOffice", "certificateDivision", "certificateUnit"])
-            && request.resource.data.destination == request.resource.data.certificateOffice
-            && request.resource.data.keys().hasAll(["purpose"])
-            && request.resource.data.purpose is string
-            && request.resource.data.purpose.size() > 0
-            && request.resource.data.purpose.size() <= 500
-            && request.resource.data.eventDateFrom == ""
-            && request.resource.data.eventDateTo == ""
+            && request.resource.data.destination.size() > 0
+            && request.resource.data.destination.size() <= 180
+            && request.resource.data.eventDateFrom.size() == 10
+            && request.resource.data.eventDateTo.size() == 10
           : request.resource.data.people.size() > 0);
       allow create: if isValidFodProjectLeaderBlankAppearanceCreate(request.resource.data);
       allow create: if isValidFodProjectLeaderAppearanceCreate(request.resource.data);
