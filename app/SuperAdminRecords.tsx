@@ -290,8 +290,10 @@ function UserProfilesManager({ user }: { user: User }) {
       <label>Position<input maxLength={120} value={values.position} onChange={(event) => setValues({ ...values, position: event.target.value })} /></label>
       <label>Designation<input maxLength={2000} value={values.designation} onChange={(event) => setValues({ ...values, designation: event.target.value })} /></label>
       <label>Office<input maxLength={120} value={values.office} onChange={(event) => setValues({ ...values, office: event.target.value })} required /></label>
-      <label>Division<input maxLength={120} value={values.division} onChange={(event) => setValues({ ...values, division: event.target.value })} required /></label>
-      <label>Unit<input maxLength={120} value={values.unit} onChange={(event) => setValues({ ...values, unit: event.target.value })} required /></label>
+      <div className="super-admin-profile-division-row wide-field">
+        <label>Division<input maxLength={120} value={values.division} onChange={(event) => setValues({ ...values, division: event.target.value })} required /></label>
+        <label>Unit<input maxLength={120} value={values.unit} onChange={(event) => setValues({ ...values, unit: event.target.value })} required /></label>
+      </div>
     </AdminEditForm>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this user profile?" description={`Delete ${text(pendingDelete?.name) || "this user profile"} from My Desk? This removes the Firestore profile and disables app access.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
   </>;
