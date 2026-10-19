@@ -3,14 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { matchesAdminSearch, searchableAdminText } from "@/lib/admin-search";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
+import "./admin-search.css";
 import "./document-notification-admin.css";
 
 type DocumentNotificationRow = {
   id: string;
   documentType?: string;
   createdAt?: unknown;
+  searchText?: string;
 };
 
 function createdAtMillis(value: unknown) {
@@ -42,8 +45,10 @@ export default function DocumentNotificationAdmin() {
   const [pendingDelete, setPendingDelete] = useState<DocumentNotificationRow | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const sortedNotifications = useMemo(() => [...notifications].sort((first, second) => createdAtMillis(second.createdAt) - createdAtMillis(first.createdAt)), [notifications]);
-  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(sortedNotifications);
+  const filteredNotifications = useMemo(() => sortedNotifications.filter((notification) => matchesAdminSearch([notification.documentType, notification.createdAt, notification.searchText], searchQuery)), [sortedNotifications, searchQuery]);
+  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(filteredNotifications);
 
   useEffect(() => {
     if (!db) {
@@ -59,6 +64,7 @@ export default function DocumentNotificationAdmin() {
           id: item.id,
           documentType: typeof data.documentType === "string" ? data.documentType : "Unknown",
           createdAt: data.createdAt,
+          searchText: searchableAdminText(data),
         };
       });
       setNotifications(rows);
@@ -100,6 +106,11 @@ export default function DocumentNotificationAdmin() {
     {error && <p className="document-notification-admin-message is-error" role="alert">{error}</p>}
     {message && <p className="document-notification-admin-message" role="status">{message}</p>}
     {loading ? <p className="muted">Loading document notifications...</p> : notifications.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No document notifications</h3><p>New document notifications will appear here.</p></div> : <>
+      <div className="admin-list-toolbar">
+        <label className="admin-list-search">Search document notifications<input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(0); }} placeholder="Document type, name, date, or details..." /></label>
+        {searchQuery.trim() && <span className="admin-list-results">{filteredNotifications.length} matching {filteredNotifications.length === 1 ? "notification" : "notifications"}</span>}
+      </div>
+      {filteredNotifications.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No matching document notifications</h3><p>Try another document type, name, date, or detail.</p></div> : <>
       <div className="document-notification-admin-table-wrap">
         <table className="document-notification-admin-table">
           <thead><tr><th>Document Type</th><th>Created At</th><th>Action</th></tr></thead>
@@ -110,7 +121,8 @@ export default function DocumentNotificationAdmin() {
           </tr>)}</tbody>
         </table>
       </div>
-      <RecordPagination totalRecords={sortedNotifications.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Document Notifications" />
+      <RecordPagination totalRecords={filteredNotifications.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Document Notifications" />
+      </>}
     </>}
     <DeleteConfirmation
       open={Boolean(pendingDelete)}

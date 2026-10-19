@@ -19,9 +19,11 @@ import { sendPasswordResetEmail, type User } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase";
 import { accountProfileSelection } from "@/lib/account-profile";
+import { matchesAdminSearch } from "@/lib/admin-search";
 import { tevDivisions } from "@/lib/mytev";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
+import "./admin-search.css";
 import "./super-admin-records.css";
 
 export type SuperAdminRecordsKind = "users-profile" | "users-nta" | "users-so" | "users-to" | "users-appearances";
@@ -120,13 +122,21 @@ function AdminTable<T extends RecordBase>({ rows, columns, label, busy, onEdit, 
   rows: T[]; columns: Column<T>[]; label: string; busy: boolean; onEdit: (row: T) => void; onDelete: (row: T) => void;
   onResetPassword?: (row: T) => void; resettingId?: string;
 }) {
-  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(rows);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredRows = useMemo(() => rows.filter((row) => matchesAdminSearch(row, searchQuery)), [rows, searchQuery]);
+  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(filteredRows);
   if (!rows.length) return <div className="empty-state"><span className="empty-number">00</span><h3>No {label.toLocaleLowerCase("en")} yet</h3><p>Records will appear here when they are available.</p></div>;
   return <>
+    <div className="admin-list-toolbar">
+      <label className="admin-list-search">Search {label.toLocaleLowerCase("en")}<input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(0); }} placeholder="Search names, dates, titles, or details..." /></label>
+      {searchQuery.trim() && <span className="admin-list-results">{filteredRows.length} matching {filteredRows.length === 1 ? "record" : "records"}</span>}
+    </div>
+    {filteredRows.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No matching {label.toLocaleLowerCase("en")}</h3><p>Try a different name, date, title, or detail.</p></div> : <>
     <div className="super-admin-records-table-wrap"><table className="super-admin-records-table"><thead><tr>{columns.map((column) => <th key={column.label}>{column.label}</th>)}<th>Actions</th></tr></thead><tbody>
       {visibleRecords.map((row) => <tr key={row.id}>{columns.map((column) => <td key={column.label} data-label={column.label}>{column.render(row) || "—"}</td>)}<td className="super-admin-records-actions" data-label="Actions"><button type="button" className="row-action" disabled={busy || resettingId === row.id} onClick={() => onEdit(row)}>Edit</button>{onResetPassword && <button type="button" className="row-action" disabled={busy || Boolean(resettingId)} onClick={() => onResetPassword(row)}>{resettingId === row.id ? "Sending..." : "Reset Password"}</button>}<button type="button" className="delete-button" disabled={busy || resettingId === row.id} onClick={() => onDelete(row)}>Delete</button></td></tr>)}
     </tbody></table></div>
-    <RecordPagination totalRecords={rows.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label={label} />
+    <RecordPagination totalRecords={filteredRows.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label={label} />
+    </>}
   </>;
 }
 

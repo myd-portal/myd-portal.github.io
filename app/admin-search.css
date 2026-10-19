@@ -1,0 +1,28 @@
+.admin-list-toolbar {
+  display: grid;
+  gap: 0;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+
+.admin-list-search {
+  max-width: none;
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-list-search input {
+  box-sizing: border-box;
+  font-weight: 400;
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-list-results {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-top: 8px;
+  text-align: right;
+}

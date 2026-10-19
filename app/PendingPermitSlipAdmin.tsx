@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { matchesAdminSearch } from "@/lib/admin-search";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import { normalizeWorkflowStatus } from "./workflow-status";
+import "./admin-search.css";
 import "./pending-permit-slip-admin.css";
 
 type PermitRecord = {
@@ -42,8 +44,10 @@ export default function PendingPermitSlipAdmin() {
   const [pendingDelete, setPendingDelete] = useState<PermitRecord | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const sortedPermits = useMemo(() => [...permits].sort((first, second) => second.date.localeCompare(first.date)), [permits]);
-  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(sortedPermits);
+  const filteredPermits = useMemo(() => sortedPermits.filter((permit) => matchesAdminSearch([permit.names, permit.date, formatDate(permit.date)], searchQuery)), [sortedPermits, searchQuery]);
+  const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(filteredPermits);
 
   useEffect(() => {
     if (!db) {
@@ -107,6 +111,11 @@ export default function PendingPermitSlipAdmin() {
     {error && <p className="pending-permit-admin-message is-error" role="alert">{error}</p>}
     {message && <p className="pending-permit-admin-message" role="status">{message}</p>}
     {loading ? <p className="muted">Loading pending Permit Slips...</p> : permits.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No pending Permit Slips</h3><p>New submissions awaiting a decision will appear here.</p></div> : <>
+      <div className="admin-list-toolbar">
+        <label className="admin-list-search">Search pending Permit Slips<input type="search" value={searchQuery} onChange={(event) => { setSearchQuery(event.target.value); setPage(0); }} placeholder="Name or date..." /></label>
+        {searchQuery.trim() && <span className="admin-list-results">{filteredPermits.length} matching {filteredPermits.length === 1 ? "permit" : "permits"}</span>}
+      </div>
+      {filteredPermits.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No matching pending Permit Slips</h3><p>Try another name or date.</p></div> : <>
       <div className="pending-permit-admin-table-wrap">
         <table className="pending-permit-admin-table">
           <thead><tr><th>Name</th><th>Date</th><th>Action</th></tr></thead>
@@ -117,7 +126,8 @@ export default function PendingPermitSlipAdmin() {
           </tr>)}</tbody>
         </table>
       </div>
-      <RecordPagination totalRecords={sortedPermits.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Pending Permit Slips" />
+      <RecordPagination totalRecords={filteredPermits.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Pending Permit Slips" />
+      </>}
     </>}
     <DeleteConfirmation
       open={Boolean(pendingDelete)}
