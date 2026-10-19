@@ -1,0 +1,238 @@
+.super-admin-records-section,
+.super-admin-edit-section {
+  min-width: 0;
+}
+
+.super-admin-records-count {
+  align-self: center;
+  background: var(--mint);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.super-admin-records-message {
+  background: #edf7f0;
+  border-left: 4px solid #4b9f69;
+  color: #26633b;
+  margin: 0 0 18px;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.super-admin-records-message.is-error {
+  background: #fff1ef;
+  border-color: var(--accent);
+  color: #9d321f;
+}
+
+.super-admin-records-table-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.super-admin-records-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.super-admin-records-table th,
+.super-admin-records-table td {
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 13px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.super-admin-records-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.super-admin-records-table td {
+  font-size: 13px;
+}
+
+.super-admin-records-table td strong {
+  color: var(--ink);
+}
+
+.super-admin-records-actions {
+  white-space: nowrap;
+}
+
+.super-admin-records-actions .row-action,
+.super-admin-records-actions .delete-button {
+  margin-right: 10px;
+}
+
+.super-admin-edit-form {
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.super-admin-edit-form > label,
+.super-admin-edit-form > .super-admin-dynamic-list {
+  min-width: 0;
+}
+
+.super-admin-edit-form input,
+.super-admin-edit-form select,
+.super-admin-edit-form textarea {
+  min-width: 0;
+  width: 100%;
+}
+
+.super-admin-dynamic-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.super-admin-dynamic-list-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.super-admin-dynamic-list-heading strong {
+  font-size: 13px;
+}
+
+.super-admin-dynamic-row {
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  padding: 16px;
+}
+
+.super-admin-dynamic-row legend {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+
+.super-admin-dynamic-row > label,
+.super-admin-attendee-row > label {
+  min-width: 0;
+}
+
+.super-admin-attendee-row {
+  align-items: end;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  padding: 12px 0;
+}
+
+.super-admin-attendee-row .delete-button {
+  justify-self: start;
+}
+
+.super-admin-edit-form > .form-actions {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1080px) {
+  .super-admin-records-table,
+  .super-admin-records-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .super-admin-records-table thead {
+    display: none;
+  }
+
+  .super-admin-records-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .super-admin-records-table tr {
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .super-admin-records-table td {
+    border: 0;
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 12px;
+  }
+
+  .super-admin-records-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .super-admin-records-table .super-admin-records-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    gap: 10px;
+  }
+
+  .super-admin-records-actions .row-action,
+  .super-admin-records-actions .delete-button {
+    margin: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .super-admin-records-section .section-heading,
+  .super-admin-edit-section .section-heading {
+    align-items: flex-start;
+  }
+
+  .super-admin-records-count {
+    font-size: 10px;
+    padding: 6px 8px;
+  }
+
+  .super-admin-edit-form,
+  .super-admin-dynamic-row,
+  .super-admin-attendee-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .super-admin-edit-form > .form-actions {
+    grid-column: auto;
+  }
+
+  .super-admin-edit-form > .form-actions .primary-button {
+    width: 100%;
+  }
+
+  .super-admin-attendee-row {
+    align-items: stretch;
+  }
+}

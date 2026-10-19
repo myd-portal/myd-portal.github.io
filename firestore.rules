@@ -694,6 +694,22 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 200))
           && (!request.resource.data.keys().hasAny(["taxIdentificationNo"]) || (request.resource.data.taxIdentificationNo is string && request.resource.data.taxIdentificationNo.size() > 0 && request.resource.data.taxIdentificationNo.size() <= 30))
           && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))
+        || (isSuperAdmin()
+          && userId != request.auth.uid
+          && resource.data.get("isRootSuperAdmin", false) != true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "firstName", "middleName", "lastName", "address", "position", "designation", "office", "division", "unit", "profileFieldsVersion"])
+          && request.resource.data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion"])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
+          && request.resource.data.position is string && request.resource.data.position.size() <= 120
+          && request.resource.data.office is string && request.resource.data.office.size() > 0 && request.resource.data.office.size() <= 120
+          && request.resource.data.division is string && request.resource.data.division.size() > 0 && request.resource.data.division.size() <= 120
+          && request.resource.data.unit is string && request.resource.data.unit.size() > 0 && request.resource.data.unit.size() <= 120
+          && request.resource.data.profileFieldsVersion == 4
+          && (!request.resource.data.keys().hasAny(["firstName"]) || (request.resource.data.firstName is string && request.resource.data.firstName.size() <= 60))
+          && (!request.resource.data.keys().hasAny(["middleName"]) || (request.resource.data.middleName is string && request.resource.data.middleName.size() <= 60))
+          && (!request.resource.data.keys().hasAny(["lastName"]) || (request.resource.data.lastName is string && request.resource.data.lastName.size() <= 60))
+          && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() <= 200))
+          && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))
         || (isEmailVerified()
           && request.auth.token.email == "rjamescute2@gmail.com"
           && resource.data.get("profileFieldsVersion", 0) < 4
@@ -1139,19 +1155,19 @@ service cloud.firestore {
         && !existsAfter(/databases/$(database)/documents/permits/$(resource.data.permitId)));
     }
     match /specialOrders/{orderId} {
-      allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid
+      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", []));
+        || request.auth.uid in resource.data.get("recipientIds", [])));
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerUnit == signedInUnit();
-      allow update: if isVerifiedUser() && resource.data.ownerId == request.auth.uid
+      allow update: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
-        && ownerUnitCanBeUpdated();
-      allow delete: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+        && ownerUnitCanBeUpdated());
+      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid);
     }
     match /certificatesOfAppearance/{certificateId} {
-      allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReadAppearanceCertificate(resource.data));
-      allow update: if (isVerifiedUser()
+      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReadAppearanceCertificate(resource.data)));
+      allow update: if isSuperAdmin() || (isVerifiedUser()
           && resource.data.ownerId == request.auth.uid
           && resource.data.get("status", "Pending") != "Approved"
           && request.resource.data.get("status", "Pending") == resource.data.get("status", "Pending")
@@ -1170,9 +1186,9 @@ service cloud.firestore {
           && validCertificateDecisionUpdate(true))
         || (canReviewAppearanceCertificate(resource.data)
           && validApprovedProjectLeaderSignatureBackfill());
-      allow delete: if isVerifiedUser()
+      allow delete: if isSuperAdmin() || (isVerifiedUser()
         && resource.data.get("status", "Pending") != "Approved"
-        && (resource.data.ownerId == request.auth.uid || canReviewAppearanceCertificate(resource.data));
+        && (resource.data.ownerId == request.auth.uid || canReviewAppearanceCertificate(resource.data)));
       allow create: if isVerifiedUser()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(["eventTitle", "destination", "eventDateFrom", "eventDateTo", "people", "signatoryName", "designation", "division", "ownerId", "createdAt"])
@@ -1517,13 +1533,13 @@ service cloud.firestore {
           || !(getAfter(/databases/$(database)/documents/leaveApplications/$(resource.data.leaveApplicationId)).data.status in ["Approved", "Pending"]));
     }
     match /travelOrders/{travelOrderId} {
-      allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid
+      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || resource.data.get("recipientId", "") == request.auth.uid
-        || resource.data.get("status", "") in ["Approved", "Pending", "Processing", "Disapproved"]);
+        || resource.data.get("status", "") in ["Approved", "Pending", "Processing", "Disapproved"]));
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerUnit == signedInUnit()
         && isPersonalTravelOrder(request.resource.data, request.resource.data.get("recipientId", ""));
-      allow update: if isVerifiedUser()
+      allow update: if isSuperAdmin() || (isVerifiedUser()
         && resource.data.get("status", "Pending") in ["Pending", "Processing"]
         && ((resource.data.ownerId == request.auth.uid
           && request.resource.data.ownerId == resource.data.ownerId
@@ -1545,38 +1561,38 @@ service cloud.firestore {
                 && request.resource.data.people[0].get("toNumber", "").size() > 0
                 && request.resource.data.people[0].diff(resource.data.people[0]).affectedKeys().hasOnly(["toNumber"])
               : request.resource.data.get("date", "") == resource.data.get("date", "")
-                && request.resource.data.people == resource.data.people)));
-      allow delete: if isVerifiedUser()
+                && request.resource.data.people == resource.data.people))));
+      allow delete: if isSuperAdmin() || (isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
-        && resource.data.status == "Pending";
+        && resource.data.status == "Pending");
     }
     match /travelOrderNumbers/{numberId} {
       allow get: if isVerifiedUser();
-      allow list: if false;
-      allow create: if isVerifiedUser()
+      allow list: if isSuperAdmin();
+      allow create: if isSuperAdmin() || (isVerifiedUser()
         && request.resource.data.keys().hasAll(["ownerId", "travelOrderId"])
         && request.resource.data.keys().hasOnly(["ownerId", "travelOrderId"])
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.travelOrderId is string
         && (get(/databases/$(database)/documents/travelOrders/$(request.resource.data.travelOrderId)).data.ownerId == request.auth.uid
           || canUpdateTravelOrderAsRecipient(get(/databases/$(database)/documents/travelOrders/$(request.resource.data.travelOrderId)).data))
-        && getAfter(/databases/$(database)/documents/travelOrders/$(request.resource.data.travelOrderId)).data.status == "Approved";
-      allow delete: if isVerifiedUser()
+        && getAfter(/databases/$(database)/documents/travelOrders/$(request.resource.data.travelOrderId)).data.status == "Approved");
+      allow delete: if isSuperAdmin() || (isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
         && resource.data.travelOrderId is string
         && get(/databases/$(database)/documents/travelOrders/$(resource.data.travelOrderId)).data.ownerId == request.auth.uid
-        && !existsAfter(/databases/$(database)/documents/travelOrders/$(resource.data.travelOrderId));
+        && !existsAfter(/databases/$(database)/documents/travelOrders/$(resource.data.travelOrderId)));
     }
     match /ntaRecords/{ntaId} {
-      allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid
+      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", []));
+        || request.auth.uid in resource.data.get("recipientIds", [])));
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerUnit == signedInUnit();
-      allow update: if isVerifiedUser() && resource.data.ownerId == request.auth.uid
+      allow update: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
-        && ownerUnitCanBeUpdated();
-      allow delete: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+        && ownerUnitCanBeUpdated());
+      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid);
     }
     match /myNotes/{noteId} {
       allow read: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
