@@ -422,7 +422,7 @@ function TravelOrderPreview({ order, onClose }: { order: TravelOrder; onClose: (
   return <div className="preview-backdrop travel-order-preview-backdrop"><div className="preview-toolbar"><span>Travel Order preview · {order.people.length} {order.people.length === 1 ? "page" : "pages"}</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={downloadPdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={printPreview}>{printing ? "Preparing print..." : "Print"}</button>{error && <small className="download-error">{error}</small>}{printError && <small className="download-error" role="alert">{printError}</small>}</div><div ref={pagesRef} className="travel-order-preview-pages">{order.people.map((person, index) => <TravelOrderPaper key={`${order.id}-${index}`} order={order} person={person} />)}</div></div>;
 }
 
-export default function TravelOrderModule({ user, office, unit, focusRecordId, onFocusHandled }: { user: User; office: string; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void }) {
+export default function TravelOrderModule({ user, office, unit, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; office: string; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [orders, setOrders] = useState<TravelOrder[]>([]);
   const [preparedByNames, setPreparedByNames] = useState<Record<string, string>>({});
   const [accountName, setAccountName] = useState(user.displayName?.trim() ?? "");
@@ -848,10 +848,12 @@ export default function TravelOrderModule({ user, office, unit, focusRecordId, o
     } finally { setUpdatingId(null); }
   }
 
+  function closePreview() { setPreview(null); onPreviewClose?.(); }
+
   return <>
     {error && <div className="error-message travel-order-error">{error}</div>}
     {editingOrder ? <TravelOrderForm key={editingOrder.id} user={user} office={office} unit={unit} initialOrder={editingOrder} onSaved={(savedOrders, replacedOrderId) => { setOrders((current) => [...savedOrders, ...current.filter((order) => order.id !== replacedOrderId)]); setEditingOrder(null); }} onCancel={() => setEditingOrder(null)} onError={setError} /> : view === "new" ? <TravelOrderForm user={user} office={office} unit={unit} onSaved={(savedOrders) => { setOrders((current) => [...savedOrders, ...current]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : loading ? <section className="content-section"><p className="muted">Loading Travel Orders...</p></section> : <TravelOrderList orders={orders} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} onNew={() => { setError(""); setView("new"); }} onEdit={(order) => { setError(""); setEditingOrder(order); }} onPreview={setPreview} onCopy={(order) => void copyOrder(order)} onDelete={setPendingDelete} onStatusChange={changeStatus} updatingId={updatingId} deletingId={deletingId} copyingId={copyingId} />}
     <DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid)} title="Confirm Travel Order Deletion?" description="Are you sure you want to delete this Travel Order? This action cannot be undone. Its assigned TO No. values will be released." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteOrder(pendingDelete); }} />
-    {preview && <TravelOrderPreview order={preview} onClose={() => setPreview(null)} />}
+    {preview && <TravelOrderPreview order={preview} onClose={closePreview} />}
   </>;
 }

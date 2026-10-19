@@ -323,7 +323,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   return pdf.save();
 }
 
-export default function LeaveApplicationModule({ user, focusRecordId, onFocusHandled }: { user: User; focusRecordId?: string; onFocusHandled?: () => void }) {
+export default function LeaveApplicationModule({ user, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [records, setRecords] = useState<LeaveApplicationRecord[]>([]);
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(records);
   const [view, setView] = useState<"list" | "new">("list");
@@ -680,6 +680,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
   function closePreview() {
     setPreviewRecord(null);
     setPreviewUrl("");
+    onPreviewClose?.();
   }
 
   function printPreview() {

@@ -262,7 +262,7 @@ function AccomplishmentReportPreview({ report, onClose }: { report: Report; onCl
   </div>;
 }
 
-export default function AccomplishmentReportModule({ user, focusMonth, focusCycle, onFocusHandled }: { user: User; focusMonth?: string; focusCycle?: 1 | 2; onFocusHandled?: () => void }) {
+export default function AccomplishmentReportModule({ user, focusMonth, focusCycle, onFocusHandled, onPreviewClose }: { user: User; focusMonth?: string; focusCycle?: 1 | 2; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(reports);
@@ -527,6 +527,6 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       {loading ? <p className="muted">Loading reports...</p> : reports.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No accomplishment reports yet</h3><p>Saved reports will appear here.</p></div> : <div className="permit-table ar-saved-table"><RecordPagination totalRecords={reports.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Saved Report" /><div className="table-head"><span>Month</span><span>Half-month Cycle</span><span aria-hidden="true" /></div>{visibleRecords.map((report) => <div className="table-row" key={report.id}><strong>{reportMonth(report.month)}</strong><span>{report.startDay}-{report.endDay}</span><div className="ar-record-actions">{isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div></div>)}</div>}
     </section>}
 
-    {previewReport && <AccomplishmentReportPreview report={previewReport} onClose={() => setSelectedReport(null)} />}
+    {previewReport && <AccomplishmentReportPreview report={previewReport} onClose={() => { setSelectedReport(null); onPreviewClose?.(); }} />}
   </div>;
 }

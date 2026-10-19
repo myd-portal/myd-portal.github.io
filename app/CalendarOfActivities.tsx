@@ -474,7 +474,7 @@ function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView,
   </section>;
 }
 
-export default function CalendarOfActivitiesModule({ user, mode = "prepared", profileRevision = 0, focusCalendarId, onFocusHandled }: { user: User; mode?: "prepared" | "approved-records"; profileRevision?: number; focusCalendarId?: string; onFocusHandled?: () => void }) {
+export default function CalendarOfActivitiesModule({ user, mode = "prepared", profileRevision = 0, focusCalendarId, onFocusHandled, onPreviewClose }: { user: User; mode?: "prepared" | "approved-records"; profileRevision?: number; focusCalendarId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [adminAccounts, setAdminAccounts] = useState<Account[]>([]);
@@ -645,10 +645,12 @@ export default function CalendarOfActivitiesModule({ user, mode = "prepared", pr
     } finally { setDeletingId(null); }
   }
 
+  function closePreview() { setPreview(null); onPreviewClose?.(); }
+
   return <>
     {error && <div className="error-message calendar-of-activities-error" role="alert">{error}</div>}
     {loading ? <section className="content-section"><p className="muted">Loading Calendar of Activities records…</p></section> : mode === "prepared" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Calendar of Activities.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={plans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Calendar of Activities."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} deletingId={deletingId} updatingStatusId={updatingStatusId} adminRecordsOnly={mode === "approved-records"} />}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Calendar of Activities Deletion?" description="Are you sure you want to delete this Calendar of Activities? This action cannot be undone, and its activity notifications will also be removed." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteCalendarOfActivities(pendingDelete); }} />
-    {preview && <CalendarOfActivitiesPreview plan={preview} onClose={() => setPreview(null)} />}
+    {preview && <CalendarOfActivitiesPreview plan={preview} onClose={closePreview} />}
   </>;
 }
