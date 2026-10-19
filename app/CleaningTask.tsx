@@ -16,6 +16,7 @@ import {
   currentCleaningWeekStart,
   displayCleaningDate,
   displayCleaningDateTime,
+  isCleaningTaskImageOutdated,
   isCleaningTaskUnit,
   manilaDateKey,
   shiftCleaningMonth,
@@ -200,15 +201,6 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
   const currentAssignment = assignments.find((assignment) => assignment.weekStart === currentWeekStart) ?? null;
   const ownUnitImage = images.find((image) => image.id === unit) ?? null;
   const selectedWeeks = useMemo(() => cleaningTaskCalendarWeeks(month), [month]);
-  function missedAssignment(image: CleaningTaskImage) {
-    const latestDueAssignment = assignments
-      .filter((assignment) => assignment.unit === image.unit
-        && assignment.weekStart > image.submittedWeekStart
-        && (assignment.startAt?.toDate?.().getTime() ?? Number.POSITIVE_INFINITY) <= now.getTime())
-      .sort((first, second) => second.weekStart.localeCompare(first.weekStart))[0];
-    const deadline = latestDueAssignment?.endAt?.toDate?.().getTime();
-    return Boolean(latestDueAssignment && typeof deadline === "number" && now.getTime() >= deadline);
-  }
 
   async function uploadCleaningPhotos(files: File[], location: string) {
     setBusy(true);
@@ -340,7 +332,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
             <header className="cleaning-task-photo-heading"><h3>Cleaning Task Photo Verification</h3></header>
             <div className="cleaning-task-photo-visual">
               <img src={image.imageURL} alt={`Four-photo ${image.unit} Cleaning Task collage uploaded by ${image.uploaderName}`} loading="lazy" />
-              {missedAssignment(image) && <div className="cleaning-task-outdated" role="status"><span aria-hidden="true">!</span> MOV is outdated!</div>}
+              {!loading && isCleaningTaskImageOutdated(image, assignments) && <div className="cleaning-task-outdated" role="status"><span aria-hidden="true">!</span> Means of Verification is outdated!</div>}
             </div>
             <footer className="cleaning-task-photo-meta">
               <div><strong>Uploader:</strong><span>{image.uploaderName} - {image.unit}</span></div>

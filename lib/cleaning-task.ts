@@ -127,3 +127,21 @@ export function displayCleaningDateTime(value: unknown) {
 export function isCleaningTaskUnit(value: unknown): value is CleaningTaskUnit {
   return typeof value === "string" && cleaningTaskUnits.includes(value as CleaningTaskUnit);
 }
+
+export function isCleaningTaskImageOutdated(image: CleaningTaskImage, assignments: CleaningTaskAssignment[]) {
+  const uploadedAt = image.uploadedAt?.toDate?.().getTime();
+  if (typeof uploadedAt !== "number" || !Number.isFinite(uploadedAt)) return false;
+
+  const assignment = assignments.find((item) => item.weekStart === image.submittedWeekStart);
+  if (!assignment || assignment.unit !== image.unit) return true;
+
+  const startAt = assignment.startAt?.toDate?.().getTime();
+  const endAt = assignment.endAt?.toDate?.().getTime();
+  return typeof startAt !== "number"
+    || !Number.isFinite(startAt)
+    || typeof endAt !== "number"
+    || !Number.isFinite(endAt)
+    || endAt <= startAt
+    || uploadedAt < startAt
+    || uploadedAt >= endAt;
+}
