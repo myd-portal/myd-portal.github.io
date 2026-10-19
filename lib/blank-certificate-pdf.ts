@@ -43,6 +43,7 @@ function certificateDateRange(from?: string, to?: string) {
 }
 
 const eventFontFamily = 'Cambria, "Times New Roman", serif';
+type CanvasTextRun = { text: string; bold?: boolean };
 
 function wrapCanvasText(context: CanvasRenderingContext2D, text: string, width: number, size: number) {
   context.font = `${size}px ${eventFontFamily}`;
@@ -72,8 +73,65 @@ function wrapCanvasText(context: CanvasRenderingContext2D, text: string, width: 
   return lines;
 }
 
-async function makeCambriaTextImage(text: string, width: number, height: number, baseline: number, fontSize: number, minFontSize = fontSize) {
-  await document.fonts.load(`${fontSize}px Cambria`);
+function wrapCanvasRuns(context: CanvasRenderingContext2D, runs: CanvasTextRun[], width: number, size: number) {
+  const lines: CanvasTextRun[][] = [[]];
+  let lineWidth = 0;
+  let pendingSpace = false;
+  const currentLine = () => lines[lines.length - 1];
+  const append = (text: string, bold: boolean) => {
+    const line = currentLine();
+    const previous = line[line.length - 1];
+    if (previous?.bold === bold) previous.text += text;
+    else line.push({ text, bold });
+  };
+  const setFont = (bold: boolean) => {
+    context.font = `${bold ? "bold " : ""}${size}px ${eventFontFamily}`;
+  };
+
+  for (const run of runs) {
+    setFont(Boolean(run.bold));
+    for (const token of run.text.match(/\s+|\S+/g) ?? []) {
+      if (/^\s+$/.test(token)) {
+        pendingSpace = currentLine().length > 0;
+        continue;
+      }
+      const space = pendingSpace && currentLine().length > 0 ? " " : "";
+      pendingSpace = false;
+      const tokenWidth = context.measureText(token).width;
+      const spaceWidth = space ? context.measureText(space).width : 0;
+      if (lineWidth + spaceWidth + tokenWidth > width && currentLine().length > 0) {
+        lines.push([]);
+        lineWidth = 0;
+      } else if (space) {
+        append(space, Boolean(run.bold));
+        lineWidth += spaceWidth;
+      }
+
+      if (tokenWidth <= width) {
+        append(token, Boolean(run.bold));
+        lineWidth += tokenWidth;
+        continue;
+      }
+
+      for (const character of token) {
+        const characterWidth = context.measureText(character).width;
+        if (lineWidth + characterWidth > width && currentLine().length > 0) {
+          lines.push([]);
+          lineWidth = 0;
+        }
+        append(character, Boolean(run.bold));
+        lineWidth += characterWidth;
+      }
+    }
+  }
+  return lines.filter((line) => line.length > 0);
+}
+
+async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, height: number, baseline: number, fontSize: number) {
+  await Promise.all([
+    document.fonts.load(`${fontSize}px Cambria`),
+    document.fonts.load(`bold ${fontSize}px Cambria`),
+  ]);
   const scale = 4;
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(width * scale);
@@ -85,14 +143,17 @@ async function makeCambriaTextImage(text: string, width: number, height: number,
   context.fillRect(0, 0, width, height);
   context.fillStyle = "#111";
   context.textBaseline = "alphabetic";
-  let size = fontSize;
-  context.font = `${size}px ${eventFontFamily}`;
-  while (context.measureText(text).width > width - 2 && size > minFontSize) {
-    size = Math.max(minFontSize, size - 0.25);
-    context.font = `${size}px ${eventFontFamily}`;
+  let x = 1;
+  for (const run of runs) {
+    context.font = `${run.bold ? "bold " : ""}${fontSize}px ${eventFontFamily}`;
+    context.fillText(run.text, x, baseline);
+    x += context.measureText(run.text).width;
   }
-  context.fillText(text, 1, baseline);
   return canvas.toDataURL("image/png");
+}
+
+async function makeCambriaTextImage(text: string, width: number, height: number, baseline: number, fontSize: number) {
+  return makeCambriaRichTextImage([{ text }], width, height, baseline, fontSize);
 }
 
 async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCertificatePdfRecord) {
@@ -100,46 +161,48 @@ async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCe
   const title = (legacyTitle ? record.purpose : record.eventTitle)?.trim() || "";
   const destination = record.destination?.trim() || "";
   const dateRange = certificateDateRange(record.eventDateFrom, record.eventDateTo);
-  const titleCanvas = document.createElement("canvas");
-  const titleContext = titleCanvas.getContext("2d");
-  if (!titleContext) throw new Error("Unable to prepare the certificate event title.");
-  await document.fonts.load(`11.5px Cambria`);
-  let titleSize = 11.5;
-  let titleLines = wrapCanvasText(titleContext, title, 388, titleSize);
-  while (titleLines.length > 2 && titleSize > 8.5) {
-    titleSize -= 0.25;
-    titleLines = wrapCanvasText(titleContext, title, 388, titleSize);
-  }
-  const titleImages = await Promise.all(titleLines.slice(0, 2).map((line, index) => makeCambriaTextImage(
-    line,
-    index === 0 ? 389.2 : 461,
-    16.2,
-    12.5,
-    titleSize,
-  )));
-  const destinationImage = destination
-    ? await makeCambriaTextImage(destination, 236, 16.2, 12.5, 11.5, 7.5)
-    : "";
-  const dateImage = dateRange
-    ? await makeCambriaTextImage(dateRange, 146.5, 16.2, 12.5, 10.5, 8)
-    : "";
-  const [embeddedTitleImages, embeddedDestinationImage, embeddedDateImage] = await Promise.all([
-    Promise.all(titleImages.map((image) => pdf.embedPng(image))),
-    destinationImage ? pdf.embedPng(destinationImage) : Promise.resolve(null),
-    dateImage ? pdf.embedPng(dateImage) : Promise.resolve(null),
+  const eventRuns: CanvasTextRun[] = [
+    { text: "attended the “" },
+    ...(title ? [{ text: title, bold: true }] : []),
+    ...(title ? [{ text: "”" }] : []),
+    ...(destination ? [{ text: " held in " }, { text: destination, bold: true }] : []),
+    ...(dateRange ? [{ text: " on " }, { text: dateRange, bold: true }] : []),
+    { text: "." },
+  ];
+  const legalText = "This certification is issued upon the request of the above-named person for whatever legal purpose it may serve him/her best.";
+  await document.fonts.load("12px Cambria");
+  await document.fonts.load("bold 12px Cambria");
+  const measureCanvas = document.createElement("canvas");
+  const measureContext = measureCanvas.getContext("2d");
+  if (!measureContext) throw new Error("Unable to prepare the certificate event details.");
+  const bodyFontSize = 12;
+  const bodyWidth = 468;
+  const bodyLineHeight = 14.5;
+  const eventLines = wrapCanvasRuns(measureContext, eventRuns, bodyWidth, bodyFontSize);
+  const legalLines = wrapCanvasText(measureContext, legalText, bodyWidth, bodyFontSize);
+  const [eventImages, legalImages] = await Promise.all([
+    Promise.all(eventLines.map((line) => makeCambriaRichTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize))),
+    Promise.all(legalLines.map((line) => makeCambriaTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize))),
   ]);
+  const [embeddedEventImages, embeddedLegalImages] = await Promise.all([
+    Promise.all(eventImages.map((image) => pdf.embedPng(image))),
+    Promise.all(legalImages.map((image) => pdf.embedPng(image))),
+  ]);
+  const eventStartY = 646.26;
+  const lastEventY = eventStartY - (eventLines.length - 1) * bodyLineHeight;
+  const legalStartY = lastEventY - bodyLineHeight - 10;
+  const { rgb } = await import("pdf-lib");
 
   for (const offset of [0, -413.2864]) {
-    const titleRows = [
-      { x: 137.019, y: 646.26 + offset, width: 389.2 },
-      { x: 63.76, y: 621.99 + offset, width: 461 },
-    ];
-    embeddedTitleImages.forEach((image, index) => {
-      const row = titleRows[index];
-      page.drawImage(image, { x: row.x, y: row.y - 3.7, width: row.width, height: 16.2 });
+    page.drawRectangle({ x: 62.5, y: 520 + offset, width: 473, height: 139.5, color: rgb(1, 1, 1) });
+    embeddedEventImages.forEach((image, index) => {
+      const baseline = eventStartY - index * bodyLineHeight + offset;
+      page.drawImage(image, { x: 63.76, y: baseline - 3.7, width: bodyWidth, height: 16.2 });
     });
-    if (embeddedDestinationImage) page.drawImage(embeddedDestinationImage, { x: 106.5, y: 603.8 + offset, width: 236, height: 16.2 });
-    if (embeddedDateImage) page.drawImage(embeddedDateImage, { x: 363.2, y: 603.8 + offset, width: 146.5, height: 16.2 });
+    embeddedLegalImages.forEach((image, index) => {
+      const baseline = legalStartY - index * bodyLineHeight + offset;
+      page.drawImage(image, { x: 63.76, y: baseline - 3.7, width: bodyWidth, height: 16.2 });
+    });
   }
 }
 
