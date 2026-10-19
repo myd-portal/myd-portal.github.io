@@ -125,6 +125,26 @@
   color: var(--ink);
 }
 
+.user-master-list-status {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.user-master-list-actions {
+  white-space: nowrap;
+}
+
+.user-master-list-actions .row-action,
+.user-master-list-actions .delete-button {
+  margin-right: 10px;
+}
+
+.user-master-list-edit-form {
+  min-width: 0;
+}
+
 .user-master-list-table select {
   background: #fff;
   border: 1px solid var(--line);
@@ -188,6 +208,18 @@
   .user-master-list-table td:nth-child(2),
   .user-master-list-table td:nth-child(5) {
     grid-column: 1 / -1;
+  }
+
+  .user-master-list-table td.user-master-list-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .user-master-list-actions .row-action,
+  .user-master-list-actions .delete-button {
+    margin: 0;
   }
 }
 

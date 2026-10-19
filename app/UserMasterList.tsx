@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { collection, deleteDoc, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -49,6 +49,8 @@ export default function UserMasterList({ user }: { user: User }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [editing, setEditing] = useState<MasterListAccount | null>(null);
+  const [editValues, setEditValues] = useState<{ accountRole: AccountRole; accountStatus: AccountStatus }>({ accountRole: "regular", accountStatus: "Pending" });
   const [pendingDelete, setPendingDelete] = useState<MasterListAccount | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -95,14 +97,23 @@ export default function UserMasterList({ user }: { user: User }) {
 
   const accountCountLabel = useMemo(() => `${accounts.length} verified ${accounts.length === 1 ? "account" : "accounts"}`, [accounts.length]);
 
-  async function updateAccount(account: MasterListAccount, changes: { accountStatus?: AccountStatus; accountRole?: AccountRole }) {
-    if (!db || busyId) return;
-    setBusyId(account.id);
+  function editAccount(account: MasterListAccount) {
+    setEditValues({ accountRole: normalizeAccountRole(account.accountRole), accountStatus: normalizeAccountStatus(account.accountStatus) });
+    setEditing(account);
+    setError("");
+    setMessage("");
+  }
+
+  async function saveAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!db || !editing || busyId) return;
+    setBusyId(editing.id);
     setError("");
     setMessage("");
     try {
-      await updateDoc(doc(db, "users", account.id), changes);
-      setMessage(`${account.name || "Account"} updated.`);
+      await updateDoc(doc(db, "users", editing.id), editValues);
+      setMessage(`${editing.name || "Account"} updated.`);
+      setEditing(null);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       setError(code ? `Could not update this account (${code}).` : "Could not update this account.");
@@ -128,7 +139,15 @@ export default function UserMasterList({ user }: { user: User }) {
     }
   }
 
-  return <section className="content-section user-master-list-section">
+  return <>{editing ? <section className="content-section form-section user-master-list-section user-master-list-edit-section">
+    <div className="section-heading"><div><p className="eyebrow">Super Admin / Edit account</p><h2>Edit User Approval</h2><p className="muted">Update the role or approval status for {editing.name || "this account"}.</p></div><button type="button" className="ghost-button" disabled={busyId === editing.id} onClick={() => { setEditing(null); setError(""); }}>Cancel</button></div>
+    {error && <p className="user-master-list-message is-error" role="alert">{error}</p>}
+    <form className="permit-form user-master-list-edit-form" onSubmit={(event) => void saveAccount(event)}>
+      <label>Role<select value={editValues.accountRole} onChange={(event) => setEditValues({ ...editValues, accountRole: event.target.value as AccountRole })} required>{roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label>Account Status<select value={editValues.accountStatus} onChange={(event) => setEditValues({ ...editValues, accountStatus: event.target.value as AccountStatus })} required>{(["Pending", "Approved", "Disapproved"] as AccountStatus[]).map((status) => <option key={status}>{status}</option>)}</select></label>
+      <div className="form-actions"><button type="submit" className="primary-button" disabled={busyId === editing.id}>{busyId === editing.id ? "Saving..." : "Save changes"}</button></div>
+    </form>
+  </section> : <section className="content-section user-master-list-section">
     <div className="section-heading"><div><p className="eyebrow">Super Admin</p><h2>User Approval</h2><p className="muted">Verified accounts waiting for approval and active system users.</p></div><span className="user-master-list-count">{accountCountLabel}</span></div>
     {error && <p className="user-master-list-message is-error" role="alert">{error}</p>}
     {message && <p className="user-master-list-message" role="status">{message}</p>}
@@ -138,7 +157,7 @@ export default function UserMasterList({ user }: { user: User }) {
         {searchQuery.trim() && <span className="user-master-list-results">{filteredAccounts.length} matching {filteredAccounts.length === 1 ? "account" : "accounts"}</span>}
       </div>
       {filteredAccounts.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No matching accounts</h3><p>Try a different name, position, designation, office, division, unit, role, or status.</p></div> : <>
-      <div className="user-master-list-table-wrap"><table className="user-master-list-table"><thead><tr><th>Name</th><th>Designation</th><th>Office</th><th>Division</th><th>Unit / Program / Project</th><th>Role</th><th>Status / Action</th></tr></thead><tbody>
+      <div className="user-master-list-table-wrap"><table className="user-master-list-table"><thead><tr><th>Name</th><th>Designation</th><th>Office</th><th>Division</th><th>Unit / Program / Project</th><th>Role / Status</th><th>Actions</th></tr></thead><tbody>
       {visibleRecords.map((account) => {
         const status = normalizeAccountStatus(account.accountStatus);
         const role = normalizeAccountRole(account.accountRole);
@@ -151,13 +170,8 @@ export default function UserMasterList({ user }: { user: User }) {
           <td data-label="Office">{profile.office || "—"}</td>
           <td data-label="Division">{profile.division || "—"}</td>
           <td data-label="Unit / Program / Project">{profile.unit || "—"}</td>
-          <td data-label="Role"><select aria-label={`Role for ${account.name || "account"}`} value={role} disabled={busy || protectedAccount} onChange={(event) => void updateAccount(account, { accountRole: event.target.value as AccountRole })}>{roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
-          <td data-label="Status / Action"><select className="user-master-list-action-select" aria-label={`Status and actions for ${account.name || "account"}`} value="" disabled={busy || protectedAccount} onChange={(event) => {
-            const action = event.target.value;
-            if (action === "approve") void updateAccount(account, { accountStatus: "Approved" });
-            else if (action === "disapprove") void updateAccount(account, { accountStatus: "Disapproved" });
-            else if (action === "delete") setPendingDelete(account);
-          }}><option value="" disabled>{status}</option>{status !== "Approved" && <option value="approve">Approve</option>}{status !== "Disapproved" && <option value="disapprove">Disapprove</option>}<option value="delete">Delete</option></select></td>
+          <td data-label="Role / Status"><strong>{roleOptions.find((option) => option.value === role)?.label ?? "Regular"}</strong><span className="user-master-list-status">{status}</span></td>
+          <td className="user-master-list-actions" data-label="Actions"><button type="button" className="row-action" disabled={busy || protectedAccount} onClick={() => editAccount(account)}>Edit</button><button type="button" className="delete-button" disabled={busy || protectedAccount} onClick={() => setPendingDelete(account)}>Delete</button></td>
         </tr>;
       })}
       </tbody></table></div>
@@ -165,5 +179,5 @@ export default function UserMasterList({ user }: { user: User }) {
       </>}
     </>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this account?" description={`Remove ${pendingDelete?.name || "this account"} from User Approval? Its Firestore profile will be deleted, which disables access to My Desk.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteAccount()} />
-  </section>;
+  </section>}</>;
 }

@@ -128,11 +128,13 @@ function AdminTable<T extends RecordBase>({ rows, columns, label, busy, onEdit, 
   </>;
 }
 
-function AdminEditForm({ title, busy, onCancel, onSubmit, children }: {
-  title: string; busy: boolean; onCancel: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode;
+function AdminEditForm({ title, busy, error, message, onCancel, onSubmit, children }: {
+  title: string; busy: boolean; error: string; message: string; onCancel: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; children: ReactNode;
 }) {
   return <section className="content-section form-section super-admin-edit-section">
     <div className="section-heading"><div><p className="eyebrow">Super Admin · Edit record</p><h2>{title}</h2><p className="muted">Update the saved record details.</p></div><button type="button" className="ghost-button" disabled={busy} onClick={onCancel}>Cancel</button></div>
+    {error && <p className="super-admin-records-message is-error" role="alert">{error}</p>}
+    {message && <p className="super-admin-records-message" role="status">{message}</p>}
     <form className="permit-form super-admin-edit-form" onSubmit={onSubmit}>
       {children}
       <div className="form-actions"><button type="submit" className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button></div>
@@ -240,14 +242,14 @@ function UserProfilesManager({ user }: { user: User }) {
   }
 
   return <>
-    <AdminFrame title="Users' Profile" description="Review and update saved user profiles." count={profiles.length} loading={loading} error={error} message={message}>
+    {!editing && <AdminFrame title="Users' Profile" description="Review and update saved user profiles." count={profiles.length} loading={loading} error={error} message={message}>
       <AdminTable rows={profiles} label="User Profiles" busy={Boolean(busyId)} resettingId={resettingId} onResetPassword={(record) => void resetPassword(record)} onEdit={edit} onDelete={setPendingDelete} columns={[
         { label: "Name", render: (record) => <strong>{text(record.name) || "—"}</strong> },
         { label: "Designation", render: (record) => text(record.designation) },
         { label: "Unit", render: (record) => accountProfileSelection(record).unit },
       ]} />
-    </AdminFrame>
-    {editing && <AdminEditForm title="Edit User Profile" busy={busyId === editing.id} onCancel={() => setEditing(null)} onSubmit={(event) => void save(event)}>
+    </AdminFrame>}
+    {editing && <AdminEditForm title="Edit User Profile" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
       <label>First Name<input maxLength={60} value={values.firstName} onChange={(event) => setValues({ ...values, firstName: event.target.value })} required /></label>
       <label>Middle Name<input maxLength={60} value={values.middleName} onChange={(event) => setValues({ ...values, middleName: event.target.value })} /></label>
       <label>Last Name<input maxLength={60} value={values.lastName} onChange={(event) => setValues({ ...values, lastName: event.target.value })} required /></label>
@@ -312,14 +314,14 @@ function SpecialOrdersManager() {
   }
 
   return <>
-    <AdminFrame title="Users' SO" description="Edit or remove saved Special Orders." count={records.length} loading={loading} error={error} message={message}>
+    {!editing && <AdminFrame title="Users' SO" description="Edit or remove saved Special Orders." count={records.length} loading={loading} error={error} message={message}>
       <AdminTable rows={records} label="Special Orders" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={[
         { label: "Activity Title", render: (record) => <strong>{text(record.activityTitle) || "—"}</strong> },
         { label: "Date From – Date To", render: (record) => dateRange(record.dateFrom, record.dateTo) },
         { label: "Participants", render: (record) => (record.participants ?? []).join(", ") },
       ]} />
-    </AdminFrame>
-    {editing && <AdminEditForm title="Edit Special Order" busy={busyId === editing.id} onCancel={() => setEditing(null)} onSubmit={(event) => void save(event)}>
+    </AdminFrame>}
+    {editing && <AdminEditForm title="Edit Special Order" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
       <label>Subject<input maxLength={240} value={values.subject} onChange={(event) => setValues({ ...values, subject: event.target.value })} required /></label>
       <label>Activity Title<input maxLength={240} value={values.activityTitle} onChange={(event) => setValues({ ...values, activityTitle: event.target.value })} required /></label>
       <label>Date From<input type="date" value={values.dateFrom} onChange={(event) => setValues({ ...values, dateFrom: event.target.value })} /></label>
@@ -417,10 +419,10 @@ function NtaManager() {
   ];
 
   return <>
-    <AdminFrame title="Users' NTA" description="Edit or remove Individual, Group, and Multiple Notices to Attend." count={records.length} loading={loading} error={error} message={message}>
+    {!editing && <AdminFrame title="Users' NTA" description="Edit or remove Individual, Group, and Multiple Notices to Attend." count={records.length} loading={loading} error={error} message={message}>
       <AdminTable rows={records} label="Notices to Attend" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={columns} />
-    </AdminFrame>
-    {editing && <AdminEditForm title="Edit Notice to Attend" busy={busyId === editing.id} onCancel={() => setEditing(null)} onSubmit={(event) => void save(event)}>
+    </AdminFrame>}
+    {editing && <AdminEditForm title="Edit Notice to Attend" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
       <label className="wide-field">Mode<select value={values.mode} onChange={(event) => setValues({ ...values, mode: event.target.value as typeof values.mode })}><option value="individual">Individual</option><option value="batch">Group</option><option value="multiple">Multiple</option></select></label>
       <label>Subject<input value={values.subject} onChange={(event) => setValues({ ...values, subject: event.target.value })} required /></label>
       <label>Activity Title<input value={values.activityTitle} onChange={(event) => setValues({ ...values, activityTitle: event.target.value })} required /></label>
@@ -529,14 +531,14 @@ function TravelOrdersManager() {
   }
 
   return <>
-    <AdminFrame title="Users' TO" description="Edit or remove saved Travel Orders." count={records.length} loading={loading} error={error} message={message}>
+    {!editing && <AdminFrame title="Users' TO" description="Edit or remove saved Travel Orders." count={records.length} loading={loading} error={error} message={message}>
       <AdminTable rows={records} label="Travel Orders" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={[
         { label: "Name", render: (record) => <strong>{text(record.people?.[0]?.name) || "—"}</strong> },
         { label: "Place of Travel", render: (record) => text(record.placeOfTravel) },
         { label: "Purpose", render: (record) => text(record.purpose) },
       ]} />
-    </AdminFrame>
-    {editing && <AdminEditForm title="Edit Travel Order" busy={busyId === editing.id} onCancel={() => setEditing(null)} onSubmit={(event) => void save(event)}>
+    </AdminFrame>}
+    {editing && <AdminEditForm title="Edit Travel Order" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
       <label>Date<input type="date" value={values.date} onChange={(event) => setValues({ ...values, date: event.target.value })} /></label>
       <label>Name<input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required /></label>
       <label>Position<input value={values.position} onChange={(event) => setValues({ ...values, position: event.target.value })} /></label>
@@ -606,15 +608,15 @@ function AppearancesManager() {
   }
 
   return <>
-    <AdminFrame title="Users' Appearances" description="Edit or remove Certificates of Appearance." count={records.length} loading={loading} error={error} message={message}>
+    {!editing && <AdminFrame title="Users' Appearances" description="Edit or remove Certificates of Appearance." count={records.length} loading={loading} error={error} message={message}>
       <AdminTable rows={records} label="Appearances" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={[
         { label: "Certificate Unit", render: (record) => text(record.certificateUnit ?? record.ownerUnit ?? record.unit) },
         { label: "Event's Title", render: (record) => <strong>{text(record.eventTitle) || "—"}</strong> },
         { label: "Date From – Date To", render: (record) => dateRange(record.eventDateFrom ?? record.eventDate, record.eventDateTo ?? record.eventDateFrom ?? record.eventDate) },
         { label: "Names", render: (record) => (record.people ?? []).map((person) => person.name).filter(Boolean).join(", ") },
       ]} />
-    </AdminFrame>
-    {editing && <AdminEditForm title="Edit Certificate of Appearance" busy={busyId === editing.id} onCancel={() => setEditing(null)} onSubmit={(event) => void save(event)}>
+    </AdminFrame>}
+    {editing && <AdminEditForm title="Edit Certificate of Appearance" busy={busyId === editing.id} error={error} message={message} onCancel={() => { setEditing(null); setError(""); }} onSubmit={(event) => void save(event)}>
       <label className="wide-field">Event's Title<input value={values.eventTitle} onChange={(event) => setValues({ ...values, eventTitle: event.target.value })} required /></label>
       <label className="wide-field">Destination<input value={values.destination} onChange={(event) => setValues({ ...values, destination: event.target.value })} /></label>
       <label>Date From<input type="date" value={values.eventDateFrom} onChange={(event) => setValues({ ...values, eventDateFrom: event.target.value })} /></label>
