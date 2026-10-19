@@ -367,6 +367,11 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
             </div>;
           })}
         </div>
+        <div className="cleaning-task-legend" aria-label="Assignment status legend">
+          <span><i className="is-completed" aria-hidden="true" />Completed</span>
+          <span><i className="is-ongoing" aria-hidden="true" />Ongoing</span>
+          <span><i className="is-upnext" aria-hidden="true" />Up Next</span>
+        </div>
       </section>
     </div>
     <DeleteConfirmation
