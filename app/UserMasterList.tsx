@@ -88,7 +88,7 @@ export default function UserMasterList({ user }: { user: User }) {
       setLoading(false);
     }, (cause) => {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not load the Users' Master List (${code}).` : "Could not load the Users' Master List.");
+      setError(code ? `Could not load User Approval (${code}).` : "Could not load User Approval.");
       setLoading(false);
     });
   }, []);
@@ -118,7 +118,7 @@ export default function UserMasterList({ user }: { user: User }) {
     setMessage("");
     try {
       await deleteDoc(doc(db, "users", pendingDelete.id));
-      setMessage(`${pendingDelete.name || "Account"} removed from the Users' Master List and system access disabled.`);
+      setMessage(`${pendingDelete.name || "Account"} removed from User Approval and system access disabled.`);
       setPendingDelete(null);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
@@ -129,7 +129,7 @@ export default function UserMasterList({ user }: { user: User }) {
   }
 
   return <section className="content-section user-master-list-section">
-    <div className="section-heading"><div><p className="eyebrow">Super Admin</p><h2>Users&apos; Master List</h2><p className="muted">Verified accounts waiting for approval and active system users.</p></div><span className="user-master-list-count">{accountCountLabel}</span></div>
+    <div className="section-heading"><div><p className="eyebrow">Super Admin</p><h2>User Approval</h2><p className="muted">Verified accounts waiting for approval and active system users.</p></div><span className="user-master-list-count">{accountCountLabel}</span></div>
     {error && <p className="user-master-list-message is-error" role="alert">{error}</p>}
     {message && <p className="user-master-list-message" role="status">{message}</p>}
     {loading ? <p className="muted">Loading verified accounts...</p> : accounts.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No verified accounts yet</h3><p>Accounts appear here after their owners verify their email address and sign in.</p></div> : <>
@@ -161,9 +161,9 @@ export default function UserMasterList({ user }: { user: User }) {
         </tr>;
       })}
       </tbody></table></div>
-      <RecordPagination totalRecords={filteredAccounts.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Users' Master List" />
+      <RecordPagination totalRecords={filteredAccounts.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="User Approval" />
       </>}
     </>}
-    <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this account?" description={`Remove ${pendingDelete?.name || "this account"} from the Users' Master List? Its Firestore profile will be deleted, which disables access to My Desk.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteAccount()} />
+    <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this account?" description={`Remove ${pendingDelete?.name || "this account"} from User Approval? Its Firestore profile will be deleted, which disables access to My Desk.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteAccount()} />
   </section>;
 }
