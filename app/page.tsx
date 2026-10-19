@@ -1177,7 +1177,7 @@ function PermitCard({ permit, name, permitNo, decisionKey, approvedPermitNumbers
 
     <div className="permit-approval">
       <div className="permit-approved-label">Approved:</div>
-      {decision?.status === "Approved" && <div className="permit-digital-signature">{signatureAsset && <img src={publicAsset(signatureAsset)} alt="Permit Slip approval signature" />}<div><span>Digitally Signed By</span><strong>{decision.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision.decidedAt)}</span><span>Time: {decisionTime}</span></div></div>}
+      {isApproved && <div className="permit-digital-signature">{signatureAsset && <img src={publicAsset(signatureAsset)} alt="Permit Slip approval signature" />}<div><span>Digitally Signed By</span><strong>{decision?.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision?.decidedAt)}</span><span>Time: {decisionTime}</span></div></div>}
       {decision?.status === "Disapproved" && <div className="permit-disapproved-stamp"><strong>Disapproved</strong><span>By {decision.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</span><span>Date: {signatureDate(decision.decidedAt)}</span><span>Time: {decisionTime}</span></div>}
       <div className="permit-approved-name">{signatory?.name.toLocaleUpperCase("en") || (requiresConfiguredSignatory ? "" : "GERLIE B. ANTIPASO")}</div>
       {signatory?.kind === "fod"

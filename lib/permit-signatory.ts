@@ -10,6 +10,7 @@ const fieldOperationsPermitOwnerUnits = new Set([
   "ELCAC",
   "Extension and Partnership",
   "F2C2",
+  "Field Operations Division",
   "Gender and Development",
   "Halal Projects",
   "HVCD Program",

@@ -334,7 +334,7 @@ service cloud.firestore {
       let hasProfile = exists(profilePath);
       let profile = hasProfile ? get(profilePath).data : {};
       return hasProfile && isFodAppearanceOwnerRecord(data)
-        && ((certificateScopeUnit(data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"]
+        && ((certificateScopeUnit(data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Field Operations Division", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"]
             && isFodAppearanceApproverProfile(profile, "Chief"))
           || (certificateScopeUnit(data) in ["AGRISTAT", "AMIA", "DRRM"]
             && isFodAppearanceApproverProfile(profile, "AGRISTAT/DRRM/AMIA Project Leader")));
@@ -350,7 +350,7 @@ service cloud.firestore {
         || (isChiefCertificateAdmin() && !isFodChief
           && data.get("division", "") == appearanceDivisionForProfile(get(currentUserPath()).data))
         || (isFodChief && isFodAppearanceOwnerRecord(data)
-          && certificateScopeUnit(data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"])
+          && certificateScopeUnit(data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Field Operations Division", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"])
         || (isCurrentFodAppearanceApprover("AGRISTAT/DRRM/AMIA Project Leader")
           && isFodAppearanceOwnerRecord(data)
           && certificateScopeUnit(data) in ["AGRISTAT", "AMIA", "DRRM"]);
@@ -496,7 +496,7 @@ service cloud.firestore {
           && request.resource.data.signerOffice == "Division"
           && isFodAppearanceOwnerRecord(resource.data)
           && ((signatureAsset == "field_operations_division_chief_signature.png"
-              && certificateScopeUnit(resource.data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"]
+              && certificateScopeUnit(resource.data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Field Operations Division", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"]
               && isFodAppearanceApproverProfile(profile, "Chief")
               && request.resource.data.signerDesignation == "Chief")
             || (signatureAsset == "agristat_and_drrm_focal_persons_amia_project_leader.png"
