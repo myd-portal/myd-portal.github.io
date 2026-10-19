@@ -882,7 +882,12 @@ function PermitNotificationCenter({ isAdmin, isSuperAdmin, userId, notifications
     markNotificationKeyAsRead(permitNotificationKey(notification));
   }
 
-  return <div className="notification-center" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
+  return <div className="notification-center" onBlur={(event) => {
+    const center = event.currentTarget;
+    window.setTimeout(() => {
+      if (!center.contains(document.activeElement)) setOpen(false);
+    }, 0);
+  }} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}>
     <button type="button" className="notification-button" aria-label={`${visibleCount} unread notifications`} title={`${visibleCount} unread notifications`} aria-haspopup="dialog" aria-expanded={open} onClick={toggleOpen}>
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg>
       {visibleCount > 0 && <span className="notification-badge" aria-hidden="true">{visibleCount > 99 ? "99+" : visibleCount}</span>}
@@ -967,14 +972,14 @@ function PermitNotificationCenter({ isAdmin, isSuperAdmin, userId, notifications
         {notification.activityTitle && <span className="notification-detail"><span className="notification-detail-label">Title</span><span>{notification.activityTitle}</span></span>}
         <small>{notification.read ? "Read" : "New · Select to view"}</small>
       </button></li>)}</ul></>}
-      {shownDocumentNotifications.some((notification) => notification.documentType !== "Leave Application" && notification.documentType !== "Travel Expense Voucher" && notification.documentType !== "Certificate Approval" && notification.documentType !== "Certificate Decision") && <><p className="notification-section-title">Assigned Documents</p><ul>{shownDocumentNotifications.filter((notification) => notification.documentType !== "Leave Application" && notification.documentType !== "Travel Expense Voucher" && notification.documentType !== "Certificate Approval" && notification.documentType !== "Certificate Decision").map((notification) => <li key={notification.id}><button type="button" className={`notification-item calendar-of-activities-notification${notification.read ? " is-read" : ""}`} onClick={() => { onReadDocument(notification); if (notification.documentType !== "Permit Slip") { setOpen(false); onOpenDocumentNotification(notification); } }}>
+      {shownDocumentNotifications.some((notification) => notification.documentType !== "Leave Application" && notification.documentType !== "Travel Expense Voucher" && notification.documentType !== "Certificate Approval" && notification.documentType !== "Certificate Decision") && <><p className="notification-section-title">Assigned Documents</p><ul>{shownDocumentNotifications.filter((notification) => notification.documentType !== "Leave Application" && notification.documentType !== "Travel Expense Voucher" && notification.documentType !== "Certificate Approval" && notification.documentType !== "Certificate Decision").map((notification) => <li key={notification.id}><button type="button" className={`notification-item calendar-of-activities-notification${notification.read ? " is-read" : ""}`} onClick={() => { onReadDocument(notification); setOpen(false); onOpenDocumentNotification(notification); }}>
         <span className="notification-status notification-status-pending">{notification.documentType || "Assigned document"}</span>
         <strong>{assignedDocumentSummary(notification)}</strong>
         {notification.documentType === "Special Order" && <><span className="notification-detail"><span className="notification-detail-label">Date</span><span>{notification.dateFrom === notification.dateTo ? formatDate(notification.dateFrom ?? "") : `${formatDate(notification.dateFrom ?? "")} – ${formatDate(notification.dateTo ?? "")}`}</span></span><span className="notification-detail"><span className="notification-detail-label">Venue</span><span>{notification.venue}</span></span></>}
         {notification.documentType === "Notice to Attend" && notification.schedules?.map((schedule, index) => <span className="calendar-of-activities-notification-activity" key={`${notification.id}-schedule-${index}`}><b>{schedule.dateFrom === schedule.dateTo ? formatDate(schedule.dateFrom) : `${formatDate(schedule.dateFrom)} – ${formatDate(schedule.dateTo)}`}</b><span>{schedule.venue}</span></span>)}
         {notification.documentType === "Permit Slip" && <><span className="notification-detail"><span className="notification-detail-label">Date</span><span>{formatDate(notification.date ?? "")}</span></span><span className="notification-detail"><span className="notification-detail-label">Purpose</span><span>{notification.purpose}</span></span></>}
         {notification.documentType === "Travel Order" && <><span className="notification-detail"><span className="notification-detail-label">Departure Date to Return Date</span><strong>{formatDate(notification.departureDate ?? "")} – {formatDate(notification.returnDate ?? "")}</strong></span><span className="notification-detail"><span className="notification-detail-label">Place of Travel</span><span>{notification.placeOfTravel}</span></span><span className="notification-detail"><span className="notification-detail-label">Specific Purpose of the Trip</span><strong>{notification.purpose}</strong></span></>}
-        <small>{notification.documentType === "Permit Slip" ? "New · Select to mark as read" : "New · Select to open"}</small>
+        <small>{notification.read ? "Read" : "New · Select to open"}</small>
       </button></li>)}</ul></>}
       {shownCalendarOfActivitiesNotifications.length > 0 && <><p className="notification-section-title">Calendar of Activities</p><ul>{shownCalendarOfActivitiesNotifications.map((notification) => <li key={notification.id}><button type="button" className={`notification-item calendar-of-activities-notification${notification.read ? " is-read" : ""}`} onClick={() => { onReadCalendarOfActivities(notification); setOpen(false); onOpenCalendarOfActivities(notification); }}>
         <strong>{notification.month ? new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${notification.month}-01T00:00:00Z`)) : "Activity schedule"}</strong>
@@ -2851,7 +2856,7 @@ export default function Home() {
     closeMobileNavigation();
     setView("list");
     setError("");
-    setNotificationFocus(notification.documentType === "Permit Slip" ? null : {
+    setNotificationFocus({
       kind: "document",
       id: notification.documentId,
       documentType: notification.documentType,
@@ -2912,6 +2917,17 @@ export default function Home() {
     setSpecialOrderPreview(order);
     clearNotificationFocus();
   }, [notificationFocus, specialOrders, clearNotificationFocus]);
+
+  useEffect(() => {
+    if (!user || notificationFocus?.kind !== "document" || notificationFocus.documentType !== "Permit Slip") return;
+    const permit = permits.find((item) => item.id === notificationFocus.id);
+    if (!permit) return;
+    const assignedPersonIndex = permit.personIds?.indexOf(user.uid) ?? -1;
+    const personIndex = assignedPersonIndex >= 0 ? assignedPersonIndex : 0;
+    setSingleSlipPreview(true);
+    setPreview(singlePersonPermitPreview(permit, personIndex));
+    clearNotificationFocus();
+  }, [notificationFocus, permits, user?.uid, clearNotificationFocus]);
 
   function closeMobileNavigation() {
     setMobileMenuOpen(false);

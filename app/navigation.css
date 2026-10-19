@@ -396,8 +396,9 @@
 
 @media(max-width:1120px){
   .topbar .notification-dropdown{
-    max-height:min(70vh,calc(100vh - 82px));
-    max-height:min(70dvh,calc(100dvh - 82px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
+    max-height:calc(100vh - 98px);
+    max-height:calc(100dvh - 98px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+    -webkit-overflow-scrolling:touch;
     position:fixed;
     right:max(12px,env(safe-area-inset-right,0px));
     top:calc(70px + env(safe-area-inset-top,0px));
@@ -407,8 +408,8 @@
 
 @media(max-width:480px){
   .topbar .notification-dropdown{
-    max-height:min(70vh,calc(100vh - 72px));
-    max-height:min(70dvh,calc(100dvh - 72px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
+    max-height:calc(100vh - 88px);
+    max-height:calc(100dvh - 88px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
     top:calc(60px + env(safe-area-inset-top,0px));
   }
 }
