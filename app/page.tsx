@@ -2919,6 +2919,18 @@ export default function Home() {
     setMobileMyDocsOpen(false);
   }
 
+  const isSuperAdmin = normalizeAccountRole(
+    user && accountProfile?.userId === user.uid ? accountProfile.accountRole : undefined,
+    user?.email,
+  ) === "superadmin";
+
+  useEffect(() => {
+    if (isSuperAdmin && section !== "user-master-list") {
+      setSection("user-master-list");
+      setView("list");
+    }
+  }, [isSuperAdmin, section]);
+
   if (loading) return <div className="loading-screen" role="status" aria-label="Loading My Desk"><span>Loading</span><img className="loading-logo" src={publicAsset("/my%20desk%20logo.png")} alt="" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><span aria-hidden="true">...</span></div>;
   if (!isFirebaseConfigured) return <div className="setup-screen"><div className="setup-card"><img className="brand-mark brand-logo" src="/my%20desk%20logo.png" alt="My Desk logo" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><p className="eyebrow">One setup step</p><h1>Connect your Firebase project</h1><p className="muted">Copy <strong>.env.example</strong> to <strong>.env.local</strong>, add your Firebase web app credentials, then restart the dev server.</p><code>NEXT_PUBLIC_FIREBASE_PROJECT_ID=...</code></div></div>;
   if (startupError) return <div className="setup-screen"><section className="setup-card"><p className="eyebrow">Connection issue</p><h1>My Desk could not start</h1><p className="muted" role="alert">{startupError}</p><button className="primary-button" type="button" onClick={() => window.location.reload()}>Reload My Desk</button></section></div>;
@@ -2932,17 +2944,10 @@ export default function Home() {
   const accountRole = normalizeAccountRole(activeAccountProfile?.accountRole, user.email);
   const certificateOwnerScope = accountProfileSelection({ ...(activeAccountProfile ?? {}), profileFieldsVersion: 4 });
   const isAdmin = isPermitAdmin(user.email, accountRole);
-  const isSuperAdmin = accountRole === "superadmin";
   const canAccessCertificateApproval = isSuperAdmin || (accountRole === "admin" && (activeAccountProfile?.designation === "Chief" || isFieldOperationsAppearanceApprover(activeAccountProfile ?? {})));
   const accountUnit = activeAccountProfile?.unit || activeAccountProfile?.assignment || null;
   const canAccessCleaningTask = canAccessCleaningTaskNavigation(accountRole, accountUnit ?? "", activeAccountProfile?.designation ?? "");
   const canViewCleaningTask = canViewCleaningTaskLanding(accountRole, accountUnit ?? "");
-  useEffect(() => {
-    if (isSuperAdmin && section !== "user-master-list") {
-      setSection("user-master-list");
-      setView("list");
-    }
-  }, [isSuperAdmin, section]);
   const canAccessAmiaDocumentTracking = accountRole === "regular"
     ? activeAccountProfile?.office === "Division"
       && activeAccountProfile?.division === "Field Operations Division"
