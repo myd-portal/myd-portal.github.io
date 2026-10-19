@@ -1,4 +1,4 @@
-import type { Color, PDFFont, PDFPage } from "pdf-lib";
+import type { PDFDocument, PDFPage } from "pdf-lib";
 import { divisionSignatory, type TevDivision } from "@/lib/mytev";
 import { appearanceCertificateSignatory, certificateDisapprovalStampDetails, fieldOperationsAppearanceApprovalSignatureAsset, type CertificateWorkflowFields } from "@/app/CertificateWorkflow";
 
@@ -42,29 +42,25 @@ function certificateDateRange(from?: string, to?: string) {
   return `${certificateDate(start)}-${certificateDate(end)}`;
 }
 
-function fitFontSize(text: string, width: number, font: { widthOfTextAtSize: (value: string, size: number) => number }, maxSize: number, minSize: number) {
-  for (let size = maxSize; size >= minSize; size -= 0.25) {
-    if (font.widthOfTextAtSize(text, size) <= width) return size;
-  }
-  return minSize;
-}
+const eventFontFamily = 'Cambria, "Times New Roman", serif';
 
-function wrapText(text: string, width: number, font: { widthOfTextAtSize: (value: string, size: number) => number }, size: number) {
+function wrapCanvasText(context: CanvasRenderingContext2D, text: string, width: number, size: number) {
+  context.font = `${size}px ${eventFontFamily}`;
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
     const candidate = line ? `${line} ${word}` : word;
-    if (font.widthOfTextAtSize(candidate, size) <= width) {
+    if (context.measureText(candidate).width <= width) {
       line = candidate;
       continue;
     }
     if (line) lines.push(line);
     line = word;
-    if (font.widthOfTextAtSize(line, size) > width) {
+    if (context.measureText(line).width > width) {
       let chunk = "";
       for (const character of word) {
-        if (chunk && font.widthOfTextAtSize(`${chunk}${character}`, size) > width) {
+        if (chunk && context.measureText(`${chunk}${character}`).width > width) {
           lines.push(chunk);
           chunk = character;
         } else chunk += character;
@@ -76,40 +72,74 @@ function wrapText(text: string, width: number, font: { widthOfTextAtSize: (value
   return lines;
 }
 
-function drawEventDetails(page: PDFPage, record: BlankCertificatePdfRecord, font: PDFFont, white: Color) {
+async function makeCambriaTextImage(text: string, width: number, height: number, baseline: number, fontSize: number, minFontSize = fontSize) {
+  await document.fonts.load(`${fontSize}px Cambria`);
+  const scale = 4;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(width * scale);
+  canvas.height = Math.ceil(height * scale);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Unable to prepare the certificate event details.");
+  context.scale(scale, scale);
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#111";
+  context.textBaseline = "alphabetic";
+  let size = fontSize;
+  context.font = `${size}px ${eventFontFamily}`;
+  while (context.measureText(text).width > width - 2 && size > minFontSize) {
+    size = Math.max(minFontSize, size - 0.25);
+    context.font = `${size}px ${eventFontFamily}`;
+  }
+  context.fillText(text, 1, baseline);
+  return canvas.toDataURL("image/png");
+}
+
+async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCertificatePdfRecord) {
   const legacyTitle = record.eventTitle?.trim() === legacyBlankTitle;
   const title = (legacyTitle ? record.purpose : record.eventTitle)?.trim() || "";
   const destination = record.destination?.trim() || "";
   const dateRange = certificateDateRange(record.eventDateFrom, record.eventDateTo);
+  const titleCanvas = document.createElement("canvas");
+  const titleContext = titleCanvas.getContext("2d");
+  if (!titleContext) throw new Error("Unable to prepare the certificate event title.");
+  await document.fonts.load(`11.5px Cambria`);
+  let titleSize = 11.5;
+  let titleLines = wrapCanvasText(titleContext, title, 388, titleSize);
+  while (titleLines.length > 2 && titleSize > 8.5) {
+    titleSize -= 0.25;
+    titleLines = wrapCanvasText(titleContext, title, 388, titleSize);
+  }
+  const titleImages = await Promise.all(titleLines.slice(0, 2).map((line, index) => makeCambriaTextImage(
+    line,
+    index === 0 ? 389.2 : 461,
+    16.2,
+    12.5,
+    titleSize,
+  )));
+  const destinationImage = destination
+    ? await makeCambriaTextImage(destination, 236, 16.2, 12.5, 11.5, 7.5)
+    : "";
+  const dateImage = dateRange
+    ? await makeCambriaTextImage(dateRange, 146.5, 16.2, 12.5, 10.5, 8)
+    : "";
+  const [embeddedTitleImages, embeddedDestinationImage, embeddedDateImage] = await Promise.all([
+    Promise.all(titleImages.map((image) => pdf.embedPng(image))),
+    destinationImage ? pdf.embedPng(destinationImage) : Promise.resolve(null),
+    dateImage ? pdf.embedPng(dateImage) : Promise.resolve(null),
+  ]);
+
   for (const offset of [0, -413.2864]) {
     const titleRows = [
       { x: 137.019, y: 646.26 + offset, width: 389.2 },
       { x: 63.76, y: 621.99 + offset, width: 461 },
     ];
-    for (const row of titleRows) {
-      page.drawRectangle({ x: row.x - 1, y: row.y - 3.7, width: row.width + 2, height: 16.2, color: white });
-    }
-    page.drawRectangle({ x: 106.5, y: 603.8 + offset, width: 236, height: 16.2, color: white });
-    page.drawRectangle({ x: 363.2, y: 603.8 + offset, width: 146.5, height: 16.2, color: white });
-
-    let titleSize = 11.5;
-    let titleLines = wrapText(title, 388, font, titleSize);
-    while (titleLines.length > 2 && titleSize > 8.5) {
-      titleSize -= 0.25;
-      titleLines = wrapText(title, 388, font, titleSize);
-    }
-    titleLines.slice(0, 2).forEach((line, index) => {
-      page.drawText(line, { x: titleRows[index].x, y: titleRows[index].y, size: titleSize, font });
+    embeddedTitleImages.forEach((image, index) => {
+      const row = titleRows[index];
+      page.drawImage(image, { x: row.x, y: row.y - 3.7, width: row.width, height: 16.2 });
     });
-
-    if (destination) {
-      const destinationSize = fitFontSize(destination, 230, font, 11.5, 7.5);
-      page.drawText(destination, { x: 108, y: 607.49 + offset, size: destinationSize, font });
-    }
-    if (dateRange) {
-      const dateSize = fitFontSize(dateRange, 140, font, 10.5, 8);
-      page.drawText(dateRange, { x: 364.5, y: 607.49 + offset, size: dateSize, font });
-    }
+    if (embeddedDestinationImage) page.drawImage(embeddedDestinationImage, { x: 106.5, y: 603.8 + offset, width: 236, height: 16.2 });
+    if (embeddedDateImage) page.drawImage(embeddedDateImage, { x: 363.2, y: 603.8 + offset, width: 146.5, height: 16.2 });
   }
 }
 
@@ -183,14 +213,13 @@ async function makeSignatoryBlockImage(name: string, designation: string, divisi
 export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord) {
   const response = await fetch(blankCertificatePdfAsset);
   if (!response.ok) throw new Error("The Certificate of Appearance PDF could not be loaded.");
-  const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
+  const { PDFDocument, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.load(await response.arrayBuffer());
   const page = pdf.getPages()[0];
   if (!page) throw new Error("The Certificate of Appearance PDF has no pages.");
 
   const division = record.division as TevDivision;
-  const eventFont = await pdf.embedFont(StandardFonts.TimesRoman);
-  drawEventDetails(page, record, eventFont, rgb(1, 1, 1));
+  await drawEventDetails(pdf, page, record);
   const templateSignatory = divisionSignatory(division);
   const signatory = appearanceCertificateSignatory(record, templateSignatory.name, templateSignatory.position);
   const signatoryImage = await pdf.embedPng(await makeSignatoryBlockImage(signatory.name, signatory.position, division, signatory.isProfileSignatory ? signatory.designation : undefined));
