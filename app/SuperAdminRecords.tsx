@@ -15,8 +15,9 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import type { User } from "firebase/auth";
-import { db } from "@/lib/firebase";
+import { sendPasswordResetEmail, type User } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "@/lib/firebase";
 import { accountProfileSelection } from "@/lib/account-profile";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -113,14 +114,15 @@ function AdminFrame({ title, description, count, loading, error, message, childr
   </section>;
 }
 
-function AdminTable<T extends RecordBase>({ rows, columns, label, busy, onEdit, onDelete }: {
+function AdminTable<T extends RecordBase>({ rows, columns, label, busy, onEdit, onDelete, onResetPassword, resettingId }: {
   rows: T[]; columns: Column<T>[]; label: string; busy: boolean; onEdit: (row: T) => void; onDelete: (row: T) => void;
+  onResetPassword?: (row: T) => void; resettingId?: string;
 }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(rows);
   if (!rows.length) return <div className="empty-state"><span className="empty-number">00</span><h3>No {label.toLocaleLowerCase("en")} yet</h3><p>Records will appear here when they are available.</p></div>;
   return <>
     <div className="super-admin-records-table-wrap"><table className="super-admin-records-table"><thead><tr>{columns.map((column) => <th key={column.label}>{column.label}</th>)}<th>Actions</th></tr></thead><tbody>
-      {visibleRecords.map((row) => <tr key={row.id}>{columns.map((column) => <td key={column.label} data-label={column.label}>{column.render(row) || "—"}</td>)}<td className="super-admin-records-actions" data-label="Actions"><button type="button" className="row-action" disabled={busy} onClick={() => onEdit(row)}>Edit</button><button type="button" className="delete-button" disabled={busy} onClick={() => onDelete(row)}>Delete</button></td></tr>)}
+      {visibleRecords.map((row) => <tr key={row.id}>{columns.map((column) => <td key={column.label} data-label={column.label}>{column.render(row) || "—"}</td>)}<td className="super-admin-records-actions" data-label="Actions"><button type="button" className="row-action" disabled={busy || resettingId === row.id} onClick={() => onEdit(row)}>Edit</button>{onResetPassword && <button type="button" className="row-action" disabled={busy || Boolean(resettingId)} onClick={() => onResetPassword(row)}>{resettingId === row.id ? "Sending..." : "Reset Password"}</button>}<button type="button" className="delete-button" disabled={busy || resettingId === row.id} onClick={() => onDelete(row)}>Delete</button></td></tr>)}
     </tbody></table></div>
     <RecordPagination totalRecords={rows.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label={label} />
   </>;
@@ -162,6 +164,7 @@ function UserProfilesManager({ user }: { user: User }) {
   const [editing, setEditing] = useState<ProfileRecord | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ProfileRecord | null>(null);
   const [busyId, setBusyId] = useState("");
+  const [resettingId, setResettingId] = useState("");
   const [message, setMessage] = useState("");
   const [values, setValues] = useState({ firstName: "", middleName: "", lastName: "", address: "", position: "", designation: "", office: "", division: "", unit: "" });
   const profiles = useMemo(() => records.filter((record) => record.emailVerified === true), [records]);
@@ -212,9 +215,33 @@ function UserProfilesManager({ user }: { user: User }) {
     } finally { setBusyId(""); }
   }
 
+  async function resetPassword(record: ProfileRecord) {
+    setError(""); setMessage("");
+    if (resettingId) return;
+    if (!auth || !functions) { setError("Firebase Authentication is not configured."); return; }
+    setResettingId(record.id);
+    try {
+      const getAccountEmail = httpsCallable<{ userId: string }, { email: string }>(functions, "getUserEmailForPasswordReset");
+      const { data } = await getAccountEmail({ userId: record.id });
+      const email = data.email.trim();
+      if (!email) throw new Error("The account does not have a verified email address.");
+      await sendPasswordResetEmail(auth, email);
+      setMessage(`Password reset email sent to ${email}.`);
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code === "functions/not-found"
+        ? `${text(record.name) || "This user"}'s verified account could not be found.`
+        : code === "functions/failed-precondition"
+          ? `${text(record.name) || "This user"} does not have a verified email address.`
+          : code === "auth/too-many-requests"
+          ? "Too many reset requests were made. Wait a while and try again."
+          : code ? `Could not request a password reset (${code}).` : "Could not request a password reset.");
+    } finally { setResettingId(""); }
+  }
+
   return <>
     <AdminFrame title="Users' Profile" description="Review and update saved user profiles." count={profiles.length} loading={loading} error={error} message={message}>
-      <AdminTable rows={profiles} label="User Profiles" busy={Boolean(busyId)} onEdit={edit} onDelete={setPendingDelete} columns={[
+      <AdminTable rows={profiles} label="User Profiles" busy={Boolean(busyId)} resettingId={resettingId} onResetPassword={(record) => void resetPassword(record)} onEdit={edit} onDelete={setPendingDelete} columns={[
         { label: "Name", render: (record) => <strong>{text(record.name) || "—"}</strong> },
         { label: "Designation", render: (record) => text(record.designation) },
         { label: "Unit", render: (record) => accountProfileSelection(record).unit },

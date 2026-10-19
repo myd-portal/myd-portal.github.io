@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 
 const app = initializeApp();
@@ -10,6 +12,45 @@ const hour = 60 * 60 * 1000;
 const day = 24 * hour;
 const permitDeletionAfter = 6 * hour;
 const permitWarningAfter = permitDeletionAfter - 30 * 60 * 1000;
+const rootSuperAdminEmail = "rjamescute2@gmail.com";
+
+export const getUserEmailForPasswordReset = onCall({ region: "asia-southeast1" }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError("unauthenticated", "Sign in with a verified email before requesting a password reset.");
+  }
+
+  const callerEmail = typeof request.auth.token.email === "string" ? request.auth.token.email.trim().toLowerCase() : "";
+  const callerProfile = await db.collection("users").doc(request.auth.uid).get();
+  const isRootSuperAdmin = callerEmail === rootSuperAdminEmail;
+  const isApprovedSuperAdmin = callerProfile.exists
+    && callerProfile.data()?.accountRole === "superadmin"
+    && (callerProfile.data()?.accountStatus ?? "Approved") === "Approved";
+  if (!isRootSuperAdmin && !isApprovedSuperAdmin) {
+    throw new HttpsError("permission-denied", "Only an approved superadmin can request another account's password reset.");
+  }
+
+  const userId = request.data?.userId;
+  if (typeof userId !== "string" || !userId.trim()) {
+    throw new HttpsError("invalid-argument", "A user ID is required.");
+  }
+
+  const targetProfile = await db.collection("users").doc(userId).get();
+  if (!targetProfile.exists || targetProfile.data()?.emailVerified !== true) {
+    throw new HttpsError("not-found", "This verified user profile could not be found.");
+  }
+
+  try {
+    const targetAccount = await getAuth(app).getUser(userId);
+    if (!targetAccount.email || !targetAccount.emailVerified) {
+      throw new HttpsError("failed-precondition", "This account does not have a verified email address.");
+    }
+    return { email: targetAccount.email };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Could not look up the target account for a password reset", { userId, error });
+    throw new HttpsError("internal", "Could not look up the user's email address.");
+  }
+});
 
 function manilaParts(date) {
   const parts = new Intl.DateTimeFormat("en-US", {
