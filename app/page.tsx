@@ -1880,7 +1880,6 @@ function FindDocsRecordPreview({ record, user, office, division, unit, onClose }
   }
 
   return <div className="find-docs-preview-host">
-    <div className="find-docs-preview-loading" role="status"><div className="find-docs-preview-loading-card"><p>Opening the saved {record.type} document…</p><button type="button" className="ghost-button" onClick={onClose}>Back to findDocs</button></div></div>
     {documentModule}
   </div>;
 }

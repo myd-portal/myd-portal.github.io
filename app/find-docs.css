@@ -20,11 +20,6 @@
 .find-docs-error{margin:0 0 20px}
 .find-docs-preview-host .content-section,.find-docs-preview-host>.error-message{display:none!important}
 .find-docs-preview-host .ar-module>:not(.ar-preview-backdrop),.find-docs-preview-host .mytev-module>:not(.preview-backdrop){display:none!important}
-.find-docs-preview-host:has(.preview-backdrop,.ar-preview-backdrop,.calendar-of-activities-preview-backdrop) .find-docs-preview-loading{display:none}
-.find-docs-preview-loading{align-items:center;background:rgba(24,33,31,.72);display:flex;inset:0;justify-content:center;padding:20px;position:fixed;z-index:9}
-.find-docs-preview-loading-card{background:#fff;border-top:3px solid var(--ink);max-width:360px;padding:26px;text-align:center;width:100%}
-.find-docs-preview-loading-card p{color:var(--muted);font-size:14px;margin:0 0 18px}
-.find-docs-preview-loading-card .ghost-button{width:100%}
 
 @media(max-width:860px){
   .find-docs-section .section-heading{gap:16px}
