@@ -488,8 +488,10 @@ function NtaManager() {
           {batches.length > 1 && <button type="button" className="delete-button" onClick={() => setBatches((current) => current.filter((_, index) => index !== batchIndex))}>Remove schedule</button>}
         </fieldset>)}
       </div></>}
-      <label>Signatory Name<input value={values.signatoryName} onChange={(event) => setValues({ ...values, signatoryName: event.target.value })} /></label>
-      <label>Signatory Division<input value={values.signatoryDivision} onChange={(event) => setValues({ ...values, signatoryDivision: event.target.value })} /></label>
+      <div className="super-admin-nta-signatory-row wide-field">
+        <label>Signatory Name<input value={values.signatoryName} onChange={(event) => setValues({ ...values, signatoryName: event.target.value })} /></label>
+        <label>Signatory Division<input value={values.signatoryDivision} onChange={(event) => setValues({ ...values, signatoryDivision: event.target.value })} /></label>
+      </div>
     </AdminEditForm>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this Notice to Attend?" description={`Delete “${text(pendingDelete?.activityTitle) || "this Notice to Attend"}”? Linked document notifications will also be removed.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
   </>;

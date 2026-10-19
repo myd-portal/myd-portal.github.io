@@ -102,6 +102,18 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.super-admin-nta-signatory-row {
+  display: grid;
+  gap: 18px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.super-admin-nta-signatory-row > label {
+  min-width: 0;
+}
+
 .super-admin-so-edit-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -263,6 +275,10 @@
   }
 
   .super-admin-profile-division-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .super-admin-nta-signatory-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
