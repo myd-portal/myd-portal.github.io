@@ -1,0 +1,150 @@
+.document-notification-admin-section {
+  min-width: 0;
+}
+
+.document-notification-admin-count {
+  align-self: center;
+  background: var(--mint);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.document-notification-admin-message {
+  background: #edf7f0;
+  border-left: 4px solid #4b9f69;
+  color: #26633b;
+  margin: 0 0 18px;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.document-notification-admin-message.is-error {
+  background: #fff1ef;
+  border-color: var(--accent);
+  color: #9d321f;
+}
+
+.document-notification-admin-table-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.document-notification-admin-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.document-notification-admin-table th,
+.document-notification-admin-table td {
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 13px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.document-notification-admin-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.document-notification-admin-table td {
+  font-size: 13px;
+}
+
+.document-notification-admin-table th:nth-child(1),
+.document-notification-admin-table td:nth-child(1) {
+  width: 48%;
+}
+
+.document-notification-admin-table th:nth-child(2),
+.document-notification-admin-table td:nth-child(2) {
+  width: 32%;
+}
+
+.document-notification-admin-table th:nth-child(3),
+.document-notification-admin-table td:nth-child(3) {
+  width: 20%;
+}
+
+.document-notification-admin-delete {
+  background: #fff;
+  border: 1px solid #e0bcb4;
+  border-radius: 6px;
+  color: #9d321f;
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
+.document-notification-admin-delete:hover:not(:disabled) {
+  background: #fff1ef;
+}
+
+.document-notification-admin-delete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.document-notification-admin-delete:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 720px) {
+  .document-notification-admin-count {
+    font-size: 10px;
+    padding: 6px 8px;
+  }
+
+  .document-notification-admin-table,
+  .document-notification-admin-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .document-notification-admin-table thead {
+    display: none;
+  }
+
+  .document-notification-admin-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .document-notification-admin-table tr {
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .document-notification-admin-table td {
+    border-bottom: 0;
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 12px;
+    width: auto;
+  }
+
+  .document-notification-admin-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .document-notification-admin-table td:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}

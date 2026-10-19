@@ -1,0 +1,150 @@
+.pending-permit-admin-section {
+  min-width: 0;
+}
+
+.pending-permit-admin-count {
+  align-self: center;
+  background: var(--mint);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.pending-permit-admin-message {
+  background: #edf7f0;
+  border-left: 4px solid #4b9f69;
+  color: #26633b;
+  margin: 0 0 18px;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.pending-permit-admin-message.is-error {
+  background: #fff1ef;
+  border-color: var(--accent);
+  color: #9d321f;
+}
+
+.pending-permit-admin-table-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.pending-permit-admin-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.pending-permit-admin-table th,
+.pending-permit-admin-table td {
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 13px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.pending-permit-admin-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pending-permit-admin-table td {
+  font-size: 13px;
+}
+
+.pending-permit-admin-table th:nth-child(1),
+.pending-permit-admin-table td:nth-child(1) {
+  width: 52%;
+}
+
+.pending-permit-admin-table th:nth-child(2),
+.pending-permit-admin-table td:nth-child(2) {
+  width: 28%;
+}
+
+.pending-permit-admin-table th:nth-child(3),
+.pending-permit-admin-table td:nth-child(3) {
+  width: 20%;
+}
+
+.pending-permit-admin-delete {
+  background: #fff;
+  border: 1px solid #e0bcb4;
+  border-radius: 6px;
+  color: #9d321f;
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
+.pending-permit-admin-delete:hover:not(:disabled) {
+  background: #fff1ef;
+}
+
+.pending-permit-admin-delete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pending-permit-admin-delete:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 720px) {
+  .pending-permit-admin-count {
+    font-size: 10px;
+    padding: 6px 8px;
+  }
+
+  .pending-permit-admin-table,
+  .pending-permit-admin-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .pending-permit-admin-table thead {
+    display: none;
+  }
+
+  .pending-permit-admin-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .pending-permit-admin-table tr {
+    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .pending-permit-admin-table td {
+    border-bottom: 0;
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 12px;
+    width: auto;
+  }
+
+  .pending-permit-admin-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .pending-permit-admin-table td:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}

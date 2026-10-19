@@ -976,6 +976,7 @@ service cloud.firestore {
           && get(profilePath).data.get("accountRole", "") in ["regular", "user"]
           && get(profilePath).data.get("accountStatus", "Approved") == "Approved";
       }
+      allow read, delete: if isSuperAdmin();
       allow read: if isVerifiedUser()
         && (resource.data.recipientId == request.auth.uid || resource.data.ownerId == request.auth.uid);
       allow create: if isVerifiedUser()
@@ -1101,10 +1102,14 @@ service cloud.firestore {
             || (resource.data.personStatuses is map && resource.data.personStatuses.keys().size() == 0)))
         || isValidPermitDecisionUpdate()
       );
-      allow delete: if isVerifiedUser()
-        && resource.data.ownerId == request.auth.uid
-        && (!resource.data.keys().hasAny(["personStatuses"])
-          || (resource.data.personStatuses is map && resource.data.personStatuses.keys().size() == 0));
+      allow delete: if (isSuperAdmin()
+          && resource.data.get("lastDecisionKey", null) == null
+          && (!resource.data.keys().hasAny(["personStatuses"])
+            || (resource.data.personStatuses is map && resource.data.personStatuses.keys().size() == 0)))
+        || (isVerifiedUser()
+          && resource.data.ownerId == request.auth.uid
+          && (!resource.data.keys().hasAny(["personStatuses"])
+            || (resource.data.personStatuses is map && resource.data.personStatuses.keys().size() == 0)));
     }
     match /permitCounters/{counterId} {
       allow read, write: if isVerifiedUser();
