@@ -2937,7 +2937,15 @@ export default function Home() {
   const accountUnit = activeAccountProfile?.unit || activeAccountProfile?.assignment || null;
   const canAccessCleaningTask = canAccessCleaningTaskNavigation(accountRole, accountUnit ?? "", activeAccountProfile?.designation ?? "");
   const canViewCleaningTask = canViewCleaningTaskLanding(accountRole, accountUnit ?? "");
-  const canAccessAmiaDocumentTracking = accountUnit === "AMIA" || accountUnit === "Field Operations Division";
+  const canAccessAmiaDocumentTracking = accountRole === "regular"
+    ? activeAccountProfile?.office === "Division"
+      && activeAccountProfile?.division === "Field Operations Division"
+      && activeAccountProfile?.unit === "AMIA"
+    : accountRole === "admin"
+      && (activeAccountProfile?.designation === "Chief" || activeAccountProfile?.designation === "AGRISTAT/DRRM/AMIA Project Leader")
+      && activeAccountProfile?.office === "Division"
+      && activeAccountProfile?.division === "Field Operations Division"
+      && activeAccountProfile?.unit === "Field Operations Division";
   const userPermitNotifications = permits.flatMap((permit) => permit.names.flatMap((name, personIndex) => {
     const decision = permit.personStatuses?.[permitDecisionKey(permit, personIndex)];
     if (decision?.status !== "Approved" && decision?.status !== "Disapproved") return [];
