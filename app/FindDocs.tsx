@@ -114,11 +114,14 @@ function rowSearchContent(record: FindDocsRecord, tevRates?: TevRegionRate[] | n
 
 export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
   const [records, setRecords] = useState<FindDocsRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<FindDocsType | "all">("all");
   const [tevRates, setTevRates] = useState<TevRegionRate[] | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const scopeKey = `${user.uid}:${unit ?? ""}`;
+  const searchInitiated = Boolean(search.trim()) || typeFilter !== "all";
 
   useEffect(() => {
     let active = true;
@@ -127,10 +130,12 @@ export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
   }, []);
 
   useEffect(() => {
-    if (!db) { setRecords([]); setLoading(false); setError("Document storage is unavailable."); return; }
+    if (!searchInitiated || loadedScope === scopeKey) return;
+    if (!db) { setRecords([]); setLoading(false); setError("Document storage is unavailable."); setLoadedScope(scopeKey); return; }
     let active = true;
     setLoading(true);
     setError("");
+    setRecords([]);
     const sharedFilters = (): Filter[][] => [
       [["ownerId", "==", user.uid]],
       ...(unit ? [[["ownerUnit", "==", unit]] as Filter[]] : []),
@@ -180,15 +185,17 @@ export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
       });
       setRecords(allRecords);
       setLoading(false);
+      setLoadedScope(scopeKey);
     }).catch((cause) => {
       if (!active) return;
       const code = (cause as { code?: string }).code;
       setError(code ? `Could not load your documents (${code}).` : "Could not load your documents. Refresh and try again.");
       setRecords([]);
       setLoading(false);
+      setLoadedScope(scopeKey);
     });
     return () => { active = false; };
-  }, [user.uid, unit]);
+  }, [loadedScope, scopeKey, searchInitiated, unit, user.uid]);
 
   const filteredRecords = useMemo(() => records.filter((record) => (typeFilter === "all" || record.type === typeFilter)
     && matchesAdminSearch(rowSearchContent(record, tevRates), search)), [records, search, typeFilter, tevRates]);
@@ -200,13 +207,13 @@ export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
   })).filter((group) => group.records.length), [visibleRecords]);
 
   return <section className="content-section find-docs-section">
-    <div className="section-heading"><div><p className="eyebrow">My Desk · Document search</p><h2>findDocs</h2><p className="muted">Search documents saved by or shared with your account.</p></div><span className="find-docs-count">{filteredRecords.length} {filteredRecords.length === 1 ? "document" : "documents"}</span></div>
+    <div className="section-heading"><div><p className="eyebrow">My Desk · Document search</p><h2>findDocs</h2><p className="muted">Search documents saved by or shared with your account.</p></div><span className="find-docs-count">{searchInitiated && loadedScope === scopeKey ? `${filteredRecords.length} ${filteredRecords.length === 1 ? "document" : "documents"}` : "Search to view"}</span></div>
     <div className="find-docs-filters">
       <label className="find-docs-search">Search documents<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search titles, dates, status, names…" /></label>
       <label>Document Type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as FindDocsType | "all")}><option value="all">All document types</option>{findDocsTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
     </div>
-    {error && <p className="error-message find-docs-error" role="alert">{error}</p>}
-    {loading ? <p className="muted">Loading your documents…</p> : filteredRecords.length === 0 ? <div className="empty-state find-docs-empty"><span className="empty-number">00</span><h3>{records.length ? "No documents match your search" : "No documents found"}</h3><p>{records.length ? "Change the document type or search terms and try again." : "Documents saved by or shared with your account will appear here."}</p></div> : <div className="find-docs-results">
+    {searchInitiated && error && <p className="error-message find-docs-error" role="alert">{error}</p>}
+    {!searchInitiated ? <div className="empty-state find-docs-empty"><span className="empty-number">00</span><h3>Search to view your documents</h3><p>Enter a search term or choose a document type to display matching records.</p></div> : loading || loadedScope !== scopeKey ? <p className="muted" role="status">Searching your documents…</p> : filteredRecords.length === 0 ? <div className="empty-state find-docs-empty"><span className="empty-number">00</span><h3>{records.length ? "No documents match your search" : "No documents found"}</h3><p>{records.length ? "Change the document type or search terms and try again." : "Documents saved by or shared with your account will appear here."}</p></div> : <div className="find-docs-results">
       <RecordPagination totalRecords={filteredRecords.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Find documents" />
       {groupedRecords.map((group) => {
         const columns = valuesForRecord(group.records[0], tevRates).columns;
