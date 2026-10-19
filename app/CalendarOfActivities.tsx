@@ -66,7 +66,7 @@ type CalendarOfActivities = {
 };
 type Profile = { name: string; position: string; office: string; division: string; unit: Unit };
 type CalendarOfActivitiesAdminSignatory = { userId: string; name: string; designation: string; position: string; assignment: string };
-type CalendarOfActivitiesApprover = { name: string; designation: "Regional Executive Director" | "RTD for Operations" };
+type CalendarOfActivitiesApprover = { name: string; designation: "Regional Executive Director" | "RTD for Operations" | "RTD for Research and Regulation" };
 type Account = { id: string; name: string; adminAccount: boolean; designation: string; position: string; assignment: string };
 
 const unitLabel = (unit: Unit) => unit === "Field Operations Division" || unit.startsWith("FOD-") ? unit : `FOD-${unit}`;
@@ -91,6 +91,7 @@ const fixedCalendarOfActivitiesSignatories = [
 const calendarOfActivitiesApprovers: CalendarOfActivitiesApprover[] = [
   { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
   { name: "REBECCA R. ATEGA", designation: "RTD for Operations" },
+  { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulation" },
 ];
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 const emptyActivity = (): ActivityDraft => ({ dateFrom: "", dateTo: "", activity: "", location: "", responsiblePeople: [], nextResponsibleId: "" });

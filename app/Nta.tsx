@@ -57,6 +57,7 @@ const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${pat
 const ntaSignatories = [
   { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
   { name: "REBECCA R. ATEGA", designation: "RTD for Operations" },
+  { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulation" },
   { name: "MELODY M. GUIMARY", designation: "Chief, Field Operations Division" },
 ] as const;
 const legacySignatoryName = "MELODY M. GUIMARY";
