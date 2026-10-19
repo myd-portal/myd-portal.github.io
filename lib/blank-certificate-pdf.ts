@@ -127,7 +127,7 @@ function wrapCanvasRuns(context: CanvasRenderingContext2D, runs: CanvasTextRun[]
   return lines.filter((line) => line.length > 0);
 }
 
-async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, height: number, baseline: number, fontSize: number) {
+async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, height: number, baseline: number, fontSize: number, justify = false) {
   await Promise.all([
     document.fonts.load(`${fontSize}px Cambria`),
     document.fonts.load(`bold ${fontSize}px Cambria`),
@@ -144,17 +144,28 @@ async function makeCambriaRichTextImage(runs: CanvasTextRun[], width: number, he
   context.fillRect(0, 0, width, height);
   context.fillStyle = "#111";
   context.textBaseline = "alphabetic";
+  const spaceCount = justify
+    ? runs.reduce((count, run) => count + (run.text.match(/ /g)?.length ?? 0), 0)
+    : 0;
+  const lineWidth = runs.reduce((total, run) => {
+    context.font = `${run.italic ? "italic " : ""}${run.bold ? "bold " : ""}${fontSize}px ${eventFontFamily}`;
+    return total + context.measureText(run.text).width;
+  }, 0);
+  const extraSpace = spaceCount ? Math.max(0, width - 2 - lineWidth) / spaceCount : 0;
   let x = 1;
   for (const run of runs) {
     context.font = `${run.italic ? "italic " : ""}${run.bold ? "bold " : ""}${fontSize}px ${eventFontFamily}`;
-    context.fillText(run.text, x, baseline);
-    x += context.measureText(run.text).width;
+    for (const part of run.text.split(/( +)/).filter(Boolean)) {
+      context.fillText(part, x, baseline);
+      x += context.measureText(part).width;
+      if (justify && /^ +$/.test(part)) x += extraSpace * part.length;
+    }
   }
   return canvas.toDataURL("image/png");
 }
 
-async function makeCambriaTextImage(text: string, width: number, height: number, baseline: number, fontSize: number) {
-  return makeCambriaRichTextImage([{ text }], width, height, baseline, fontSize);
+async function makeCambriaTextImage(text: string, width: number, height: number, baseline: number, fontSize: number, justify = false) {
+  return makeCambriaRichTextImage([{ text }], width, height, baseline, fontSize, justify);
 }
 
 async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCertificatePdfRecord) {
@@ -182,8 +193,8 @@ async function drawEventDetails(pdf: PDFDocument, page: PDFPage, record: BlankCe
   const eventLines = wrapCanvasRuns(measureContext, eventRuns, bodyWidth, bodyFontSize);
   const legalLines = wrapCanvasText(measureContext, legalText, bodyWidth, bodyFontSize);
   const [eventImages, legalImages] = await Promise.all([
-    Promise.all(eventLines.map((line) => makeCambriaRichTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize))),
-    Promise.all(legalLines.map((line) => makeCambriaTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize))),
+    Promise.all(eventLines.map((line, index) => makeCambriaRichTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize, index < eventLines.length - 1))),
+    Promise.all(legalLines.map((line, index) => makeCambriaTextImage(line, bodyWidth, 16.2, 12.5, bodyFontSize, index < legalLines.length - 1))),
   ]);
   const [embeddedEventImages, embeddedLegalImages] = await Promise.all([
     Promise.all(eventImages.map((image) => pdf.embedPng(image))),
