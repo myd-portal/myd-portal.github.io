@@ -142,7 +142,24 @@
 }
 
 .user-master-list-edit-form {
+  max-width: 100%;
   min-width: 0;
+  width: 100%;
+}
+
+.content-section.form-section.user-master-list-edit-section {
+  box-sizing: border-box;
+  max-width: 1100px;
+  width: 100%;
+}
+
+.user-master-list-edit-form input,
+.user-master-list-edit-form select,
+.user-master-list-edit-form textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .user-master-list-table select {
@@ -224,6 +241,10 @@
 }
 
 @media (max-width: 720px) {
+  .user-master-list-edit-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .user-master-list-section .section-heading {
     align-items: flex-start;
   }

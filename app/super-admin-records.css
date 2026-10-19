@@ -77,7 +77,15 @@
 .super-admin-edit-form {
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 100%;
   min-width: 0;
+  width: 100%;
+}
+
+.content-section.form-section.super-admin-edit-section {
+  box-sizing: border-box;
+  max-width: 1100px;
+  width: 100%;
 }
 
 .super-admin-edit-form > label,
@@ -88,6 +96,8 @@
 .super-admin-edit-form input,
 .super-admin-edit-form select,
 .super-admin-edit-form textarea {
+  box-sizing: border-box;
+  max-width: 100%;
   min-width: 0;
   width: 100%;
 }
