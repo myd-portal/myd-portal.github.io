@@ -18,6 +18,49 @@
 .find-docs-actions .row-action{padding:4px 0;white-space:nowrap}
 .find-docs-empty{margin-top:10px}
 .find-docs-error{margin:0 0 20px}
+.find-docs-detail-backdrop{align-items:flex-start;background:rgba(24,33,31,.72);display:flex;inset:0;justify-content:center;overflow:auto;overscroll-behavior:contain;padding:22px;position:fixed;z-index:100}
+.find-docs-detail-dialog{background:#fff;border-top:3px solid var(--ink);box-shadow:0 18px 60px #0004;display:flex;flex-direction:column;margin:auto;max-height:calc(100dvh - 44px);max-width:1040px;min-height:0;min-width:0;overflow:auto;width:100%}
+.find-docs-detail-toolbar{align-items:center;background:#fff;border-bottom:1px solid var(--line);display:flex;flex:0 0 auto;gap:14px;justify-content:space-between;padding:14px 22px;position:sticky;top:0;z-index:1}
+.find-docs-detail-toolbar>span{color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.find-docs-detail-actions{align-items:center;display:flex;flex-wrap:wrap;gap:8px}
+.find-docs-detail-actions .ghost-button,.find-docs-detail-actions .pdf-button{font-size:12px;padding:9px 13px}
+.find-docs-detail-paper{background:#fff;min-width:0;padding:clamp(22px,5vw,54px);width:100%}
+.find-docs-detail-paper .eyebrow{margin-bottom:12px}
+.find-docs-detail-paper h2{font-size:clamp(23px,3vw,34px);letter-spacing:-.045em;line-height:1.15;margin:0 0 8px;overflow-wrap:anywhere}
+.find-docs-detail-reference{color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;overflow-wrap:anywhere;margin:0 0 30px}
+.find-docs-detail-fields{display:grid;gap:0;margin:0;min-width:0}
+.find-docs-detail-root-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.find-docs-detail-field{border-top:1px solid var(--line);display:grid;gap:8px;min-width:0;padding:15px 12px}
+.find-docs-detail-field dt{color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;overflow-wrap:anywhere;text-transform:uppercase}
+.find-docs-detail-field dd{font-size:14px;line-height:1.55;margin:0;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.find-docs-detail-list{display:grid;gap:10px;min-width:0}
+.find-docs-detail-item{background:#f7faf6;border:1px solid var(--line);min-width:0;padding:12px}
+.find-docs-detail-item>.find-docs-detail-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.find-docs-detail-item .find-docs-detail-field{padding:10px 8px}
+.find-docs-detail-error{background:#fff0eb;color:#9e3824;margin:12px 22px 0}
+
+@media(max-width:600px){
+  .find-docs-detail-backdrop{padding:0}
+  .find-docs-detail-dialog{border-top-width:3px;max-height:100dvh;min-height:100dvh;width:100%}
+  .find-docs-detail-toolbar{align-items:flex-start;flex-direction:column;padding:12px 16px}
+  .find-docs-detail-actions{width:100%}
+  .find-docs-detail-actions button{flex:1 1 auto}
+  .find-docs-detail-paper{padding:24px 16px}
+  .find-docs-detail-reference{margin-bottom:20px}
+  .find-docs-detail-root-fields,.find-docs-detail-item>.find-docs-detail-fields{grid-template-columns:minmax(0,1fr)}
+  .find-docs-detail-field{padding:13px 4px}
+  .find-docs-detail-field dd{font-size:13px}
+}
+
+@media print{
+  body *{visibility:hidden!important}
+  .find-docs-detail-backdrop,.find-docs-detail-backdrop *{visibility:visible!important}
+  .find-docs-detail-backdrop{background:#fff!important;display:block!important;inset:0!important;overflow:visible!important;padding:0!important;position:absolute!important}
+  .find-docs-detail-dialog{border:0!important;box-shadow:none!important;margin:0!important;max-height:none!important;max-width:none!important;overflow:visible!important;width:100%!important}
+  .find-docs-detail-toolbar,.find-docs-detail-error{display:none!important}
+  .find-docs-detail-paper{padding:12mm!important;width:100%!important}
+  .find-docs-detail-field,.find-docs-detail-item{break-inside:avoid}
+}
 
 @media(max-width:860px){
   .find-docs-section .section-heading{gap:16px}
@@ -44,4 +87,5 @@
   .find-docs-section .section-heading{display:grid}
   .find-docs-table-row{grid-template-columns:minmax(0,1fr)}
   .find-docs-table-row>.find-docs-primary-value,.find-docs-actions{grid-column:1}
+  .find-docs-detail-actions button{font-size:11px;padding:8px}
 }

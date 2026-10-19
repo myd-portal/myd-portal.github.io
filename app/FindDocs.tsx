@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { collection, getDocs, query, where, type QueryDocumentSnapshot, type WhereFilterOp } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
@@ -8,6 +8,7 @@ import { formatTevAmount, loadTevRegionRates, totalsForRecord, type TevItinerary
 import { matchesAdminSearch } from "@/lib/admin-search";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import { LEGACY_PENDING_STATUS } from "./workflow-status";
+import { loadPdfTools } from "@/lib/pdf-tools";
 import "./find-docs.css";
 
 export const findDocsTypes = [
@@ -27,7 +28,6 @@ export type FindDocsRecord = { id: string; type: FindDocsType; data: Record<stri
 type FindDocsProps = {
   user: User;
   unit: string | null;
-  onOpenRecord: (record: FindDocsRecord) => void;
 };
 
 type Filter = [field: string, operator: WhereFilterOp, value: string | string[]];
@@ -112,13 +112,151 @@ function rowSearchContent(record: FindDocsRecord, tevRates?: TevRegionRate[] | n
   return [record.type, ...valuesForRecord(record, tevRates).values, record.data];
 }
 
-export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
+const hiddenDetailFields = new Set([
+  "id", "ownerId", "ownerUnit", "recipientIds", "personIds", "userId", "createdAt", "updatedAt", "submittedAt",
+]);
+
+function detailLabel(value: string) {
+  const labels: Record<string, string> = {
+    dateFrom: "Date From",
+    dateTo: "Date To",
+    filedDate: "Date Filed",
+    inclusiveDateFrom: "Inclusive Date From",
+    inclusiveDateTo: "Inclusive Date To",
+    departureDate: "Departure Date",
+    returnDate: "Return Date",
+    activityTitle: "Activity Title",
+    venueType: "Venue Type",
+    placeOfTravel: "Place of Travel",
+    totalAmount: "Total Amount",
+    permitNo: "Permit Number",
+    permitNos: "Permit Numbers",
+    ownerOffice: "Office",
+    ownerDivision: "Division",
+    ownerUnit: "Unit",
+  };
+  return labels[value] ?? value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function detailText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    const date = (value.toDate as () => Date)();
+    return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  }
+  return "";
+}
+
+function renderDetailValue(value: unknown): ReactNode {
+  const primitive = detailText(value);
+  if (primitive) return primitive;
+  if (Array.isArray(value)) {
+    const visibleItems = value.filter((item) => item !== null && item !== undefined && item !== "");
+    if (!visibleItems.length) return "—";
+    if (visibleItems.every((item) => typeof item !== "object")) return visibleItems.map((item) => detailText(item)).join(", ");
+    return <div className="find-docs-detail-list">{visibleItems.map((item, index) => <div className="find-docs-detail-item" key={index}>{renderDetailValue(item)}</div>)}</div>;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([key, item]) => !hiddenDetailFields.has(key) && item !== undefined && item !== null && item !== "");
+    if (!entries.length) return "—";
+    return <dl className="find-docs-detail-fields">{entries.map(([key, item]) => <div className="find-docs-detail-field" key={key}><dt>{detailLabel(key)}</dt><dd>{renderDetailValue(item)}</dd></div>)}</dl>;
+  }
+  return "—";
+}
+
+function recordDetails(record: FindDocsRecord): Array<[string, unknown]> {
+  return Object.entries(record.data).filter(([key, value]) => !hiddenDetailFields.has(key) && value !== undefined && value !== null && value !== "");
+}
+
+function FindDocsDetail({ record, onClose }: { record: FindDocsRecord; onClose: () => void }) {
+  const detailRef = useRef<HTMLElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const canExport = record.type !== "myAR";
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  async function downloadPdf() {
+    if (!detailRef.current) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      if (document.fonts?.ready) await document.fonts.ready;
+      const { html2canvas, jsPDF } = await loadPdfTools();
+      const canvas = await html2canvas(detailRef.current, { backgroundColor: "#fff", logging: false, scale: 2, useCORS: true, windowWidth: detailRef.current.scrollWidth });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageHeight = canvas.width * (297 / 210);
+      let offsetY = 0;
+      let page = 0;
+      while (offsetY < canvas.height) {
+        const sliceHeight = Math.min(pageHeight, canvas.height - offsetY);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = sliceHeight;
+        const context = slice.getContext("2d");
+        if (!context) throw new Error("Unable to prepare the document PDF.");
+        context.drawImage(canvas, 0, offsetY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        if (page > 0) pdf.addPage("a4", "portrait");
+        const renderedHeight = 297 * (sliceHeight / pageHeight);
+        pdf.addImage(slice.toDataURL("image/jpeg", .94), "JPEG", 0, 0, 210, renderedHeight);
+        offsetY += sliceHeight;
+        page += 1;
+      }
+      const filename = `${record.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${record.id}.pdf`;
+      pdf.save(filename);
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Unable to create this document PDF.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function printDocument() {
+    if (document.fonts?.ready) await document.fonts.ready;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    window.print();
+  }
+
+  return <div className="find-docs-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="find-docs-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="find-docs-detail-title">
+      <div className="find-docs-detail-toolbar">
+        <span>{record.type}</span>
+        <div className="find-docs-detail-actions">
+          {canExport && <><button type="button" className="ghost-button" onClick={printDocument} disabled={busy}>Print</button><button type="button" className="pdf-button" onClick={() => void downloadPdf()} disabled={busy}>{busy ? "Preparing PDF…" : "Download PDF"}</button></>}
+          <button type="button" className="ghost-button" onClick={onClose}>Close</button>
+        </div>
+      </div>
+      {actionError && <p className="error-message find-docs-detail-error" role="alert">{actionError}</p>}
+      <article className="find-docs-detail-paper" ref={detailRef}>
+        <p className="eyebrow">My Desk · {record.type}</p>
+        <h2 id="find-docs-detail-title">{record.type} details</h2>
+        <p className="find-docs-detail-reference">Document reference: {record.id}</p>
+        <dl className="find-docs-detail-fields find-docs-detail-root-fields">{recordDetails(record).map(([key, value]) => <div className="find-docs-detail-field" key={key}><dt>{detailLabel(key)}</dt><dd>{renderDetailValue(value)}</dd></div>)}</dl>
+      </article>
+    </div>
+  </div>;
+}
+
+export default function FindDocs({ user, unit }: FindDocsProps) {
   const [records, setRecords] = useState<FindDocsRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<FindDocsType | "all">("all");
   const [tevRates, setTevRates] = useState<TevRegionRate[] | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<FindDocsRecord | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -219,12 +357,13 @@ export default function FindDocs({ user, unit, onOpenRecord }: FindDocsProps) {
               const { values } = valuesForRecord(record, tevRates);
               return <div className="find-docs-table-row" role="row" key={record.id} style={{ "--find-docs-column-count": columns.length } as CSSProperties}>
                 {values.map((value, index) => <span className={index === 0 ? "find-docs-primary-value" : ""} data-label={columns[index]} role="cell" key={`${record.id}:${columns[index]}`}>{value}</span>)}
-                <span className="find-docs-actions" data-label="Action" role="cell"><button type="button" className="row-action" onClick={() => onOpenRecord(record)}>View</button></span>
+                <span className="find-docs-actions" data-label="Action" role="cell"><button type="button" className="row-action" onClick={() => setSelectedRecord(record)}>View</button></span>
               </div>;
             })}
           </div>
         </section>;
       })}
     </div>}
+    {selectedRecord && <FindDocsDetail record={selectedRecord} onClose={() => setSelectedRecord(null)} />}
   </section>;
 }
