@@ -133,3 +133,4 @@
 .nta-form-section .nta-schedule-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:720px){.nta-form-section .nta-activity-fields{grid-template-columns:minmax(0,1fr)}}
 .nta-edit-section .name-search-select-search{min-height:52px}.nta-edit-section .nta-attendee-input>.name-search-select{min-width:0;width:100%}
+.nta-to-subject p:last-child>strong:last-child{text-align:justify}
