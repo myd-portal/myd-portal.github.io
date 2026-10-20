@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
+import { createPortal } from "react-dom";
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import type { User } from "firebase/auth";
-import { db } from "@/lib/firebase";
+import { db, functions } from "@/lib/firebase";
+import { accountDesignation, accountProfileSelection } from "@/lib/account-profile";
 import NameSearchSelect from "./NameSearchSelect";
-import { divisionSignatory, tevDivisions } from "@/lib/mytev";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
+import { normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./nta.css";
@@ -39,6 +42,21 @@ type NtaRecord = {
   organizer: string;
   signatoryName?: string;
   signatoryDesignation?: string;
+  signatoryAdminId?: string;
+  ownerOffice?: string;
+  ownerDivision?: string;
+  approvalWorkflow?: "fod";
+  approvalStage?: "initial" | "chief" | "approved";
+  initialSignerId?: string;
+  chiefSignerId?: string;
+  affixInitialSignature?: "Yes" | "No";
+  affixInitialSignatureURL?: string;
+  affixInitialSignatureName?: string;
+  affixInitialSignatureAt?: unknown;
+  affixSignature?: "Yes" | "No";
+  affixSignatureURL?: string;
+  affixSignatureName?: string;
+  affixSignatureAt?: unknown;
   dateFrom?: string;
   dateTo?: string;
   timeFrom?: string;
@@ -54,33 +72,8 @@ type NtaRecord = {
 };
 
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
-const ntaSignatories = [
-  { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
-  { name: "REBECCA R. ATEGA", designation: "RTD for Operations" },
-  { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulation" },
-  { name: "MELODY M. GUIMARY", designation: "Chief, Field Operations Division" },
-] as const;
 const legacySignatoryName = "MELODY M. GUIMARY";
 const legacySignatoryDesignation = "Chief, Field Operations Division";
-const ntaSignatoryOptions = [
-  ...tevDivisions.map((division) => {
-    const signatory = divisionSignatory(division);
-    return {
-      value: `division:${division}`,
-      label: division,
-      name: signatory.name,
-      position: `${signatory.position}, ${division}`,
-    };
-  }),
-  ...ntaSignatories
-    .filter((signatory) => signatory.designation !== legacySignatoryDesignation)
-    .map((signatory) => ({
-      value: `role:${signatory.designation}`,
-      label: signatory.designation,
-      name: signatory.name,
-      position: signatory.designation,
-    })),
-].sort((first, second) => first.label.localeCompare(second.label));
 const formatDate = (date: string) => date ? new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" }).format(new Date(`${date}T12:00:00+08:00`)) : "";
 const formatDateRange = (from: string, to: string) => from === to ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)}`;
 const ntaFormHelpText = "Choose an individual notice, group schedule, or multiple personnel notice.";
@@ -90,8 +83,57 @@ const isNtaGuidanceText = (value?: string) => Boolean(value && ntaGuidanceText.h
 const cleanNtaField = (value?: string) => isNtaGuidanceText(value) ? "" : value ?? "";
 const normalizePersonnelName = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 const initialBatch = (): NtaBatch => ({ number: "1", dateFrom: "", dateTo: "", timeFrom: "08:00", timeTo: "17:00", venueType: "physical", venue: "", link: "", attendees: [{ name: "", position: "", office: "", unit: "", userId: "", manual: false }] });
+type NtaWorkflowAccount = { userId: string; name: string; designation: string; unit: string; position: string; office: string; division: string };
+type NtaWorkflowAccounts = { head: NtaWorkflowAccount | null; chief: NtaWorkflowAccount | null; signatories: NtaWorkflowAccount[] };
+type FodNtaCreateResult = { ntaId: string; initialSignerId: string; chiefSignerId: string; signatoryName: string; signatoryDesignation: string; ownerOffice: string; ownerDivision: string; ownerUnit: string; recipientIds: string[] };
 
-function NtaForm({ user, office, division, unit, onSaved, onCancel }: { user: User; office: string; division?: string | null; unit: string | null; onSaved: (record: NtaRecord) => void; onCancel: () => void }) {
+async function createFodNtaDocument(ntaId: string, record: object): Promise<FodNtaCreateResult> {
+  if (!functions) throw new Error("Notice to Attend service is unavailable.");
+  const serializableRecord = { ...(record as Record<string, unknown>) };
+  delete serializableRecord.createdAt;
+  const create = httpsCallable<{ ntaId: string; record: Record<string, unknown> }, FodNtaCreateResult>(functions, "createFodNta");
+  const response = await create({ ntaId, record: serializableRecord });
+  if (response.data.ntaId !== ntaId) throw new Error("Notice to Attend service returned an unexpected record ID.");
+  return response.data;
+}
+
+const isFodNtaWorkflowScope = (ownerRole: string, office: string, division: string, unit: string) => ownerRole === "regular" && office === "Division" && division === "Field Operations Division" && ["AGRISTAT", "AMIA", "DRRM"].includes(unit);
+const hasNtaSignature = (record: Pick<NtaRecord, "affixInitialSignature" | "affixInitialSignatureURL" | "affixSignature" | "affixSignatureURL">) =>
+  record.affixInitialSignature === "Yes" || Boolean(record.affixInitialSignatureURL?.trim()) ||
+  record.affixSignature === "Yes" || Boolean(record.affixSignatureURL?.trim());
+function sortNtaRecords(records: NtaRecord[]) {
+  const recordsById = new Map<string, NtaRecord>();
+  records.forEach((record) => recordsById.set(record.id, record));
+  return [...recordsById.values()].sort((first, second) => {
+    const millis = (value: unknown) => value && typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function" ? value.toMillis() as number : 0;
+    return millis(second.createdAt) - millis(first.createdAt);
+  });
+}
+function prependNtaRecord(records: NtaRecord[], record: NtaRecord) {
+  return [record, ...records.filter((item) => item.id !== record.id)];
+}
+function resolveNtaWorkflowAccounts(profiles: Array<{ userId: string; data: Record<string, unknown> }>): NtaWorkflowAccounts {
+  const approvedAdmins = profiles.flatMap(({ userId, data }) => {
+    if (normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
+      || normalizeAccountStatus(data.accountStatus) !== "Approved") return [];
+    const profile = accountProfileSelection(data);
+    const name = typeof data.name === "string" ? data.name : "";
+    if (!name.trim()) return [];
+    const designation = accountDesignation(data.designation);
+    const unit = profile.unit || profile.assignment || profile.division || profile.office;
+    return [{ userId, name, designation, unit, position: designation + (unit ? ", " + unit : ""), office: profile.office, division: profile.division }];
+  });
+  const fodAdmins = approvedAdmins.filter((account) => account.office === "Division"
+    && account.division === "Field Operations Division" && account.unit === "Field Operations Division");
+  return {
+    head: fodAdmins.find((account) => account.designation === "AGRISTAT/DRRM/AMIA Project Leader") ?? null,
+    chief: fodAdmins.find((account) => account.designation === "Chief") ?? null,
+    signatories: approvedAdmins.filter((account) => ["Chief", "OIC"].includes(account.designation))
+      .sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" })),
+  };
+}
+
+function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }: { user: User; ownerRole: string; office: string; division?: string | null; unit: string | null; onSaved: (record: NtaRecord, notificationWarning?: string) => void; onCancel: () => void }) {
   const [mode, setMode] = useState<NtaMode>("individual");
   const [to, setTo] = useState("");
   const [toUserId, setToUserId] = useState("");
@@ -101,8 +143,18 @@ function NtaForm({ user, office, division, unit, onSaved, onCancel }: { user: Us
   const [activityTitle, setActivityTitle] = useState("");
   const [organizer, setOrganizer] = useState("");
   const [signatorySelection, setSignatorySelection] = useState("");
-  const selectedSignatory = ntaSignatoryOptions.find((option) => option.value === signatorySelection);
-  const signatoryField = (wide = false) => <label className={wide ? "wide-field" : undefined}>Signatory<select value={signatorySelection} onChange={(event) => setSignatorySelection(event.target.value)} required><option value="" disabled>Select a signatory</option>{ntaSignatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  const workflowScope = isFodNtaWorkflowScope(ownerRole, office, division ?? "", unit ?? "");
+  const [workflowAccounts, setWorkflowAccounts] = useState<NtaWorkflowAccounts | null>(null);
+  const [workflowAccountsLoading, setWorkflowAccountsLoading] = useState(true);
+  const signatoryOptions = (workflowAccounts?.signatories ?? []).map((account) => ({
+    value: "account:" + account.userId,
+    label: account.name.trim() + " \u2014 " + account.position,
+    name: account.name,
+    position: account.position,
+    adminUserId: account.userId,
+  }));
+  const selectedSignatory = signatoryOptions.find((option) => option.value === signatorySelection);
+  const signatoryField = (wide = false) => <label className={wide ? "wide-field" : undefined}>Signatory<select value={signatorySelection} onChange={(event) => setSignatorySelection(event.target.value)} required disabled={workflowAccountsLoading || signatoryOptions.length === 0}><option value="" disabled>{workflowAccountsLoading ? "Loading active signatories..." : "Select a signatory"}</option>{signatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{!workflowAccountsLoading && signatoryOptions.length === 0 && <small className="muted">No approved Admin accounts with the Chief or OIC designation are available.</small>}{workflowScope && !workflowAccountsLoading && (!workflowAccounts?.head || !workflowAccounts.chief) && <small className="muted">The active FOD Project Leader and Chief accounts must be set up before an NTA can be submitted.</small>}</label>;
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [timeFrom, setTimeFrom] = useState("08:00");
@@ -133,6 +185,19 @@ function NtaForm({ user, office, division, unit, onSaved, onCancel }: { user: Us
     return () => { cancelled = true; };
   }, [office, division, unit]);
 
+  useEffect(() => {
+    if (!db) { setWorkflowAccounts(null); return; }
+    setWorkflowAccountsLoading(true);
+    return onSnapshot(collection(db, "users"), (snapshot) => {
+      setWorkflowAccounts(resolveNtaWorkflowAccounts(snapshot.docs.map((item) => ({ userId: item.id, data: item.data() }))));
+      setWorkflowAccountsLoading(false);
+    }, () => {
+      setWorkflowAccounts(null);
+      setWorkflowAccountsLoading(false);
+      setError("Could not load active NTA signatories.");
+    });
+  }, []);
+
   function updateBatch(index: number, update: Partial<NtaBatch>) {
     setBatches((current) => current.map((batch, itemIndex) => itemIndex === index ? { ...batch, ...update } : batch));
   }
@@ -146,6 +211,11 @@ function NtaForm({ user, office, division, unit, onSaved, onCancel }: { user: Us
     if (!db) { setError("Database is not configured."); return; }
     if (!unit) { setError("Your Unit / Program / Project is still loading. Try saving again in a moment."); return; }
     if (!selectedSignatory) { setError("Select a signatory."); return; }
+    if (!selectedSignatory?.adminUserId) { setError("Select an available Admin Chief or OIC as the signatory."); return; }
+    if (workflowScope && (!workflowAccounts?.head || !workflowAccounts.chief)) {
+      setError("An active FOD Project Leader and Chief Admin account are required before creating this NTA.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const readField = (name: string, fallback: string) => {
       const submitted = formData.get(name);
@@ -180,22 +250,61 @@ function NtaForm({ user, office, division, unit, onSaved, onCancel }: { user: Us
       schedulesByRecipient.set(attendee.userId, [...(schedulesByRecipient.get(attendee.userId) ?? []), { dateFrom: batch.dateFrom, dateTo: batch.dateTo, venue: batch.venue.trim() }]);
     }));
     const recipientIds = [...schedulesByRecipient.keys()].filter((id) => id !== user.uid);
-    const common = { mode, subject: submittedSubject, activityTitle: submittedActivityTitle, organizer: submittedOrganizer, signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position, recipientIds, ownerId: user.uid, ownerUnit: unit, createdAt: serverTimestamp() };
+    const workflowFields = workflowScope && workflowAccounts?.head && workflowAccounts.chief
+      ? { approvalWorkflow: "fod" as const, approvalStage: "initial" as const, initialSignerId: workflowAccounts.head.userId, chiefSignerId: workflowAccounts.chief.userId, affixInitialSignature: "No" as const }
+      : {};
+    const common = { mode, subject: submittedSubject, activityTitle: submittedActivityTitle, organizer: submittedOrganizer, signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position, signatoryAdminId: selectedSignatory.adminUserId, recipientIds, ownerId: user.uid, ownerOffice: workflowScope ? "Division" : office, ownerDivision: workflowScope ? "Field Operations Division" : division ?? "", ownerUnit: unit, ...workflowFields, createdAt: serverTimestamp() };
     try {
       const data = mode === "individual"
         ? { ...common, to: to.trim(), toUserId: manualRecipient ? "" : toUserId, positionDesignation: positionDesignation.trim(), dateFrom: submittedDateFrom, dateTo: submittedDateTo, timeFrom: submittedTimeFrom, timeTo: submittedTimeTo, venueType, venue: submittedVenue, link: venueType === "virtual" ? link.trim() : "" }
         : { ...common, batches: batches.map((batch) => ({ ...batch, venue: batch.venue.trim(), link: batch.venueType === "virtual" ? batch.link.trim() : "", attendees: batch.attendees.map((attendee) => { const selectedPerson = attendee.manual ? undefined : personnel.find((person) => person.userId === attendee.userId); return { ...attendee, userId: attendee.manual ? "" : attendee.userId ?? "", name: attendee.manual ? attendee.name.trim() : selectedPerson?.name ?? attendee.name.trim(), position: attendee.manual ? attendee.position?.trim() ?? "" : selectedPerson?.position ?? attendee.position?.trim() ?? "", unit: attendee.manual ? attendee.unit?.trim() ?? "" : selectedPerson?.unit ?? attendee.unit?.trim() ?? "" }; }) })) };
       const firestore = db;
       const recordRef = doc(collection(firestore, "ntaRecords"));
-      const batch = writeBatch(firestore);
-      batch.set(recordRef, data);
-      recipientIds.forEach((recipientId) => {
+      let savedData: Record<string, unknown> = data;
+      let routedInitialSignerId = workflowAccounts?.head?.userId;
+      let savedRecipientIds = recipientIds;
+      if (workflowScope) {
+        const routed = await createFodNtaDocument(recordRef.id, data);
+        routedInitialSignerId = routed.initialSignerId;
+        savedRecipientIds = routed.recipientIds;
+        savedData = {
+          ...data,
+          signatoryName: routed.signatoryName,
+          signatoryDesignation: routed.signatoryDesignation,
+          ownerOffice: routed.ownerOffice,
+          ownerDivision: routed.ownerDivision,
+          ownerUnit: routed.ownerUnit,
+          initialSignerId: routed.initialSignerId,
+          chiefSignerId: routed.chiefSignerId,
+          recipientIds: routed.recipientIds,
+        };
+      } else {
+        const recordBatch = writeBatch(firestore);
+        recordBatch.set(recordRef, data);
+        await recordBatch.commit();
+      }
+      const notificationBatch = writeBatch(firestore);
+      let notificationCount = 0;
+      savedRecipientIds.forEach((recipientId) => {
         const schedules = schedulesByRecipient.get(recipientId) ?? [];
         const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: data.activityTitle, schedules });
-        batch.set(notification.reference, notification.data);
+        notificationBatch.set(notification.reference, notification.data);
+        notificationCount += 1;
       });
-      await batch.commit();
-      onSaved({ id: recordRef.id, ...data, createdAt: undefined } as NtaRecord);
+      if (workflowScope && routedInitialSignerId && routedInitialSignerId !== user.uid) {
+        const notification = makeDocumentNotification(firestore, { recipientId: routedInitialSignerId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: data.activityTitle, schedules: [], approvalStep: "initial" });
+        notificationBatch.set(notification.reference, notification.data);
+        notificationCount += 1;
+      }
+      let notificationWarning: string | undefined;
+      if (notificationCount) {
+        try { await notificationBatch.commit(); }
+        catch (notificationError) {
+          notificationWarning = "The NTA was saved, but one or more notifications could not be sent. The record remains in your NTA list.";
+          console.error("NTA saved, but its notifications could not be queued.", notificationError);
+        }
+      }
+      onSaved({ id: recordRef.id, ...savedData, createdAt: undefined } as NtaRecord, notificationWarning);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save Notice to Attend.");
     } finally { setBusy(false); }
@@ -415,6 +524,7 @@ function NtaList({ records, ownerId, preparedByNames, fallbackPreparedBy, deleti
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(records);
   return <section className="content-section"><div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Notices to Attend</h2><p className="muted">{records.length} {records.length === 1 ? "notice" : "notices"} available to your Unit / Program / Project.</p></div><button className="primary-button" onClick={onNew}>Add</button></div>{records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No notices to attend yet</h3><p>Create an individual, group, or multiple personnel notice.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Add a Notice To Attend</button></div> : <div className="permit-table"><RecordPagination totalRecords={records.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Notice to Attend" /><div className="table-head nta-list-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>Prepared By</span><span></span></div>{visibleRecords.map((record) => {
     const isOwner = record.ownerId === ownerId;
+    const hasSignature = hasNtaSignature(record);
     const schedules = record.mode === "individual"
       ? [[formatDateRange(record.dateFrom ?? "", record.dateTo ?? ""), record.timeFrom && record.timeTo ? `${formatTime(record.timeFrom)} – ${formatTime(record.timeTo)}` : ""].filter(Boolean).join(" · ")]
       : (record.batches ?? []).map((batch) => {
@@ -424,7 +534,7 @@ function NtaList({ records, ownerId, preparedByNames, fallbackPreparedBy, deleti
         const time = start || end ? `${start}${start && end ? " – " : ""}${end}` : "";
         return [date, time].filter(Boolean).join(" · ");
       }).filter(Boolean);
-    return <div className="table-row nta-list-row" key={record.id}><span data-label="Subject">{cleanNtaField(record.subject) || "—"}</span><span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span><span className="nta-list-schedules" data-label="Schedule">{schedules.length ? schedules.map((schedule, index) => <span key={`${record.id}-schedule-${index}`}>{schedule}</span>) : <span>—</span>}</span><span data-label="Prepared By">{preparedByNames[record.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="nta-list-actions">{isOwner && <button type="button" className="row-action" onClick={() => onEdit(record)}>Edit</button>}<button type="button" className="row-action" onClick={() => onPreview(record)}>View</button><button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(record)}>{copyingId === record.id ? "Copying..." : "Copy"}</button>{isOwner && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</span></div>;
+    return <div className="table-row nta-list-row" key={record.id}><span data-label="Subject">{cleanNtaField(record.subject) || "—"}</span><span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span><span className="nta-list-schedules" data-label="Schedule">{schedules.length ? schedules.map((schedule, index) => <span key={`${record.id}-schedule-${index}`}>{schedule}</span>) : <span>—</span>}</span><span data-label="Prepared By">{preparedByNames[record.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="nta-list-actions">{isOwner && !hasSignature && <button type="button" className="row-action" onClick={() => onEdit(record)}>Edit</button>}<button type="button" className="row-action" onClick={() => onPreview(record)}>View</button>{!hasSignature && <button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(record)}>{copyingId === record.id ? "Copying..." : "Copy"}</button>}{isOwner && !hasSignature && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</span></div>;
   })}</div>}</section>;
 }
 
@@ -459,20 +569,48 @@ function NtaSignatoryPosition({ designation }: { designation: string }) {
   return division.endsWith("Division") ? <><i>{position}</i> {division}</> : <i>{designation}</i>;
 }
 
+function ntaSignatureDate(value: unknown) {
+  const date = value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function"
+    ? value.toDate() as Date
+    : value instanceof Date ? value : typeof value === "string" || typeof value === "number" ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}.${part("month")}.${part("day")}`;
+}
+
+function ntaSignatureTime(value: unknown) {
+  const date = value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function"
+    ? value.toDate() as Date
+    : value instanceof Date ? value : typeof value === "string" || typeof value === "number" ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date)} +0800`;
+}
+
+function NtaSignatureAffixes({ record }: { record: NtaRecord }) {
+  const initialized = record.affixInitialSignature === "Yes";
+  const signed = record.affixSignature === "Yes";
+  if (!initialized && !signed) return null;
+  return <div className="nta-signature-affixes">
+    {initialized && record.affixInitialSignatureURL?.trim() && <div className="nta-signature-affix nta-signature-affix-initial"><img src={record.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${record.affixInitialSignatureName || "Project Leader"}`} /><div className="nta-signature-details"><strong>Digitally Initialized: {(record.affixInitialSignatureName || "PROJECT LEADER").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixInitialSignatureAt) || "—"}</small><small>Time: {ntaSignatureTime(record.affixInitialSignatureAt) || "—"}</small></div></div>}
+    {signed && record.affixSignatureURL?.trim() && <div className="nta-signature-affix"><img src={record.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${record.affixSignatureName || record.signatoryName || "signatory"}`} /><div className="nta-signature-details"><strong>Digitally Signed: {(record.affixSignatureName || record.signatoryName || "CHIEF").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixSignatureAt) || "—"}</small><small>Time: {ntaSignatureTime(record.affixSignatureAt) || "—"}</small></div></div>}
+  </div>;
+}
+
 function NtaPage({ record, page, rosterSections = [], showFixedCopy = false, firstPageRows = 0, individualClosingUnits = [], individualSignatoryPulledBack = false, individualClosingCompacted = false }: { record: NtaRecord; page: "individual" | "individual-continuation" | "batch-overview" | "batch-attendees" | "batch-copy"; rosterSections?: NtaRosterSection[]; showFixedCopy?: boolean; firstPageRows?: number; individualClosingUnits?: NtaIndividualClosingUnit[]; individualSignatoryPulledBack?: boolean; individualClosingCompacted?: boolean }) {
   const batches = record.batches ?? [];
   const individual = page === "individual";
   const batchOverview = page === "batch-overview";
-  const signatoryName = record.signatoryName || legacySignatoryName;
+  const signatoryName = (record.signatoryName || legacySignatoryName).trim();
   const signatoryDesignation = record.signatoryDesignation || legacySignatoryDesignation;
   return <article className="nta-document-page"><img className="nta-letterhead" src={asset("/Document-Header-Footer.jpg")} alt="" /><div className={`nta-document-content ${page}${showFixedCopy ? " nta-roster-copy-page" : ""}${record.mode === "multiple" ? " nta-multiple-personnel" : record.mode === "batch" ? " nta-group-notice" : ""}`}>
     {(individual || batchOverview) && <header className="nta-doc-title"><h1>NOTICE TO ATTEND</h1><p>No. ____________________</p><p>Series of {new Date().getFullYear()}</p></header>}
-    {page === "batch-copy" ? <NtaFixedCopy /> : page === "individual-continuation" ? <NtaIndividualClosing units={individualClosingUnits} signatoryName={signatoryName} signatoryDesignation={signatoryDesignation} continuation compacted={individualClosingCompacted} /> : individual ? <>
+    {page === "batch-copy" ? <NtaFixedCopy /> : page === "individual-continuation" ? <NtaIndividualClosing record={record} units={individualClosingUnits} continuation compacted={individualClosingCompacted} /> : individual ? <>
       <section className="nta-to-subject"><div className="nta-to-recipient"><p><b>TO</b><strong>:</strong><strong>{record.to?.toUpperCase()}</strong></p>{record.positionDesignation && <p className="nta-position-line"><span aria-hidden="true" /><span aria-hidden="true" /><span>{record.positionDesignation}</span></p>}</div><p><b>SUBJECT</b><strong>:</strong><strong>{cleanNtaField(record.subject).toUpperCase() || "—"}</strong></p></section>
       <hr className="nta-rule" />
       <p className="nta-directed">You are hereby directed to attend the activity with the following details:</p>
       <dl className="nta-details"><div><dt>Title of Activity</dt><b>:</b><dd>{cleanNtaField(record.activityTitle) || "—"}</dd></div><div><dt>Organizer / Host</dt><b>:</b><dd>{cleanNtaField(record.organizer) || "—"}</dd></div><div><dt>Date(s)</dt><b>:</b><dd>{formatDateRange(record.dateFrom ?? "", record.dateTo ?? "")}</dd></div>{(record.timeFrom || record.timeTo) && <div><dt>Time</dt><b>:</b><dd>{record.timeFrom ? formatTime(record.timeFrom) : ""}{record.timeFrom && record.timeTo ? " – " : ""}{record.timeTo ? formatTime(record.timeTo) : ""}</dd></div>}<div><dt>Venue / Platform</dt><b>:</b><dd>{cleanNtaField(record.venue) || "—"}</dd></div>{record.venueType === "virtual" && <div><dt>Link</dt><b>:</b><dd className="nta-link">{record.link}</dd></div>}</dl>
-      <NtaIndividualClosing units={individualClosingUnits} signatoryName={signatoryName} signatoryDesignation={signatoryDesignation} signatoryPulledBack={individualSignatoryPulledBack} compacted={individualClosingCompacted} />
+      <NtaIndividualClosing record={record} units={individualClosingUnits} signatoryPulledBack={individualSignatoryPulledBack} compacted={individualClosingCompacted} />
     </> : batchOverview ? <>
       <section className="nta-to-subject"><p><b>TO</b><strong>:</strong><strong>ALL CONCERNED PERSONNEL</strong></p><p className="nta-office-line"><span /> <strong>This Office</strong></p><p><b>SUBJECT</b><strong>:</strong><strong>{cleanNtaField(record.subject).toUpperCase() || "—"}</strong></p></section>
       <hr className="nta-rule" />
@@ -488,15 +626,17 @@ function NtaPage({ record, page, rosterSections = [], showFixedCopy = false, fir
     </> : <>
       <div className="nta-batch-tables">{rosterSections.map((section) => <NtaBatchParticipants batch={{ ...section.batch, attendees: section.attendees }} startIndex={section.startIndex} showCaption={record.mode === "batch" || !section.continued} multiplePersonnel={record.mode === "multiple"} key={`${section.batchIndex}-${section.startIndex}`} />)}</div>{showFixedCopy && <NtaFixedCopy />}
     </>}
-    {(showFixedCopy && (page === "batch-overview" || page === "batch-attendees" || page === "batch-copy")) && <footer className="nta-signatory"><strong>{signatoryName}</strong><span><NtaSignatoryPosition designation={signatoryDesignation} /></span></footer>}
+    {(showFixedCopy && (page === "batch-overview" || page === "batch-attendees" || page === "batch-copy")) && <footer className={`nta-signatory${hasNtaSignature(record) ? " nta-signatory-with-affixes" : ""}`}><NtaSignatureAffixes record={record} /><strong>{signatoryName}</strong><span><NtaSignatoryPosition designation={signatoryDesignation} /></span></footer>}
   </div></article>;
 }
 
-function NtaIndividualClosing({ units, signatoryName, signatoryDesignation, signatoryPulledBack = false, continuation = false, compacted = false }: { units: NtaIndividualClosingUnit[]; signatoryName: string; signatoryDesignation: string; signatoryPulledBack?: boolean; continuation?: boolean; compacted?: boolean }) {
+function NtaIndividualClosing({ record, units, signatoryPulledBack = false, continuation = false, compacted = false }: { record: NtaRecord; units: NtaIndividualClosingUnit[]; signatoryPulledBack?: boolean; continuation?: boolean; compacted?: boolean }) {
   if (units.length === 0) return null;
+  const signatoryName = (record.signatoryName || legacySignatoryName).trim();
+  const signatoryDesignation = record.signatoryDesignation || legacySignatoryDesignation;
   return <div className={`nta-individual-closing${continuation ? " nta-individual-closing-continuation" : ""}${compacted ? " nta-individual-closing-compact" : ""}${signatoryPulledBack ? " nta-individual-closing-pulled" : ""}`}>
     {units.map((unit) => {
-      if (unit === "signatory") return <footer className="nta-signatory nta-individual-closing-unit" data-nta-individual-closing-unit key={unit}><strong>{signatoryName}</strong><span><NtaSignatoryPosition designation={signatoryDesignation} /></span></footer>;
+      if (unit === "signatory") return <footer className={`nta-signatory nta-individual-closing-unit${hasNtaSignature(record) ? " nta-signatory-with-affixes" : ""}`} data-nta-individual-closing-unit key={unit}><NtaSignatureAffixes record={record} /><strong>{signatoryName}</strong><span><NtaSignatoryPosition designation={signatoryDesignation} /></span></footer>;
       const copy = {
         feedback: "As a representative, you are expected to actively participate and note key discussions and agreements. A brief report of feedback shall be submitted within ____ days after the activity.",
         expenses: "Travel and other incidental expenses, if any, shall be subject to existing accounting and auditing rules and regulations.",
@@ -535,6 +675,8 @@ function NtaFixedCopy() {
 
 function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => void }) {
   const pagesRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const [printing, setPrinting] = useState(false);
@@ -543,12 +685,21 @@ function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => voi
   const [rosterPageSettings, setRosterPageSettings] = useState<NtaRosterPageSetting[]>([{ capacity: 10, saturated: false }]);
   const [batchSinglePage, setBatchSinglePage] = useState(isGroupMode(record.mode) && record.batches?.length === 1);
   const [closingOnRosterPage, setClosingOnRosterPage] = useState(true);
-  const [individualClosingCount, setIndividualClosingCount] = useState(ntaIndividualClosingUnits.length);
-  const [individualClosingSaturated, setIndividualClosingSaturated] = useState(false);
-  const [individualSignatoryPulledBack, setIndividualSignatoryPulledBack] = useState(false);
-  const [individualClosingCompacted, setIndividualClosingCompacted] = useState(false);
   const rawBatches = record.batches ?? [];
   const [resolvedParticipantUnits, setResolvedParticipantUnits] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const appShell = document.querySelector(".app-shell");
+    if (!appShell) return;
+    const root = document.createElement("div");
+    root.className = "nta-preview-portal-root";
+    appShell.appendChild(root);
+    setPortalRoot(root);
+    return () => root.remove();
+  }, []);
+  useLayoutEffect(() => {
+    if (!portalRoot) return;
+    backdropRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [portalRoot, record.id]);
   useEffect(() => {
     const attendeesMissingUnits = rawBatches.flatMap((batch) => batch.attendees
       .filter((attendee) => !attendee.unit?.trim() && (attendee.userId || attendee.name.trim())));
@@ -585,16 +736,9 @@ function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => voi
   }));
   const firstPageRows = measuredFirstPageRows ?? batches[0]?.attendees.length ?? 0;
   const rosterPages = isGroupMode(record.mode) ? buildRosterPages(batches, firstPageRows, rosterPageSettings) : [];
-  let safeIndividualClosingCount = individualClosingCount;
-  if (ntaIndividualClosingUnits.length - safeIndividualClosingCount === 1 && ntaIndividualClosingUnits[safeIndividualClosingCount] === "signatory") safeIndividualClosingCount = Math.max(0, safeIndividualClosingCount - 1);
-  const individualFirstPageClosing = ntaIndividualClosingUnits.slice(0, safeIndividualClosingCount);
-  const individualContinuationClosing = ntaIndividualClosingUnits.slice(safeIndividualClosingCount);
+  const individualFirstPageClosing = ntaIndividualClosingUnits;
   useEffect(() => {
     const recalculateClosingLayout = () => {
-      setIndividualClosingCount(ntaIndividualClosingUnits.length);
-      setIndividualClosingSaturated(false);
-      setIndividualSignatoryPulledBack(false);
-      setIndividualClosingCompacted(false);
       if (isGroupMode(record.mode)) {
         setMeasuredFirstPageRows(null);
         setRosterPageSettings([{ capacity: 10, saturated: false }]);
@@ -613,52 +757,6 @@ function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => voi
       // Reserve the NTA's 0.2in bottom margin when fitting page content.
       return rect.bottom - rect.width * .0242;
     };
-    if (record.mode === "individual") {
-      const firstPageContent = pagesRef.current.querySelector<HTMLElement>(".nta-document-content.individual");
-      const firstPage = firstPageContent?.closest<HTMLElement>(".nta-document-page");
-      if (!firstPage || !firstPageContent) return;
-      if (safeIndividualClosingCount !== individualClosingCount) {
-        setIndividualClosingCount(safeIndividualClosingCount);
-        setIndividualClosingSaturated(true);
-        return;
-      }
-      const units = Array.from(firstPageContent.querySelectorAll<HTMLElement>("[data-nta-individual-closing-unit]"));
-      const fitCount = units.filter((unit) => unit.getBoundingClientRect().bottom <= pageLimit(firstPage)).length;
-      const signatureOnlyOverflows = units[units.length - 1]?.classList.contains("nta-signatory") && fitCount === units.length - 1;
-      if (fitCount < units.length && !individualClosingCompacted) {
-        setIndividualClosingCompacted(true);
-        return;
-      }
-      if (signatureOnlyOverflows && individualClosingCount === ntaIndividualClosingUnits.length && !individualSignatoryPulledBack) {
-        setIndividualSignatoryPulledBack(true);
-        return;
-      }
-      if (signatureOnlyOverflows && individualSignatoryPulledBack) {
-        setIndividualClosingCount(Math.max(0, fitCount - 2));
-        setIndividualClosingSaturated(true);
-        setIndividualSignatoryPulledBack(false);
-        return;
-      }
-      if (fitCount < units.length) {
-        const wouldLeaveOnlyDateAndSignatory = ntaIndividualClosingUnits.slice(fitCount).length === 2
-          && ntaIndividualClosingUnits[fitCount] === "issued"
-          && ntaIndividualClosingUnits[fitCount + 1] === "signatory";
-        const nextClosingCount = wouldLeaveOnlyDateAndSignatory ? Math.max(0, fitCount - 1) : fitCount;
-        if (nextClosingCount !== safeIndividualClosingCount) setIndividualClosingCount(nextClosingCount);
-        setIndividualClosingSaturated(true);
-        if (individualSignatoryPulledBack) setIndividualSignatoryPulledBack(false);
-        return;
-      }
-      if (safeIndividualClosingCount < ntaIndividualClosingUnits.length && !individualClosingSaturated) {
-        const nextCount = safeIndividualClosingCount + 1;
-        if (ntaIndividualClosingUnits.length - nextCount === 1 && ntaIndividualClosingUnits[nextCount] === "signatory") {
-          setIndividualClosingSaturated(true);
-          return;
-        }
-        setIndividualClosingCount(nextCount);
-      }
-      return;
-    }
     if (!isGroupMode(record.mode)) return;
     const firstPageContent = pagesRef.current.querySelector<HTMLElement>(".nta-document-content.batch-overview");
     const firstPage = firstPageContent?.closest<HTMLElement>(".nta-document-page");
@@ -728,7 +826,7 @@ function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => voi
       }
     }
     if (settingsChanged) setRosterPageSettings(nextSettings);
-  }, [record, firstPageRows, rosterPageSettings, rosterPages.length, individualClosingCount, individualClosingSaturated, individualSignatoryPulledBack, individualClosingCompacted, safeIndividualClosingCount, batchSinglePage, measuredFirstPageRows, closingOnRosterPage, resolvedParticipantUnits]);
+  }, [record, firstPageRows, rosterPageSettings, rosterPages.length, batchSinglePage, measuredFirstPageRows, closingOnRosterPage, resolvedParticipantUnits, portalRoot]);
   async function downloadPdf() {
     if (!pagesRef.current) return;
     setDownloading(true); setError("");
@@ -770,10 +868,11 @@ function NtaPreview({ record, onClose }: { record: NtaRecord; onClose: () => voi
     }
   }
 
-  return <div className="preview-backdrop nta-preview-backdrop"><div className="preview-toolbar"><span>NTA preview</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={downloadPdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={printPreview}>{printing ? "Preparing print..." : "Print"}</button>{error && <small className="download-error">{error}</small>}{printError && <small className="download-error" role="alert">{printError}</small>}</div><div ref={pagesRef} className="nta-preview-pages">{record.mode === "individual" ? <><NtaPage record={record} page="individual" individualClosingUnits={individualFirstPageClosing} individualSignatoryPulledBack={individualSignatoryPulledBack} individualClosingCompacted={individualClosingCompacted} />{individualContinuationClosing.length > 0 && <NtaPage record={record} page="individual-continuation" individualClosingUnits={individualContinuationClosing} individualClosingCompacted={individualClosingCompacted} />}</> : <><NtaPage record={record} page="batch-overview" firstPageRows={firstPageRows} showFixedCopy={batchSinglePage} />{!batchSinglePage && <>{rosterPages.map((sections, index) => <NtaPage key={`batch-attendees-${index}`} record={record} page="batch-attendees" rosterSections={sections} showFixedCopy={index === rosterPages.length - 1 && closingOnRosterPage} />)}{(!rosterPages.length || !closingOnRosterPage) && <NtaPage record={record} page="batch-copy" showFixedCopy />}</>}</>}</div></div>;
+  if (!portalRoot) return null;
+  return createPortal(<div ref={backdropRef} className="preview-backdrop nta-preview-backdrop"><div className="preview-toolbar"><span>NTA preview</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={downloadPdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={printPreview}>{printing ? "Preparing print..." : "Print"}</button>{error && <small className="download-error">{error}</small>}{printError && <small className="download-error" role="alert">{printError}</small>}</div><div ref={pagesRef} className="nta-preview-pages">{record.mode === "individual" ? <NtaPage record={record} page="individual" individualClosingUnits={individualFirstPageClosing} /> : <><NtaPage record={record} page="batch-overview" firstPageRows={firstPageRows} showFixedCopy={batchSinglePage} />{!batchSinglePage && <>{rosterPages.map((sections, index) => <NtaPage key={`batch-attendees-${index}`} record={record} page="batch-attendees" rosterSections={sections} showFixedCopy={index === rosterPages.length - 1 && closingOnRosterPage} />)}{(!rosterPages.length || !closingOnRosterPage) && <NtaPage record={record} page="batch-copy" showFixedCopy />}</>}</>}</div></div>, portalRoot);
 }
 
-export default function NtaModule({ user, office, division, unit, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; office: string; division?: string | null; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
+export default function NtaModule({ user, ownerRole = "", office, division, unit, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; ownerRole?: string; office: string; division?: string | null; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [records, setRecords] = useState<NtaRecord[]>([]);
   const [preparedByNames, setPreparedByNames] = useState<Record<string, string>>({});
   const [view, setView] = useState<"list" | "new">("list");
@@ -784,6 +883,7 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const handledFocusIdRef = useRef<string | null>(null);
+  const liveNtaRecords = useRef<{ userId: string; unit: string | null; owner: NtaRecord[] | null; shared: NtaRecord[] | null; recipient: NtaRecord[] | null } | null>(null);
   useEffect(() => {
     if (!db) return;
     let cancelled = false;
@@ -802,9 +902,63 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
       }));
       if (cancelled) return;
       setPreparedByNames(Object.fromEntries(profiles));
-      setRecords(rows);
+      const currentOwnerRecords = liveNtaRecords.current?.userId === user.uid && liveNtaRecords.current.unit === unit && liveNtaRecords.current.owner
+        ? liveNtaRecords.current.owner
+        : rows.filter((record) => record.ownerId === user.uid);
+      setRecords(sortNtaRecords([...rows.filter((record) => record.ownerId !== user.uid), ...currentOwnerRecords]));
     }).catch(() => { if (!cancelled) setLoadError("Could not load Notices to Attend. Refresh and try again."); });
     return () => { cancelled = true; };
+  }, [user.uid, unit]);
+  useEffect(() => {
+    if (!db) return;
+    const firestore = db;
+    const liveState = { userId: user.uid, unit, owner: null as NtaRecord[] | null, shared: unit ? null as NtaRecord[] | null : [], recipient: null as NtaRecord[] | null };
+    liveNtaRecords.current = liveState;
+    function publishLiveRecords() {
+      if (liveNtaRecords.current !== liveState || !liveState.owner || !liveState.recipient || (unit && !liveState.shared)) return;
+      const byId = new Map<string, NtaRecord>();
+      [...liveState.recipient, ...(liveState.shared ?? []), ...liveState.owner].forEach((record) => byId.set(record.id, record));
+      const latestRecords = sortNtaRecords([...byId.values()]);
+      setRecords(latestRecords);
+      setPreview((current) => {
+        if (!current) return current;
+        return byId.get(current.id) ?? (current.ownerId === user.uid ? null : current);
+      });
+      setEditingRecord((current) => current && latestRecords.some((record) => record.id === current.id && hasNtaSignature(record)) ? null : current);
+      setPendingDelete((current) => current && latestRecords.some((record) => record.id === current.id && hasNtaSignature(record)) ? null : current);
+    }
+    const ownerUnsubscribe = onSnapshot(query(collection(firestore, "ntaRecords"), where("ownerId", "==", user.uid)), { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.fromCache || liveNtaRecords.current !== liveState) return;
+      liveState.owner = snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as NtaRecord));
+      publishLiveRecords();
+    }, (cause) => {
+      const code = (cause as { code?: string }).code;
+      setLoadError(code ? `Could not refresh Notices to Attend (${code}).` : "Could not refresh Notices to Attend.");
+    });
+    const sharedUnsubscribe = unit ? onSnapshot(query(collection(firestore, "ntaRecords"), where("ownerUnit", "==", unit)), { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.fromCache || liveNtaRecords.current !== liveState) return;
+      liveState.shared = snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as NtaRecord));
+      publishLiveRecords();
+    }, () => {
+      if (liveNtaRecords.current !== liveState) return;
+      liveState.shared = [];
+      publishLiveRecords();
+    }) : () => {};
+    const recipientUnsubscribe = onSnapshot(query(collection(firestore, "ntaRecords"), where("recipientIds", "array-contains", user.uid)), { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.fromCache || liveNtaRecords.current !== liveState) return;
+      liveState.recipient = snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as NtaRecord));
+      publishLiveRecords();
+    }, () => {
+      if (liveNtaRecords.current !== liveState) return;
+      liveState.recipient = [];
+      publishLiveRecords();
+    });
+    return () => {
+      if (liveNtaRecords.current === liveState) liveNtaRecords.current = null;
+      ownerUnsubscribe();
+      sharedUnsubscribe();
+      recipientUnsubscribe();
+    };
   }, [user.uid, unit]);
   useEffect(() => {
     if (!focusRecordId) { handledFocusIdRef.current = null; return; }
@@ -816,7 +970,7 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
     onFocusHandled?.();
   }, [focusRecordId, records, onFocusHandled]);
   async function deleteRecord(record: NtaRecord) {
-    if (!db || record.ownerId !== user.uid) return;
+    if (!db || record.ownerId !== user.uid || hasNtaSignature(record)) return;
     setDeletingId(record.id);
     setLoadError("");
     try {
@@ -839,11 +993,26 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
     }
   }
   async function copyRecord(record: NtaRecord) {
+    if (hasNtaSignature(record)) { setLoadError("A digitally initialized or signed NTA cannot be copied."); return; }
     if (!db || !unit) { setLoadError("Your Unit / Program / Project is still loading. Try copying again in a moment."); return; }
     setCopyingId(record.id);
     setLoadError("");
     try {
       const firestore = db;
+      const workflowScope = isFodNtaWorkflowScope(ownerRole, office, division ?? "", unit);
+      let workflowFields: Record<string, unknown> = {};
+      const profiles = await getDocs(collection(firestore, "users"));
+      const accounts = resolveNtaWorkflowAccounts(profiles.docs.map((item) => ({ userId: item.id, data: item.data() })));
+      if (!accounts.signatories.length) throw new Error("No approved Admin Chief or OIC accounts are available to sign this NTA copy.");
+      const copiedSignatory = accounts.signatories.find((account) => account.userId === record.signatoryAdminId)
+        ?? accounts.signatories.find((account) => workflowScope && account.userId === accounts.chief?.userId)
+        ?? accounts.signatories[0];
+      const copiedSignatoryName = copiedSignatory.name;
+      const copiedSignatoryDesignation = copiedSignatory.position;
+      if (workflowScope) {
+        if (!accounts.head || !accounts.chief) throw new Error("The active FOD Project Leader and Chief accounts must be set up before this NTA can be copied.");
+        workflowFields = { approvalWorkflow: "fod", approvalStage: "initial", initialSignerId: accounts.head.userId, chiefSignerId: accounts.chief.userId, affixInitialSignature: "No" };
+      }
       const schedulesByRecipient = new Map<string, Array<{ dateFrom: string; dateTo: string; venue: string }>>();
       if (record.mode === "individual" && record.toUserId) schedulesByRecipient.set(record.toUserId, [{ dateFrom: record.dateFrom ?? "", dateTo: record.dateTo ?? record.dateFrom ?? "", venue: record.venue ?? "" }]);
       if (isGroupMode(record.mode)) record.batches?.forEach((batch) => batch.attendees.forEach((attendee) => {
@@ -856,25 +1025,66 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
         subject: record.subject,
         activityTitle: record.activityTitle,
         organizer: record.organizer,
-        ...(record.signatoryName !== undefined ? { signatoryName: record.signatoryName } : {}),
-        ...(record.signatoryDesignation !== undefined ? { signatoryDesignation: record.signatoryDesignation } : {}),
+        ...(copiedSignatoryName !== undefined ? { signatoryName: copiedSignatoryName } : {}),
+        ...(copiedSignatoryDesignation !== undefined ? { signatoryDesignation: copiedSignatoryDesignation } : {}),
+        signatoryAdminId: copiedSignatory.userId,
         recipientIds,
         ownerId: user.uid,
+        ownerOffice: workflowScope ? "Division" : office,
+        ownerDivision: workflowScope ? "Field Operations Division" : division ?? "",
         ownerUnit: unit,
+        ...workflowFields,
         createdAt: serverTimestamp(),
       };
       const data = record.mode === "individual"
         ? { ...common, to: record.to ?? "", toUserId: record.toUserId ?? "", positionDesignation: record.positionDesignation ?? "", dateFrom: record.dateFrom ?? "", dateTo: record.dateTo ?? record.dateFrom ?? "", timeFrom: record.timeFrom ?? "", timeTo: record.timeTo ?? "", venueType: record.venueType ?? "physical", venue: record.venue ?? "", link: record.link ?? "" }
         : { ...common, batches: (record.batches ?? []).map((batch) => ({ ...batch, attendees: batch.attendees.map((attendee) => ({ ...attendee })) })) };
       const recordRef = doc(collection(firestore, "ntaRecords"));
-      const batch = writeBatch(firestore);
-      batch.set(recordRef, data);
-      recipientIds.forEach((recipientId) => {
+      let savedData: Record<string, unknown> = data;
+      let routedInitialSignerId = accounts.head?.userId;
+      let savedRecipientIds = recipientIds;
+      if (workflowScope) {
+        const routed = await createFodNtaDocument(recordRef.id, data);
+        routedInitialSignerId = routed.initialSignerId;
+        savedRecipientIds = routed.recipientIds;
+        savedData = {
+          ...data,
+          signatoryName: routed.signatoryName,
+          signatoryDesignation: routed.signatoryDesignation,
+          ownerOffice: routed.ownerOffice,
+          ownerDivision: routed.ownerDivision,
+          ownerUnit: routed.ownerUnit,
+          initialSignerId: routed.initialSignerId,
+          chiefSignerId: routed.chiefSignerId,
+          recipientIds: routed.recipientIds,
+        };
+      } else {
+        const recordBatch = writeBatch(firestore);
+        recordBatch.set(recordRef, data);
+        await recordBatch.commit();
+      }
+      const notificationBatch = writeBatch(firestore);
+      let notificationCount = 0;
+      savedRecipientIds.forEach((recipientId) => {
         const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: schedulesByRecipient.get(recipientId) ?? [] });
-        batch.set(notification.reference, notification.data);
+        notificationBatch.set(notification.reference, notification.data);
+        notificationCount += 1;
       });
-      await batch.commit();
-      setRecords((current) => [{ id: recordRef.id, ...data, createdAt: undefined } as NtaRecord, ...current]);
+      if (workflowScope && routedInitialSignerId && routedInitialSignerId !== user.uid) {
+        const notification = makeDocumentNotification(firestore, { recipientId: routedInitialSignerId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: [], approvalStep: "initial" });
+        notificationBatch.set(notification.reference, notification.data);
+        notificationCount += 1;
+      }
+      let notificationFailed = false;
+      if (notificationCount) {
+        try { await notificationBatch.commit(); }
+        catch (notificationError) {
+          notificationFailed = true;
+          console.error("NTA copied, but its notifications could not be queued.", notificationError);
+        }
+      }
+      setRecords((current) => prependNtaRecord(current, { id: recordRef.id, ...savedData, createdAt: undefined } as NtaRecord));
+      if (notificationFailed) setLoadError("The NTA was copied, but one or more notifications could not be sent. The copy is in your NTA list.");
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       setLoadError(code ? `Could not copy the NTA (${code}).` : "Could not copy the NTA.");
@@ -883,5 +1093,113 @@ export default function NtaModule({ user, office, division, unit, focusRecordId,
     }
   }
   function closePreview() { setPreview(null); onPreviewClose?.(); }
-  return <>{loadError && <div className="error-message">{loadError}</div>}{editingRecord ? <NtaEditor record={editingRecord} userId={user.uid} office={office} division={division} unit={unit} onCancel={() => setEditingRecord(null)} onSaved={(updatedRecord) => { setRecords((current) => current.map((item) => item.id === updatedRecord.id ? updatedRecord : item)); setEditingRecord(null); }} onRemove={() => { if (editingRecord) setPendingDelete(editingRecord); }} /> : view === "new" ? <NtaForm user={user} office={office} division={division} unit={unit} onSaved={(record) => { setRecords((current) => [record, ...current]); setView("list"); }} onCancel={() => setView("list")} /> : <NtaList records={records} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} deletingId={deletingId} copyingId={copyingId} onNew={() => setView("new")} onEdit={setEditingRecord} onPreview={setPreview} onCopy={(record) => void copyRecord(record)} onDelete={setPendingDelete} />}{preview && <NtaPreview key={preview.id} record={preview} onClose={closePreview} />}<DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid)} title="Confirm NTA Deletion?" description="Are you sure you want to delete this Notice to Attend? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} /></>;
+  return <>{loadError && <div className="error-message">{loadError}</div>}{editingRecord ? <NtaEditor record={editingRecord} userId={user.uid} office={office} division={division} unit={unit} onCancel={() => setEditingRecord(null)} onSaved={(updatedRecord) => { setRecords((current) => current.map((item) => item.id === updatedRecord.id ? updatedRecord : item)); setEditingRecord(null); }} onRemove={() => { if (editingRecord && !hasNtaSignature(editingRecord)) setPendingDelete(editingRecord); }} /> : view === "new" ? <NtaForm user={user} ownerRole={ownerRole} office={office} division={division} unit={unit} onSaved={(record, notificationWarning) => { setRecords((current) => prependNtaRecord(current, record)); setView("list"); setLoadError(notificationWarning ?? ""); }} onCancel={() => setView("list")} /> : <NtaList records={records} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} deletingId={deletingId} copyingId={copyingId} onNew={() => setView("new")} onEdit={(record) => { if (!hasNtaSignature(record)) setEditingRecord(record); }} onPreview={setPreview} onCopy={(record) => void copyRecord(record)} onDelete={(record) => { if (record.ownerId === user.uid && !hasNtaSignature(record)) setPendingDelete(record); }} />}{preview && <NtaPreview key={preview.id} record={preview} onClose={closePreview} />}<DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid && !hasNtaSignature(pendingDelete))} title="Confirm NTA Deletion?" description="Are you sure you want to delete this Notice to Attend? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} /></>;
+}
+
+export function NtaApproval({ user, stage, canReview, focusRecordId, onFocusHandled }: { user: User; stage: "initial" | "chief"; canReview: boolean; focusRecordId?: string; onFocusHandled?: () => void }) {
+  const [records, setRecords] = useState<NtaRecord[]>([]);
+  const [signature, setSignature] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [preview, setPreview] = useState<NtaRecord | null>(null);
+  const handledFocusIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!canReview) { setLoading(false); setRecords([]); return; }
+    if (!db) { setLoading(false); setError("Firebase is not configured."); return; }
+    const signerField = stage === "initial" ? "initialSignerId" : "chiefSignerId";
+    setLoading(true);
+    return onSnapshot(query(collection(db, "ntaRecords"), where("approvalWorkflow", "==", "fod"), where(signerField, "==", user.uid), where("approvalStage", "==", stage), ...(stage === "chief" ? [where("affixInitialSignature", "==", "Yes")] : [])), (snapshot) => {
+      const next = snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as NtaRecord));
+      next.sort((first, second) => {
+        const millis = (value: unknown) => value && typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function" ? value.toMillis() as number : 0;
+        return millis(first.createdAt) - millis(second.createdAt);
+      });
+      setRecords(next);
+      setLoading(false);
+      setError("");
+    }, (cause) => {
+      const code = (cause as { code?: string }).code;
+      setLoading(false);
+      setError(code ? `Could not load NTA approvals (${code}).` : "Could not load NTA approvals. Refresh and try again.");
+    });
+  }, [canReview, stage, user.uid]);
+
+  useEffect(() => {
+    if (!canReview || !db) return;
+    return onSnapshot(doc(db, "users", user.uid), (snapshot) => {
+      const data = snapshot.data();
+      if (!data) return;
+      setSignature(stage === "initial" ? (typeof data.initialSignatureURL === "string" ? data.initialSignatureURL : "") : (typeof data.fullSignatureURL === "string" ? data.fullSignatureURL : ""));
+      setAccountName(typeof data.name === "string" ? data.name.trim() : user.displayName ?? "");
+    }, () => setError("Could not load your profile signature."));
+  }, [canReview, stage, user.displayName, user.uid]);
+
+  useEffect(() => {
+    if (!focusRecordId) { handledFocusIdRef.current = null; return; }
+    if (handledFocusIdRef.current === focusRecordId) return;
+    const record = records.find((item) => item.id === focusRecordId);
+    if (!record) return;
+    handledFocusIdRef.current = focusRecordId;
+    setPreview(record);
+    onFocusHandled?.();
+  }, [focusRecordId, onFocusHandled, records]);
+
+  async function changeAffixSignature(record: NtaRecord, value: "Yes" | "No") {
+    if (!db || busyId) return;
+    if (value === "Yes" && !signature.trim()) {
+      setError(stage === "initial" ? "Upload your Initial Signature in Profile before affixing it to an NTA." : "Upload your Full Signature in Profile before affixing it to an NTA.");
+      return;
+    }
+    setBusyId(record.id);
+    setError("");
+    try {
+      const firestore = db;
+      const ntaRef = doc(firestore, "ntaRecords", record.id);
+      const batch = writeBatch(firestore);
+      if (stage === "initial") {
+        if (value === "No") batch.update(ntaRef, { affixInitialSignature: "No" });
+        else {
+          batch.update(ntaRef, { affixInitialSignature: "Yes", affixInitialSignatureURL: signature.trim(), affixInitialSignatureName: accountName, affixInitialSignatureAt: serverTimestamp(), approvalStage: "chief" });
+          const notification = makeDocumentNotification(firestore, { recipientId: record.chiefSignerId ?? "", ownerId: user.uid, documentId: record.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: [], approvalStep: "chief" });
+          batch.set(notification.reference, notification.data);
+        }
+      } else if (value === "No") batch.update(ntaRef, { affixSignature: "No" });
+      else {
+        batch.update(ntaRef, { affixSignature: "Yes", affixSignatureURL: signature.trim(), affixSignatureName: accountName, affixSignatureAt: serverTimestamp(), approvalStage: "approved" });
+        if (record.ownerId && record.ownerId !== user.uid) {
+          const notification = makeDocumentNotification(firestore, { recipientId: record.ownerId, ownerId: user.uid, documentId: record.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: [] });
+          batch.set(notification.reference, notification.data);
+        }
+      }
+      await batch.commit();
+      const updated = await getDoc(ntaRef);
+      if (updated.exists()) setPreview((current) => current?.id === record.id ? { ...updated.data(), id: updated.id } as NtaRecord : current);
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code ? `Could not update the NTA signature (${code}).` : "Could not update the NTA signature. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const isInitial = stage === "initial";
+  const signatureLabel = isInitial ? "Affix Initial Signature" : "Affix Full Signature";
+  return <section className="content-section so-approval-section nta-approval-section">
+    <div className="section-heading"><div><p className="eyebrow">Admin panel</p><h2>NTA Approval</h2><p className="muted">{records.length} Notice{records.length === 1 ? "" : "s"} to Attend awaiting {isInitial ? "initial signature" : "full signature"}.</p></div></div>
+    {error && <p className="error-message" role="alert">{error}</p>}
+    {!canReview ? <div className="empty-state"><h3>NTA approval access is restricted</h3><p>Only the assigned FOD Project Leader and Field Operations Division Chief can initialize or sign notices.</p></div> : loading ? <p className="muted">Loading NTA approvals...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Notices to Attend awaiting your action</h3><p>New requests will appear here.</p></div> : <div className="permit-table so-approval-table nta-approval-table">
+      <div className="table-head"><span>Subject</span><span>Activity</span><span>Notice type</span><span>{signatureLabel}</span><span>View</span></div>
+      {records.map((record) => <div className="table-row" key={record.id}>
+        <strong data-label="Subject">{cleanNtaField(record.subject) || "—"}</strong>
+        <span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span>
+        <span data-label="Notice type">{record.mode === "individual" ? "Individual" : record.mode === "multiple" ? "Multiple Personnel" : "Group"}</span>
+        <label className="so-approval-affix" data-label={signatureLabel}><select className="affix-signature-select" aria-label={`${signatureLabel} for ${record.subject}`} value={isInitial ? record.affixInitialSignature ?? "No" : record.affixSignature ?? "No"} disabled={busyId === record.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}><option value="Yes" disabled={!signature.trim()}>Yes</option><option value="No">No</option></select></label>
+        <span className="permit-row-actions" data-label="View"><button type="button" className="row-action" onClick={() => setPreview(record)}>View</button></span>
+      </div>)}
+    </div>}
+    {preview && <NtaPreview key={preview.id} record={preview} onClose={() => setPreview(null)} />}
+  </section>;
 }

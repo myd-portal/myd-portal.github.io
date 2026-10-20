@@ -14,6 +14,7 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import {
   addDoc,
   arrayUnion,
@@ -34,7 +35,7 @@ import {
   writeBatch,
   type QuerySnapshot,
 } from "firebase/firestore";
-import { auth, db, isFirebaseConfigured } from "@/lib/firebase";
+import { auth, db, functions, isFirebaseConfigured } from "@/lib/firebase";
 import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
 import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
 import { accountRoleForEmail, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
@@ -45,6 +46,7 @@ import type { CalendarOfActivitiesApprovalNotification, CalendarOfActivitiesNoti
 import { calendarOfActivitiesApprovalNotificationsCollection, calendarOfActivitiesNotificationsCollection } from "@/lib/calendar-of-activities-storage";
 import { MessengerButton } from "./Messenger";
 import ProfilePhotoUpload from "./ProfilePhotoUpload";
+import ProfileSignatureUpload from "./ProfileSignatureUpload";
 import DeleteConfirmation from "./DeleteConfirmation";
 import NameSearchSelect from "./NameSearchSelect";
 import type { AdminPermit } from "./PermitSlipAdmin";
@@ -60,6 +62,7 @@ import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
 import { canAccessCleaningTaskNavigation, canViewCleaningTaskLanding } from "./CleaningTask";
 
 const NtaModule = dynamic(() => import("./Nta"));
+const NtaApproval = dynamic(() => import("./Nta").then((module) => module.NtaApproval));
 const TravelOrderModule = dynamic(() => import("./TravelOrder"));
 const CalendarOfActivitiesModule = dynamic(() => import("./CalendarOfActivities"));
 const MessengerModule = dynamic(() => import("./Messenger"));
@@ -77,6 +80,7 @@ const CertificateApproval = dynamic(() => import("./CertificateApproval"));
 const UserMasterList = dynamic(() => import("./UserMasterList"));
 const DocumentNotificationAdmin = dynamic(() => import("./DocumentNotificationAdmin"));
 const PendingPermitSlipAdmin = dynamic(() => import("./PendingPermitSlipAdmin"));
+const SpecialOrderApproval = dynamic(() => import("./SpecialOrderApproval"));
 const SuperAdminRecordManager = dynamic(() => import("./SuperAdminRecords"));
 const CleaningTaskModule = dynamic(() => import("./CleaningTask").then((module) => module.CleaningTaskBoard));
 const CleaningTaskAssignmentAdmin = dynamic(() => import("./CleaningTask").then((module) => module.CleaningTaskAssignmentAdmin));
@@ -92,12 +96,12 @@ type Unit = string;
 type AccountAssignment = string;
 type PermitDecision = { status?: "Pending" | "Approved" | "Disapproved"; decidedAt?: unknown; signerName?: string; decidedBy?: string; approvedPermitNo?: string };
 type Permit = { id: string; permitNo: string; permitNos?: string[]; date: string; names: string[]; personIds?: string[]; recipientIds?: string[]; personUnits?: Unit[]; unit: Unit; purpose: string; ownerId?: string; ownerRole?: AccountRole; ownerOffice?: string; ownerDivision?: string; ownerUnit?: string; ownerDesignation?: string; ownerAssignment?: string; personStatuses?: Record<string, PermitDecision>; createdAt?: unknown };
-type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; createdAt?: unknown };
+type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; ownerOffice?: string; ownerDivision?: string; createdAt?: unknown; approvalWorkflow?: "fod"; approvalStage?: "initial" | "chief" | "returned" | "approved"; externalSignatory?: boolean; initialSignerId?: string; chiefSignerId?: string; affixInitialSignature?: "Yes" | "No"; affixInitialSignatureURL?: string; affixInitialSignatureName?: string; affixInitialSignatureAt?: unknown; affixChiefInitialSignature?: "Yes" | "No"; affixChiefInitialSignatureURL?: string; affixChiefInitialSignatureName?: string; affixChiefInitialSignatureAt?: unknown; affixSignature?: "Yes" | "No"; affixSignatureURL?: string; affixSignatureName?: string; affixSignatureAt?: unknown };
 
 const specialOrderSignatories = [
   { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
   { name: "REBECCA R. ATEGA", designation: "RTD for Operations" },
-  { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulation" },
+  { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulations" },
   { name: "MELODY M. GUIMARY", designation: "Chief, Field Operations Division" },
 ] as const;
 const specialOrderSignatoryOptions = [
@@ -119,6 +123,9 @@ const specialOrderSignatoryOptions = [
       position: signatory.designation,
     })),
 ].sort((first, second) => first.label.localeCompare(second.label));
+function isFodSpecialOrderWorkflowScope(role: AccountRole, office: string, division: string, unit: string) {
+  return role === "regular" && office === "Division" && division === "Field Operations Division" && ["AGRISTAT", "AMIA", "DRRM"].includes(unit);
+}
 
 const units: Unit[] = ["AMIA", "AGRISTAT", "DRRM"];
 const amiaDocumentTrackingLinks = [
@@ -202,6 +209,10 @@ function formatDate(date: string) {
 }
 
 function assignedDocumentSummary(notification: DocumentNotification) {
+  if (notification.documentType === "Special Order" && notification.approvalStep === "initial") return "A Special Order is awaiting your initial signature.";
+  if (notification.documentType === "Special Order" && notification.approvalStep === "chief") return "A Special Order is awaiting your approval.";
+  if (notification.documentType === "Notice to Attend" && notification.approvalStep === "initial") return "A Notice to Attend is awaiting your initial signature.";
+  if (notification.documentType === "Notice to Attend" && notification.approvalStep === "chief") return "A Notice to Attend is awaiting your approval."
   if (notification.activityTitle?.trim()) return notification.activityTitle.trim();
   switch (notification.documentType) {
     case "Special Order": return "You have been designated to attend an activity.";
@@ -707,9 +718,31 @@ function timestampMillis(value: unknown) {
 type PermitNotification = { permit: Permit; personIndex: number; permitNo: string; name: string; date: string; status: "Approved" | "Disapproved"; decidedAt?: unknown };
 type PendingPermitNotification = { permitId: string; statusKey: string; permitNo: string; name: string; date: string; purpose: string; submittedAt: number };
 type PermitNotificationAccount = { office: string; division: string; unit: string; assignment: string; designation: string; accountRole: AccountRole };
+type SpecialOrderWorkflowAccount = { userId: string; name: string; designation: string; unit: string; role: string; status: string; office: string; division: string; storedUnit: string; storedDesignation: string; storedRole: string; storedStatus: unknown; email: string; profileFieldsVersion: number; storedAssignment: string };
+function selectSpecialOrderWorkflowAccounts(snapshot: QuerySnapshot) {
+  const approvedAdmins = snapshot.docs.flatMap((item) => {
+    const data = item.data();
+    if (normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
+      || normalizeAccountStatus(data.accountStatus) !== "Approved") return [];
+    // The approval route requires the stored profile Unit itself to be
+    // Field Operations Division. Do not let profile normalization turn a
+    // missing or invalid Unit into a matching assignment.
+    if (data.office !== "Division" || data.division !== "Field Operations Division"
+      || data.unit !== "Field Operations Division") return [];
+    const profile = accountProfileSelection(data);
+    if (profile.office !== "Division" || profile.division !== "Field Operations Division") return [];
+    const unit = profile.unit || profile.assignment || "Field Operations Division";
+    return [{ userId: item.id, name: typeof data.name === "string" ? data.name : "", designation: accountDesignation(data.designation), unit, role: normalizeAccountRole(data.accountRole), status: normalizeAccountStatus(data.accountStatus), office: typeof data.office === "string" ? data.office : "", division: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedRole: typeof data.accountRole === "string" ? data.accountRole : "", storedStatus: data.accountStatus, email: typeof data.email === "string" ? data.email : "", profileFieldsVersion: typeof data.profileFieldsVersion === "number" ? data.profileFieldsVersion : 0, storedAssignment: typeof data.assignment === "string" ? data.assignment : "" }];
+  });
+  return {
+    head: approvedAdmins.find((account) => account.designation === "AGRISTAT/DRRM/AMIA Project Leader"
+      && account.unit === "Field Operations Division") ?? null,
+    chief: approvedAdmins.find((account) => account.designation === "Chief" && account.unit === "Field Operations Division") ?? null,
+  };
+}
 type PendingAccountApprovalNotification = { userId: string; name: string; office: string; division: string; unit: string };
 type NotificationFocus =
-  | { kind: "document"; id: string; documentType: DocumentNotification["documentType"]; certificateCollection?: DocumentNotification["certificateCollection"] }
+  | { kind: "document"; id: string; documentType: DocumentNotification["documentType"]; approvalStep?: DocumentNotification["approvalStep"]; certificateCollection?: DocumentNotification["certificateCollection"] }
   | { kind: "reminder"; id?: string; reminderKind: DocumentReminder["kind"]; month?: string; cycle?: 1 | 2 }
   | { kind: "calendar"; id: string; mode: "prepared" | "approved-records" };
 const permitNotificationVisibilityMs = 4 * 60 * 60 * 1000;
@@ -1334,7 +1367,7 @@ function PrintPreview({ permit, approvedPermitNumbers, onClose, ownerOffice, own
   </div>;
 }
 
-function SpecialOrderForm({ user, ownerOffice, ownerDivision, ownerUnit, onSaved, onCancel, onError }: { user: User; ownerOffice: string; ownerDivision?: string; ownerUnit: string | null; onSaved: (order: SpecialOrder) => void; onCancel: () => void; onError: (message: string) => void }) {
+function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUnit, onSaved, onCancel, onError }: { user: User; ownerRole: AccountRole; ownerOffice: string; ownerDivision?: string; ownerUnit: string | null; onSaved: (order: SpecialOrder) => void; onCancel: () => void; onError: (message: string) => void }) {
   const [subject, setSubject] = useState("");
   const [activityTitle, setActivityTitle] = useState("");
   const [organizer, setOrganizer] = useState("");
@@ -1344,11 +1377,36 @@ function SpecialOrderForm({ user, ownerOffice, ownerDivision, ownerUnit, onSaved
   const [timeTo, setTimeTo] = useState("17:00");
   const [venue, setVenue] = useState("");
   const [signatorySelection, setSignatorySelection] = useState("");
-  const selectedSignatory = specialOrderSignatoryOptions.find((option) => option.value === signatorySelection);
+  const workflowScope = isFodSpecialOrderWorkflowScope(ownerRole, ownerOffice, ownerDivision ?? "", ownerUnit ?? "");
+  const [workflowAccounts, setWorkflowAccounts] = useState<{ head: SpecialOrderWorkflowAccount | null; chief: SpecialOrderWorkflowAccount | null } | null>(null);
+  const [workflowAccountsLoading, setWorkflowAccountsLoading] = useState(false);
+  const workflowChiefUnit = workflowAccounts?.chief?.unit || "Field Operations Division";
+  const fodChiefSignatoryOptions = workflowAccounts?.chief ? [{ value: `account:${workflowAccounts.chief.userId}`, label: `${workflowAccounts.chief.name} — Chief, ${workflowChiefUnit}`, name: workflowAccounts.chief.name, position: `Chief, ${workflowChiefUnit}`, adminUserId: workflowAccounts.chief.userId }] : [];
+  // The signatory printed on the SO is independent from its approval route.
+  // Keep every normal signatory available to FOD Regular accounts; their SOs
+  // still go through the Project Leader and then the FOD Chief.
+  const signatoryOptions = workflowScope
+    ? [...fodChiefSignatoryOptions, ...specialOrderSignatoryOptions]
+    : specialOrderSignatoryOptions;
+  const selectedSignatory = signatoryOptions.find((option) => option.value === signatorySelection);
+  const isAccountlessRegionalSignatory = workflowScope && Boolean(selectedSignatory?.value.startsWith("role:"));
   const [participants, setParticipants] = useState([{ userId: "", manual: false, name: "", position: "", unit: "" }]);
   const [personnel, setPersonnel] = useState<PersonnelEntry[]>([]);
   const [personnelStatus, setPersonnelStatus] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!workflowScope || !db) { setWorkflowAccounts(null); setWorkflowAccountsLoading(false); return; }
+    setWorkflowAccountsLoading(true);
+    return onSnapshot(collection(db, "users"), (snapshot) => {
+      setWorkflowAccounts(selectSpecialOrderWorkflowAccounts(snapshot));
+      setWorkflowAccountsLoading(false);
+    }, () => {
+      setWorkflowAccounts(null);
+      setWorkflowAccountsLoading(false);
+      onError("Could not load active Special Order signatories.");
+    });
+  }, [onError, ownerUnit, workflowScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1394,34 +1452,168 @@ function SpecialOrderForm({ user, ownerOffice, ownerDivision, ownerUnit, onSaved
     if (!participantList.length) { onError("Select at least one designated personnel."); return; }
     if (!selectedSignatory) { onError("Select a signatory."); return; }
     setBusy(true); onError("");
+    let saveStage = "prepare";
+    const saveWorkflowAccounts = workflowAccounts;
     try {
       const signatory = { signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position };
       const firestore = db;
       const orderRef = doc(collection(firestore, "specialOrders"));
-      const record = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venue: venue.trim(), participants: participantList, participantPositions, participantUnits, participantUserIds, participantIds, recipientIds: participantIds.filter((id) => id !== user.uid), ...signatory, ownerId: user.uid, ownerUnit, createdAt: serverTimestamp() };
-      const batch = writeBatch(firestore);
-      batch.set(orderRef, record);
+      const baseRecord = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venue: venue.trim(), participants: participantList, participantPositions, participantUnits, participantUserIds, participantIds, recipientIds: participantIds.filter((id) => id !== user.uid), ...signatory, ownerId: user.uid, ownerOffice, ownerDivision: ownerDivision ?? "", ownerUnit };
+      let initialSignerId = saveWorkflowAccounts?.head?.userId;
+      let record: Omit<SpecialOrder, "id">;
+      if (workflowScope) {
+        if (!functions) throw new Error("Special Order service is unavailable.");
+        saveStage = "create FOD Special Order";
+        const createFodSpecialOrder = httpsCallable<{
+          orderId: string;
+          subject: string;
+          activityTitle: string;
+          organizer: string;
+          dateFrom: string;
+          dateTo: string;
+          timeFrom: string;
+          timeTo: string;
+          venue: string;
+          participants: string[];
+          participantPositions: string[];
+          participantUnits: string[];
+          participantUserIds: string[];
+          signatoryName: string;
+          signatoryDesignation: string;
+        }, { orderId: string; initialSignerId: string; chiefSignerId: string }>(functions, "createFodSpecialOrder");
+        const response = await createFodSpecialOrder({
+          orderId: orderRef.id,
+          subject: baseRecord.subject,
+          activityTitle: baseRecord.activityTitle,
+          organizer: baseRecord.organizer,
+          dateFrom: baseRecord.dateFrom,
+          dateTo: baseRecord.dateTo,
+          timeFrom: baseRecord.timeFrom,
+          timeTo: baseRecord.timeTo,
+          venue: baseRecord.venue,
+          participants: baseRecord.participants,
+          participantPositions: baseRecord.participantPositions,
+          participantUnits: baseRecord.participantUnits,
+          participantUserIds: baseRecord.participantUserIds,
+          signatoryName: baseRecord.signatoryName,
+          signatoryDesignation: baseRecord.signatoryDesignation,
+        });
+        if (response.data.orderId !== orderRef.id) throw new Error("Special Order service returned an unexpected record ID.");
+        initialSignerId = response.data.initialSignerId;
+        const chiefSignerId = response.data.chiefSignerId;
+        record = { ...baseRecord, approvalWorkflow: "fod", approvalStage: "initial", externalSignatory: isAccountlessRegionalSignatory, initialSignerId, chiefSignerId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: new Date() };
+      } else {
+        record = { ...baseRecord, createdAt: serverTimestamp() };
+        saveStage = "create specialOrders document";
+        try {
+          await setDoc(orderRef, record);
+        } catch (error) {
+          const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+          if (code !== "permission-denied") throw error;
+          saveStage = "refresh auth token and retry create";
+          await user.getIdToken(true);
+          saveStage = "retry create specialOrders document";
+          await setDoc(orderRef, record);
+        }
+      }
+      saveStage = "queue notifications";
+      const notificationBatch = writeBatch(firestore);
       [...new Set(record.recipientIds)].forEach((recipientId) => {
         const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: orderRef.id, documentType: "Special Order", activityTitle: record.activityTitle, dateFrom, dateTo: dateTo || dateFrom, venue: record.venue });
-        batch.set(notification.reference, notification.data);
+        notificationBatch.set(notification.reference, notification.data);
       });
-      await batch.commit();
+      if (workflowScope && initialSignerId) {
+        const notification = makeDocumentNotification(firestore, { recipientId: initialSignerId, ownerId: user.uid, documentId: orderRef.id, documentType: "Special Order", activityTitle: record.activityTitle, dateFrom, dateTo: dateTo || dateFrom, venue: record.venue, approvalStep: "initial" });
+        notificationBatch.set(notification.reference, notification.data);
+      }
+      let notificationsFailed = false;
+      if ((record.recipientIds?.length ?? 0) || (workflowScope && initialSignerId)) {
+        try { await notificationBatch.commit(); }
+        catch (error) { notificationsFailed = true; console.error("Special Order saved, but its notifications could not be queued.", error); }
+      }
       onSaved({ id: orderRef.id, ...record });
-    } catch (error) { onError(error instanceof Error ? error.message : "Unable to save special order."); }
+      if (notificationsFailed) onError("Special Order saved, but notifications could not be sent. It is available in the SO Approval panel.");
+    } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+      let verifiedClaim: boolean | null = null;
+      try { verifiedClaim = (await user.getIdTokenResult()).claims.email_verified === true; } catch { /* Keep the original save error. */ }
+      const ruleText = (value: unknown) => typeof value === "string" ? value : "";
+      const approverRuleFailures = (account: SpecialOrderWorkflowAccount | null | undefined, designation: string) => {
+        if (!account) return "missing";
+        const storedRole = ruleText(account.storedRole).toLowerCase();
+        const storedUnit = ruleText(account.storedUnit);
+        const storedOffice = ruleText(account.office);
+        const storedDivision = ruleText(account.division);
+        const storedAssignment = ruleText(account.storedAssignment);
+        const storedDesignation = ruleText(account.storedDesignation);
+        const email = ruleText(account.email).toLowerCase();
+        const profileFieldsVersion = typeof account.profileFieldsVersion === "number" ? account.profileFieldsVersion : 0;
+        const roleAllowed = storedRole === "admin"
+          || (!["superadmin", "regular", "user"].includes(storedRole) && email === "gerlieantipaso27@gmail.com");
+        const statusAllowed = account.storedStatus === undefined || account.storedStatus === null || account.storedStatus === "Approved";
+        const legacyAssignment = profileFieldsVersion >= 4 ? storedUnit || storedDivision : storedAssignment || storedUnit || storedOffice;
+        const officeAllowed = profileFieldsVersion >= 4
+          ? storedOffice.toLowerCase() === "division" && storedDivision.toLowerCase() === "field operations division"
+          : storedOffice.toLowerCase() === "field operations division"
+            || (storedOffice.toLowerCase() === "division" && legacyAssignment.toLowerCase() === "field operations division");
+        const designationAllowed = storedDesignation === designation
+          || storedDesignation.split(";").map((value) => value.trim()).includes(designation);
+        return [
+          !roleAllowed && "role",
+          !statusAllowed && "status",
+          !officeAllowed && "office/division",
+          storedUnit.toLowerCase() !== "field operations division" && "unit",
+          !designationAllowed && "designation",
+        ].filter(Boolean).join(",") || "none";
+      };
+      const details = {
+        stage: saveStage,
+        code,
+        ownerRole,
+        ownerOffice,
+        ownerDivision,
+        ownerUnit,
+        workflowScope,
+        hasProjectLeader: Boolean(saveWorkflowAccounts?.head),
+        hasChief: Boolean(saveWorkflowAccounts?.chief),
+        ownerScopeRuleMatch: ownerRole === "regular" && ownerOffice === "Division" && ownerDivision === "Field Operations Division" && ["AGRISTAT", "AMIA", "DRRM"].includes(ownerUnit ?? ""),
+        signatoryRuleMatch: Boolean(selectedSignatory?.name && selectedSignatory.name.length <= 120 && selectedSignatory.position && selectedSignatory.position.length <= 120),
+        verifiedClaim,
+        projectLeaderRuleFailures: approverRuleFailures(saveWorkflowAccounts?.head, "AGRISTAT/DRRM/AMIA Project Leader"),
+        chiefRuleFailures: approverRuleFailures(saveWorkflowAccounts?.chief, "Chief"),
+        distinctRoutes: Boolean(saveWorkflowAccounts?.head && saveWorkflowAccounts.chief && saveWorkflowAccounts.head.userId !== saveWorkflowAccounts.chief.userId && saveWorkflowAccounts.head.userId !== user.uid && saveWorkflowAccounts.chief.userId !== user.uid),
+        signatory: selectedSignatory?.position ?? "",
+      };
+      console.warn("Special Order save failed.", details);
+      const message = error instanceof Error ? error.message : "Unable to save special order.";
+      const diagnostic = process.env.NODE_ENV === "development"
+        ? ` [${saveStage}; ${code || "unknown error"}; role=${ownerRole}; office=${ownerOffice}; division=${ownerDivision ?? ""}; unit=${ownerUnit}; workflow=${workflowScope}; ownerScope=${details.ownerScopeRuleMatch}; signatory=${details.signatoryRuleMatch}; projectLeader=${details.hasProjectLeader}/fail:${details.projectLeaderRuleFailures}; chief=${details.hasChief}/fail:${details.chiefRuleFailures}; routesDistinct=${details.distinctRoutes}; emailVerified=${details.verifiedClaim}]`
+        : "";
+      onError(`${message}${diagnostic}`);
+    }
     finally { setBusy(false); }
   }
 
   return <section className="content-section form-section special-order-form-section"><div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create special order</h2><p className="muted">Add the activity details and designated personnel.</p></div><button className="ghost-button" onClick={onCancel}>Cancel</button></div><form className="permit-form" onSubmit={save}><div className="wide-field special-order-activity-fields"><label>Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} required /></label><label>Title of the Activity<input value={activityTitle} onChange={(event) => setActivityTitle(event.target.value)} required /></label><label>Organizer or Host<input value={organizer} onChange={(event) => setOrganizer(event.target.value)} required /></label></div><div className="special-order-schedule-fields"><div className="date-range-field"><span>Date</span><div><input aria-label="Date from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} required /><span>to</span><input aria-label="Date to" type="date" min={dateFrom} value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></div></div><div className="date-range-field"><span>Time</span><div><input aria-label="Time from" type="time" value={timeFrom} onChange={(event) => setTimeFrom(event.target.value)} required /><span>to</span><input aria-label="Time to" type="time" value={timeTo} onChange={(event) => setTimeTo(event.target.value)} required /></div></div></div><label className="wide-field">Venue<input value={venue} onChange={(event) => setVenue(event.target.value)} placeholder="Street, Building, City, Province" required /></label><div className="participant-fields wide-field"><span>Designated Personnel</span>{participants.map((participant, index) => { return <div className="participant-input" key={index}>{participant.manual ? <div className="participant-manual-fields"><label>Personnel Name<input aria-label={`Personnel ${index + 1} name`} value={participant.name} onChange={(event) => updateParticipant(index, { name: event.target.value })} required /></label><label>Personnel Position<input aria-label={`Personnel ${index + 1} position`} value={participant.position} onChange={(event) => updateParticipant(index, { position: event.target.value })} required /></label><label>Personnel Unit / Program / Project<input aria-label={`Personnel ${index + 1} Unit / Program / Project`} value={participant.unit} onChange={(event) => updateParticipant(index, { unit: event.target.value })} required /></label></div> : <NameSearchSelect aria-label={`Designated personnel ${index + 1}`} value={participant.userId} onChange={(selectedId) => { const selectedPerson = personnel.find((person) => person.userId === selectedId); updateParticipant(index, { userId: selectedId, name: selectedPerson?.name ?? "", position: selectedPerson?.position ?? "", unit: selectedPerson?.unit ?? "" }); }} required={index === 0} disabled={personnelStatus !== "ready"}><option value="" disabled>{personnelStatus === "loading" ? "Loading personnel..." : personnelStatus === "error" ? "Personnel list unavailable" : "Select a personnel"}</option>{personnel.filter((person) => person.userId === participant.userId || !selectedParticipantUserIds.has(person.userId)).map((person) => <option key={person.userId} value={person.userId}>{personnelDisplayName(person)}</option>)}</NameSearchSelect>}<label className="participant-manual-toggle"><input type="checkbox" checked={participant.manual} onChange={(event) => { const enabled = event.target.checked; updateParticipant(index, enabled ? { manual: true, userId: "" } : { manual: false, userId: "", name: "", position: "", unit: "" }); }} />Manual</label>{participants.length > 1 && <button type="button" className="remove-participant remove-action" aria-label={`Remove personnel ${index + 1}`} onClick={() => setParticipants((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}
       </div>;
     })}<button type="button" className="text-button plain-action add-item-text-button add-participant" onClick={() => setParticipants((current) => [...current, { name: "", position: "", unit: "", userId: "", manual: false }])}>+ Add personnel</button>{personnelStatus === "error" && <span className="auth-message auth-message-error" role="alert">Unable to load personnel from user accounts. Use manual input or reload the page to try again.</span>}</div>
-    <label className="wide-field">Signatory<select aria-label="Signatory" value={signatorySelection} onChange={(event) => { setSignatorySelection(event.target.value); onError(""); }} required><option value="" disabled>Select a signatory</option>{specialOrderSignatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+    <label className="wide-field">Signatory<select aria-label="Signatory" value={signatorySelection} onChange={(event) => { setSignatorySelection(event.target.value); onError(""); }} required disabled={workflowScope && workflowAccountsLoading}><option value="" disabled>{workflowScope && workflowAccountsLoading ? "Loading active signatory..." : "Select a signatory"}</option>{signatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{workflowScope && !workflowAccountsLoading && (!workflowAccounts?.head || !workflowAccounts.chief) && <small className="muted">An active Field Operations Project Leader and Field Operations Division Chief account are required to route this order.</small>}</label>
     <div className="form-actions"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save"}</button></div>
   </form></section>;
 }
 
+function sortSpecialOrdersByCreatedAt(orders: SpecialOrder[]) {
+  return [...orders].sort((left, right) => ((right.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0) - ((left.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0));
+}
+
+const hasSpecialOrderSignature = (order: Pick<SpecialOrder, "affixInitialSignature" | "affixInitialSignatureURL" | "affixChiefInitialSignature" | "affixChiefInitialSignatureURL" | "affixSignature" | "affixSignatureURL">) =>
+  order.affixInitialSignature === "Yes" || Boolean(order.affixInitialSignatureURL?.trim()) ||
+  order.affixChiefInitialSignature === "Yes" || Boolean(order.affixChiefInitialSignatureURL?.trim()) ||
+  order.affixSignature === "Yes" || Boolean(order.affixSignatureURL?.trim());
+
 function SpecialOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy, deletingId, copyingId, onNew, onEdit, onPrint, onCopy, onDelete }: { orders: SpecialOrder[]; ownerId: string; preparedByNames: Record<string, string>; fallbackPreparedBy: string; deletingId: string | null; copyingId: string | null; onNew: () => void; onEdit: (order: SpecialOrder) => void; onPrint: (order: SpecialOrder) => void; onCopy: (order: SpecialOrder) => void; onDelete: (order: SpecialOrder) => void }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(orders);
-  return <section className="content-section"><div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Special Orders</h2><p className="muted">{orders.length} {orders.length === 1 ? "order" : "orders"} available to your Unit / Program / Project.</p></div><button className="primary-button" onClick={onNew}>Add</button></div>{orders.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No special orders yet</h3><p>Create your first order to see it here.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Create a Special Order</button></div> : <div className="permit-table"><RecordPagination totalRecords={orders.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Special Order" /><div className="table-head special-order-list-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>Prepared By</span><span></span></div>{visibleRecords.map((order) => { const isOwner = order.ownerId === ownerId; return <div className="table-row special-order-list-row" key={order.id}><strong data-label="Subject">{order.subject}</strong><span data-label="Activity">{order.activityTitle}</span><span data-label="Schedule">{formatDate(order.dateFrom)}{order.dateTo !== order.dateFrom && ` - ${formatDate(order.dateTo)}`}</span><span data-label="Prepared By">{preparedByNames[order.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="permit-row-actions">{isOwner && <button type="button" className="row-action" onClick={() => onEdit(order)}>Edit</button>}<button type="button" className="row-action" onClick={() => onPrint(order)}>View</button><button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(order)}>{copyingId === order.id ? "Copying..." : "Copy"}</button>{isOwner && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(order)}>{deletingId === order.id ? "Deleting..." : "Delete"}</button>}</span></div>; })}</div>}</section>;
+  return <section className="content-section"><div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Special Orders</h2><p className="muted">{orders.length} {orders.length === 1 ? "order" : "orders"} available to your Unit / Program / Project.</p></div><button className="primary-button" onClick={onNew}>Add</button></div>{orders.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No special orders yet</h3><p>Create your first order to see it here.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Create a Special Order</button></div> : <div className="permit-table"><RecordPagination totalRecords={orders.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Special Order" /><div className="table-head special-order-list-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>Prepared By</span><span></span></div>{visibleRecords.map((order) => { const isOwner = order.ownerId === ownerId; const hasSignature = hasSpecialOrderSignature(order); return <div className="table-row special-order-list-row" key={order.id}><strong data-label="Subject">{order.subject}</strong><span data-label="Activity">{order.activityTitle}</span><span data-label="Schedule">{formatDate(order.dateFrom)}{order.dateTo !== order.dateFrom && ` - ${formatDate(order.dateTo)}`}</span><span data-label="Prepared By">{preparedByNames[order.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="permit-row-actions">{isOwner && !hasSpecialOrderSignature(order) && <button type="button" className="row-action" onClick={() => onEdit(order)}>Edit</button>}<button type="button" className="row-action" onClick={() => onPrint(order)}>View</button>{!hasSignature && <button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(order)}>{copyingId === order.id ? "Copying..." : "Copy"}</button>}{isOwner && !hasSignature && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(order)}>{deletingId === order.id ? "Deleting..." : "Delete"}</button>}</span></div>; })}</div>}</section>;
 }
 
 type EditableSpecialOrderParticipant = { name: string; position: string; unit: string; userId: string; manual: boolean };
@@ -1613,6 +1805,11 @@ function SpecialOrderPreview({ order, onClose }: { order: SpecialOrder; onClose:
   const [closingPageSettings, setClosingPageSettings] = useState<{ capacity: number; saturated: boolean }[]>([]);
   const [signatoryPulledBack, setSignatoryPulledBack] = useState(false);
   const [closingSpacingTightened, setClosingSpacingTightened] = useState(false);
+  const [layoutPageWidth, setLayoutPageWidth] = useState(0);
+  const [layoutMeasurementVersion, setLayoutMeasurementVersion] = useState(0);
+  const showInitialSignature = order.affixInitialSignature !== "No" && Boolean(order.affixInitialSignatureURL);
+  const showChiefInitialSignature = order.affixChiefInitialSignature !== "No" && Boolean(order.affixChiefInitialSignatureURL);
+  const showFinalSignature = order.affixSignature !== "No" && Boolean(order.affixSignatureURL);
 
   useEffect(() => {
     let cancelled = false;
@@ -1639,7 +1836,58 @@ function SpecialOrderPreview({ order, onClose }: { order: SpecialOrder; onClose:
     setClosingPageSettings([]);
     setSignatoryPulledBack(false);
     setClosingSpacingTightened(false);
-  }, [order.id]);
+  }, [order.id, order.activityTitle, order.dateFrom, order.dateTo, order.organizer, order.participants, order.participantPositions, order.participantUnits, order.participantOffices, order.participantUserIds, order.signatoryDesignation, order.signatoryName, order.subject, order.timeFrom, order.timeTo, order.venue, order.affixInitialSignature, order.affixInitialSignatureURL, order.affixInitialSignatureName, order.affixInitialSignatureAt, order.affixChiefInitialSignature, order.affixChiefInitialSignatureURL, order.affixChiefInitialSignatureName, order.affixChiefInitialSignatureAt, order.affixSignature, order.affixSignatureURL, order.affixSignatureName, order.affixSignatureAt]);
+
+  useEffect(() => {
+    const pages = pagesRef.current;
+    const firstPage = pages?.querySelector<HTMLElement>(".special-order-paper");
+    if (!pages || !firstPage) return;
+
+    let active = true;
+    let lastWidth = 0;
+    const measureWidth = (width: number) => {
+      if (!active || !Number.isFinite(width) || width <= 0) return;
+      const roundedWidth = Math.round(width * 100) / 100;
+      if (lastWidth && Math.abs(roundedWidth - lastWidth) > 0.5) {
+        setFirstPageCount(order.participants.length);
+        setFirstPageSaturated(false);
+        setContinuationSettings([]);
+        setClosingUnitsOnLastAttendeePage(7);
+        setClosingPageSettings([]);
+        setSignatoryPulledBack(false);
+        setClosingSpacingTightened(false);
+      }
+      lastWidth = roundedWidth;
+      setLayoutPageWidth((current) => current === roundedWidth ? current : roundedWidth);
+    };
+    const requestRemeasure = () => {
+      if (!active) return;
+      setFirstPageCount(order.participants.length);
+      setFirstPageSaturated(false);
+      setContinuationSettings([]);
+      setClosingUnitsOnLastAttendeePage(7);
+      setClosingPageSettings([]);
+      setSignatoryPulledBack(false);
+      setClosingSpacingTightened(false);
+      setLayoutMeasurementVersion((current) => current + 1);
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => {
+      const pageEntry = entries.find((entry) => entry.target === firstPage);
+      if (pageEntry) measureWidth(pageEntry.contentRect.width);
+    });
+    observer?.observe(firstPage);
+    measureWidth(firstPage.getBoundingClientRect().width);
+
+    const images = Array.from(pages.querySelectorAll("img"));
+    images.forEach((image) => image.addEventListener("load", requestRemeasure));
+    void document.fonts?.ready.then(requestRemeasure);
+
+    return () => {
+      active = false;
+      observer?.disconnect();
+      images.forEach((image) => image.removeEventListener("load", requestRemeasure));
+    };
+  }, [order.id, order.participants.length, order.affixInitialSignatureURL, order.affixInitialSignatureName, order.affixInitialSignatureAt, order.affixChiefInitialSignatureURL, order.affixChiefInitialSignatureName, order.affixChiefInitialSignatureAt, order.affixSignatureURL, order.affixSignatureName, order.affixSignatureAt]);
 
   const continuationPages: string[][] = [];
   const remainingParticipants = order.participants.slice(firstPageCount);
@@ -1658,7 +1906,7 @@ function SpecialOrderPreview({ order, onClose }: { order: SpecialOrder; onClose:
     <ul className="special-order-obligation-list special-order-closing-unit" data-special-order-closing-unit key="report"><li>Submit a brief written report and/or feedback within ____ days after the activity.</li></ul>,
     <p className="special-order-expenses special-order-closing-unit" data-special-order-closing-unit key="expenses">Travel and other incidental expenses, if any, shall be charged against available funds subject to existing accounting and auditing rules and regulations.</p>,
     <p className="special-order-done special-order-closing-unit" data-special-order-closing-unit key="done">Done this ____ day of ____________, {new Date().getFullYear()}</p>,
-    <footer className="special-order-signatory special-order-closing-unit" data-special-order-closing-unit key="signatory"><strong>{order.signatoryName || specialOrderSignatories[0].name}</strong><span><SpecialOrderSignatoryPosition designation={specialOrderSignatoryDesignation(order.signatoryName || specialOrderSignatories[0].name, order.signatoryDesignation || specialOrderSignatories[0].designation)} /></span></footer>,
+    <footer className="special-order-signatory special-order-closing-unit" data-special-order-closing-unit key="signatory">{(showInitialSignature || showChiefInitialSignature || showFinalSignature) && <div className="special-order-signature-affixes">{showInitialSignature && <div className="special-order-signature-affix special-order-signature-affix-initial"><img src={order.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${order.affixInitialSignatureName || "Project Leader"}`} /><div className="special-order-signature-details"><strong>Digitally Initialized: {(order.affixInitialSignatureName || "PROJECT LEADER").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(order.affixInitialSignatureAt) || "\u2014"}</small><small>Time: {signatureTime(order.affixInitialSignatureAt) || "\u2014"}</small></div></div>}{showChiefInitialSignature && <div className="special-order-signature-affix special-order-signature-affix-initial"><img src={order.affixChiefInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${order.affixChiefInitialSignatureName || "Field Operations Chief"}`} /><div className="special-order-signature-details"><strong>Digitally Initialized: {(order.affixChiefInitialSignatureName || "FIELD OPERATIONS CHIEF").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(order.affixChiefInitialSignatureAt) || "\u2014"}</small><small>Time: {signatureTime(order.affixChiefInitialSignatureAt) || "\u2014"}</small></div></div>}{showFinalSignature && <div className="special-order-signature-affix"><img src={order.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${order.affixSignatureName || order.signatoryName || "signatory"}`} /><div className="special-order-signature-details"><strong>Digitally Signed: {(order.affixSignatureName || order.signatoryName || "CHIEF").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(order.affixSignatureAt) || "\u2014"}</small><small>Time: {signatureTime(order.affixSignatureAt) || "\u2014"}</small></div></div>}</div>}<strong>{order.signatoryName || specialOrderSignatories[0].name}</strong><span><SpecialOrderSignatoryPosition designation={specialOrderSignatoryDesignation(order.signatoryName || specialOrderSignatories[0].name, order.signatoryDesignation || specialOrderSignatories[0].designation)} /></span></footer>,
   ];
   const closingContinuationPages: (typeof closingUnits)[] = [];
   const remainingClosingUnits = closingUnits.slice(closingUnitsOnLastAttendeePage);
@@ -1680,7 +1928,7 @@ function SpecialOrderPreview({ order, onClose }: { order: SpecialOrder; onClose:
     }
   }
   const renderClosingUnits = (units: typeof closingUnits) => units.length > 0
-    ? <div className={`special-order-closing${closingSpacingTightened ? " special-order-closing-tight" : ""}${signatoryPulledBack && units.includes(closingUnits[closingUnits.length - 1]) ? " special-order-closing-pulled" : ""}`}>{units}</div>
+    ? <div className={`special-order-closing${closingSpacingTightened ? " special-order-closing-tight" : ""}${signatoryPulledBack && units.includes(closingUnits[closingUnits.length - 1]) ? " special-order-closing-pulled" : ""}${showInitialSignature || showChiefInitialSignature || showFinalSignature ? " special-order-closing-with-affixes" : ""}`}>{units}</div>
     : null;
 
   useLayoutEffect(() => {
@@ -1793,7 +2041,7 @@ function SpecialOrderPreview({ order, onClose }: { order: SpecialOrder; onClose:
         return;
       }
     }
-  }, [closingContinuationPages.length, closingPageSettings, closingSpacingTightened, closingUnitsOnLastAttendeePage, continuationPages.length, continuationSettings, firstPageCount, firstPageSaturated, order.participants, personnel, signatoryPulledBack]);
+  }, [closingContinuationPages.length, closingPageSettings, closingSpacingTightened, closingUnitsOnLastAttendeePage, continuationPages.length, continuationSettings, firstPageCount, firstPageSaturated, layoutMeasurementVersion, layoutPageWidth, order.activityTitle, order.dateFrom, order.dateTo, order.id, order.organizer, order.participants, order.participantPositions, order.participantUnits, order.participantOffices, order.participantUserIds, order.signatoryDesignation, order.signatoryName, order.subject, order.timeFrom, order.timeTo, order.venue, order.affixInitialSignature, order.affixInitialSignatureURL, order.affixInitialSignatureName, order.affixInitialSignatureAt, order.affixChiefInitialSignature, order.affixChiefInitialSignatureURL, order.affixChiefInitialSignatureName, order.affixChiefInitialSignatureAt, order.affixSignature, order.affixSignatureURL, order.affixSignatureName, order.affixSignatureAt, personnel, signatoryPulledBack]);
 
   async function downloadPdf() {
     if (!pagesRef.current) return;
@@ -1908,13 +2156,14 @@ export default function Home() {
   const [focusedPermitNotificationKey, setFocusedPermitNotificationKey] = useState<string | null>(null);
   const [notificationFocus, setNotificationFocus] = useState<NotificationFocus | null>(null);
   const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
+  const liveSpecialOrderOwnerOrders = useRef<{ userId: string; orders: SpecialOrder[] } | null>(null);
   const [specialOrderPreparedByNames, setSpecialOrderPreparedByNames] = useState<Record<string, string>>({});
   const [editingSpecialOrder, setEditingSpecialOrder] = useState<SpecialOrder | null>(null);
   const [deletingSpecialOrderId, setDeletingSpecialOrderId] = useState<string | null>(null);
   const [copyingSpecialOrderId, setCopyingSpecialOrderId] = useState<string | null>(null);
   const [pendingSpecialOrderDelete, setPendingSpecialOrderDelete] = useState<SpecialOrder | null>(null);
   const [view, setView] = useState<"list" | "new">("list");
-  const [section, setSection] = useState<"permits" | "messenger" | "special-orders" | "nta" | "travel-orders" | "calendar-of-activities" | "calendar-of-activities-records" | "whereabouts-calendar" | "permit-statistics" | "permit-status" | "certificate-approval" | "users-profile" | "users-nta" | "users-so" | "users-to" | "users-appearances" | "user-master-list" | "document-notifications" | "pending-permit-slips" | "cleaning-task" | "cleaning-task-assignments" | "my-drive" | "myar" | "my-notes" | "my-tevs" | "leave-application" | "certificate-of-appearance" | "completion" | "appreciation" | "participation" | "findDocs">("whereabouts-calendar");
+  const [section, setSection] = useState<"permits" | "messenger" | "special-orders" | "so-approval" | "nta-approval" | "nta" | "travel-orders" | "calendar-of-activities" | "calendar-of-activities-records" | "whereabouts-calendar" | "permit-statistics" | "permit-status" | "certificate-approval" | "users-profile" | "users-nta" | "users-so" | "users-to" | "users-appearances" | "user-master-list" | "document-notifications" | "pending-permit-slips" | "cleaning-task" | "cleaning-task-assignments" | "my-drive" | "myar" | "my-notes" | "my-tevs" | "leave-application" | "certificate-of-appearance" | "completion" | "appreciation" | "participation" | "findDocs">("whereabouts-calendar");
   const [myDocsMenuOpen, setMyDocsMenuOpen] = useState(false);
   const [certificateMenuOpen, setCertificateMenuOpen] = useState(false);
   const [adminPanelMenuOpen, setAdminPanelMenuOpen] = useState(false);
@@ -1940,6 +2189,8 @@ export default function Home() {
   const [resetEmailBusy, setResetEmailBusy] = useState(false);
   const [profileFirstName, setProfileFirstName] = useState("");
   const [profilePhotoURL, setProfilePhotoURL] = useState("");
+  const [profileFullSignatureURL, setProfileFullSignatureURL] = useState("");
+  const [profileInitialSignatureURL, setProfileInitialSignatureURL] = useState("");
   const [profileRevision, setProfileRevision] = useState(0);
   const [profileMiddleName, setProfileMiddleName] = useState("");
   const [profileLastName, setProfileLastName] = useState("");
@@ -2087,6 +2338,8 @@ export default function Home() {
     setProfileLoading(true);
     setProfileMessage(null);
     setProfilePhotoURL("");
+    setProfileFullSignatureURL("");
+    setProfileInitialSignatureURL("");
     applyProfileName(user.displayName ?? "");
     setProfileGender("");
     setProfilePosition("");
@@ -2102,6 +2355,8 @@ export default function Home() {
       if (profileSnapshot.exists()) {
         const profile = profileSnapshot.data();
         if (typeof profile.photoURL === "string") setProfilePhotoURL(profile.photoURL);
+        if (typeof profile.fullSignatureURL === "string") setProfileFullSignatureURL(profile.fullSignatureURL);
+        if (typeof profile.initialSignatureURL === "string") setProfileInitialSignatureURL(profile.initialSignatureURL);
         if (typeof profile.firstName === "string" && typeof profile.lastName === "string") {
           setProfileFirstName(profile.firstName);
           setProfileMiddleName(typeof profile.middleName === "string" ? profile.middleName : "");
@@ -2724,13 +2979,36 @@ export default function Home() {
       }));
       if (cancelled) return;
       setSpecialOrderPreparedByNames(Object.fromEntries(profiles));
-      setSpecialOrders(orders);
+      const liveOwnerOrders = liveSpecialOrderOwnerOrders.current?.userId === user.uid
+        ? liveSpecialOrderOwnerOrders.current.orders
+        : orders.filter((order) => order.ownerId === user.uid);
+      const sharedOrders = orders.filter((order) => order.ownerId !== user.uid);
+      setSpecialOrders(sortSpecialOrdersByCreatedAt([...sharedOrders, ...liveOwnerOrders]));
     }).catch((error) => {
       const code = (error as { code?: string }).code;
       if (!cancelled) setError(code ? `Could not load special orders (${code}).` : "Could not load special orders. Refresh and try again.");
     });
     return () => { cancelled = true; };
   }, [user, accountProfile]);
+
+  useEffect(() => {
+    if (!user || !db) return;
+    const firestore = db;
+    liveSpecialOrderOwnerOrders.current = null;
+    const ownerOrdersQuery = query(collection(firestore, "specialOrders"), where("ownerId", "==", user.uid));
+    return onSnapshot(ownerOrdersQuery, { includeMetadataChanges: true }, (snapshot) => {
+      if (snapshot.metadata.fromCache) return;
+      const ownerOrders = snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as SpecialOrder));
+      liveSpecialOrderOwnerOrders.current = { userId: user.uid, orders: ownerOrders };
+      setSpecialOrders((current) => sortSpecialOrdersByCreatedAt([
+        ...current.filter((order) => order.ownerId !== user.uid),
+        ...ownerOrders,
+      ]));
+    }, (cause) => {
+      const code = (cause as { code?: string }).code;
+      setError(code ? "Could not refresh special orders (" + code + ")." : "Could not refresh special orders.");
+    });
+  }, [user]);
 
   async function deletePermit(permit: Permit) {
     if (!db || !user) return;
@@ -2876,6 +3154,16 @@ export default function Home() {
     }
   }
 
+  const previewOrderId = specialOrderPreview?.id;
+  useEffect(() => {
+    if (!db || !previewOrderId) return;
+    return onSnapshot(doc(db, "specialOrders", previewOrderId), (snapshot) => {
+      if (!snapshot.exists()) return;
+      const updatedOrder = { ...snapshot.data(), id: snapshot.id } as SpecialOrder;
+      setSpecialOrderPreview((current) => current?.id === snapshot.id ? updatedOrder : current);
+    });
+  }, [previewOrderId]);
+
   const clearNotificationFocus = useCallback(() => setNotificationFocus(null), []);
 
   function openFindDocsRecord(record: FindDocsRecord) {
@@ -2901,11 +3189,12 @@ export default function Home() {
       kind: "document",
       id: notification.documentId,
       documentType: notification.documentType,
+      approvalStep: notification.approvalStep,
       certificateCollection: notification.certificateCollection,
     });
     switch (notification.documentType) {
-      case "Special Order": setSection("special-orders"); break;
-      case "Notice to Attend": setSection("nta"); break;
+      case "Special Order": setSection(notification.approvalStep ? "so-approval" : "special-orders"); break;
+      case "Notice to Attend": setSection(notification.approvalStep ? "nta-approval" : "nta"); break;
       case "Permit Slip": setSection("permits"); break;
       case "Travel Order": setSection("travel-orders"); break;
       case "Leave Application": setSection("leave-application"); break;
@@ -3003,6 +3292,22 @@ export default function Home() {
   const accountRole = normalizeAccountRole(activeAccountProfile?.accountRole, user.email);
   const certificateOwnerScope = accountProfileSelection({ ...(activeAccountProfile ?? {}), profileFieldsVersion: 4 });
   const isAdmin = isPermitAdmin(user.email, accountRole);
+  const specialOrderApprovalStage = accountRole === "admin"
+    && activeAccountProfile?.office === "Division"
+    && activeAccountProfile?.division === "Field Operations Division"
+    && activeAccountProfile?.unit === "Field Operations Division"
+    ? activeAccountProfile.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "initial"
+      : activeAccountProfile.designation === "Chief" ? "chief" : null
+    : null;
+  const ntaApprovalStage = accountRole === "admin"
+    && activeAccountProfile?.office === "Division"
+    && activeAccountProfile?.division === "Field Operations Division"
+    && activeAccountProfile?.unit === "Field Operations Division"
+    ? activeAccountProfile.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "initial"
+      : activeAccountProfile.designation === "Chief" ? "chief" : null
+    : null;
+  const canAccessSpecialOrderApproval = specialOrderApprovalStage !== null;
+  const canAccessNtaApproval = ntaApprovalStage !== null;
   const canAccessCertificateApproval = isSuperAdmin || (accountRole === "admin" && (activeAccountProfile?.designation === "Chief" || isFieldOperationsAppearanceApprover(activeAccountProfile ?? {})));
   const accountUnit = activeAccountProfile?.unit || activeAccountProfile?.assignment || null;
   const canAccessCleaningTask = canAccessCleaningTaskNavigation(accountRole, accountUnit ?? "", activeAccountProfile?.designation ?? "");
@@ -3037,11 +3342,12 @@ export default function Home() {
       <div className="nav-dropdown certificate-nav-dropdown" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCertificateMenuOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") setCertificateMenuOpen(false); }}><button type="button" className={section === "certificate-of-appearance" || section === "completion" || section === "appreciation" || section === "participation" ? "nav-button certificate-nav-button active" : "nav-button certificate-nav-button"} aria-haspopup="true" aria-expanded={certificateMenuOpen} aria-controls="certificate-menu" onClick={() => setCertificateMenuOpen((open) => !open)}>Certificate <span className="nav-dropdown-arrow" aria-hidden="true">&#9662;</span></button>{certificateMenuOpen && <div className="nav-dropdown-menu certificate-nav-menu" id="certificate-menu"><button type="button" className={section === "certificate-of-appearance" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("certificate-of-appearance"); setView("list"); setCertificateMenuOpen(false); }}>Appearance</button><button type="button" className={section === "completion" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("completion"); setView("list"); setCertificateMenuOpen(false); }}>Completion</button><button type="button" className={section === "appreciation" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("appreciation"); setView("list"); setCertificateMenuOpen(false); }}>Appreciation</button><button type="button" className={section === "participation" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("participation"); setView("list"); setCertificateMenuOpen(false); }}>Participation</button></div>}</div>
       {canAccessCleaningTask && <button type="button" className={section === "cleaning-task" ? "nav-button active" : "nav-button"} onClick={() => { setSection("cleaning-task"); setView("list"); }}>Cleaning Task</button>}<button type="button" className={section === "my-drive" ? "nav-button active" : "nav-button"} onClick={() => { setSection("my-drive"); setView("list"); }}>myDrive</button><button type="button" className={section === "findDocs" ? "nav-button active" : "nav-button"} onClick={() => { setSection("findDocs"); setView("list"); }}>findDocs</button>
       {isAdmin && <div className="nav-dropdown admin-panel-nav-dropdown" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAdminPanelMenuOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") setAdminPanelMenuOpen(false); }}>
-        <button type="button" className={section === "permit-status" || section === "permit-statistics" || section === "calendar-of-activities-records" || section === "certificate-approval" || section === "cleaning-task-assignments" || section === "user-master-list" ? "nav-button active" : "nav-button"} aria-haspopup="true" aria-expanded={adminPanelMenuOpen} aria-controls="admin-panel-menu" onClick={() => setAdminPanelMenuOpen((open) => !open)}>Admin Panel <span className="nav-dropdown-arrow" aria-hidden="true">&#9662;</span></button>
+        <button type="button" className={section === "permit-status" || section === "permit-statistics" || section === "calendar-of-activities-records" || section === "certificate-approval" || section === "so-approval" || section === "nta-approval" || section === "cleaning-task-assignments" || section === "user-master-list" ? "nav-button active" : "nav-button"} aria-haspopup="true" aria-expanded={adminPanelMenuOpen} aria-controls="admin-panel-menu" onClick={() => setAdminPanelMenuOpen((open) => !open)}>Admin Panel <span className="nav-dropdown-arrow" aria-hidden="true">&#9662;</span></button>
         {adminPanelMenuOpen && <div className="nav-dropdown-menu admin-panel-nav-menu" id="admin-panel-menu">
           <button type="button" className={section === "permit-status" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("permit-status"); setView("list"); setAdminPanelMenuOpen(false); }}>Permit Slip Status</button>
           <button type="button" className={section === "permit-statistics" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("permit-statistics"); setView("list"); setAdminPanelMenuOpen(false); }}>Permit Slip Statistics</button>
           <button type="button" className={section === "calendar-of-activities-records" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("calendar-of-activities-records"); setView("list"); setAdminPanelMenuOpen(false); }}>Calendar of Activities Records</button>
+          {canAccessSpecialOrderApproval && <button type="button" className={section === "so-approval" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("so-approval"); setView("list"); setAdminPanelMenuOpen(false); }}>SO Approval</button>}{isAdmin && <button type="button" className={section === "nta-approval" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("nta-approval"); setView("list"); setAdminPanelMenuOpen(false); }}>NTA Approval</button>}
           {canAccessCertificateApproval && <button type="button" className={section === "certificate-approval" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("certificate-approval"); setView("list"); setAdminPanelMenuOpen(false); }}>Certificate Approval</button>}
           {isSuperAdmin && <button type="button" className={section === "cleaning-task-assignments" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("cleaning-task-assignments"); setView("list"); setAdminPanelMenuOpen(false); }}>Cleaning Task Assignment</button>}
           {isSuperAdmin && <button type="button" className={section === "user-master-list" ? "nav-dropdown-item active" : "nav-dropdown-item"} onClick={() => { setSection("user-master-list"); setView("list"); setAdminPanelMenuOpen(false); }}>User Approval</button>}
@@ -3056,11 +3362,15 @@ export default function Home() {
 <button type="button" className="mobile-nav-link" aria-expanded={mobileCertificateOpen} aria-controls="mobile-certificate-menu" onClick={() => setMobileCertificateOpen((open) => !open)}><span>Certificate</span><span className={mobileCertificateOpen ? "mobile-nav-chevron is-open" : "mobile-nav-chevron"} aria-hidden="true" /></button>
  {mobileCertificateOpen && <div className="mobile-nav-submenu" id="mobile-certificate-menu"><button type="button" onClick={() => { setSection("certificate-of-appearance"); setView("list"); closeMobileNavigation(); }}>Appearance</button><button type="button" onClick={() => { setSection("completion"); setView("list"); closeMobileNavigation(); }}>Completion</button><button type="button" onClick={() => { setSection("appreciation"); setView("list"); closeMobileNavigation(); }}>Appreciation</button><button type="button" onClick={() => { setSection("participation"); setView("list"); closeMobileNavigation(); }}>Participation</button></div>}
  {canAccessCleaningTask && <button type="button" className={`mobile-nav-link${section === "cleaning-task" ? " active" : ""}`} onClick={() => { setSection("cleaning-task"); setView("list"); closeMobileNavigation(); }}>Cleaning Task</button>}<button type="button" className={`mobile-nav-link${section === "my-drive" ? " active" : ""}`} onClick={() => { setSection("my-drive"); setView("list"); closeMobileNavigation(); }}>myDrive</button><button type="button" className={`mobile-nav-link${section === "findDocs" ? " active" : ""}`} onClick={() => { setSection("findDocs"); setView("list"); closeMobileNavigation(); }}>findDocs</button>
- {isAdmin && <><button type="button" className="mobile-nav-link" aria-expanded={mobileAdminPanelOpen} aria-controls="mobile-admin-panel-menu" onClick={() => setMobileAdminPanelOpen((open) => !open)}><span>Admin Panel</span><span className={mobileAdminPanelOpen ? "mobile-nav-chevron is-open" : "mobile-nav-chevron"} aria-hidden="true" /></button>{mobileAdminPanelOpen && <div className="mobile-nav-submenu" id="mobile-admin-panel-menu"><button type="button" onClick={() => { setSection("permit-status"); setView("list"); closeMobileNavigation(); }}>Permit Slip Status</button><button type="button" onClick={() => { setSection("permit-statistics"); setView("list"); closeMobileNavigation(); }}>Permit Slip Statistics</button><button type="button" onClick={() => { setSection("calendar-of-activities-records"); setView("list"); closeMobileNavigation(); }}>Calendar of Activities Records</button>{canAccessCertificateApproval && <button type="button" onClick={() => { setSection("certificate-approval"); setView("list"); closeMobileNavigation(); }}>Certificate Approval</button>}{isSuperAdmin && <button type="button" onClick={() => { setSection("cleaning-task-assignments"); setView("list"); closeMobileNavigation(); }}>Cleaning Task Assignment</button>}{isSuperAdmin && <button type="button" onClick={() => { setSection("user-master-list"); setView("list"); closeMobileNavigation(); }}>User Approval</button>}</div>}</>}
+ {isAdmin && <><button type="button" className="mobile-nav-link" aria-expanded={mobileAdminPanelOpen} aria-controls="mobile-admin-panel-menu" onClick={() => setMobileAdminPanelOpen((open) => !open)}><span>Admin Panel</span><span className={mobileAdminPanelOpen ? "mobile-nav-chevron is-open" : "mobile-nav-chevron"} aria-hidden="true" /></button>{mobileAdminPanelOpen && <div className="mobile-nav-submenu" id="mobile-admin-panel-menu"><button type="button" onClick={() => { setSection("permit-status"); setView("list"); closeMobileNavigation(); }}>Permit Slip Status</button><button type="button" onClick={() => { setSection("permit-statistics"); setView("list"); closeMobileNavigation(); }}>Permit Slip Statistics</button><button type="button" onClick={() => { setSection("calendar-of-activities-records"); setView("list"); closeMobileNavigation(); }}>Calendar of Activities Records</button>{canAccessSpecialOrderApproval && <button type="button" onClick={() => { setSection("so-approval"); setView("list"); closeMobileNavigation(); }}>SO Approval</button>}{isAdmin && <button type="button" onClick={() => { setSection("nta-approval"); setView("list"); closeMobileNavigation(); }}>NTA Approval</button>}{canAccessCertificateApproval && <button type="button" onClick={() => { setSection("certificate-approval"); setView("list"); closeMobileNavigation(); }}>Certificate Approval</button>}{isSuperAdmin && <button type="button" onClick={() => { setSection("cleaning-task-assignments"); setView("list"); closeMobileNavigation(); }}>Cleaning Task Assignment</button>}{isSuperAdmin && <button type="button" onClick={() => { setSection("user-master-list"); setView("list"); closeMobileNavigation(); }}>User Approval</button>}</div>}</>}
 {canAccessAmiaDocumentTracking && <><button type="button" className="mobile-nav-link" aria-expanded={mobileAmiaDocumentOpen} aria-controls="mobile-amia-document-menu" onClick={() => setMobileAmiaDocumentOpen((open) => !open)}><span>AMIA Document Tracking</span><span className={mobileAmiaDocumentOpen ? "mobile-nav-chevron is-open" : "mobile-nav-chevron"} aria-hidden="true" /></button>
 {mobileAmiaDocumentOpen && <div className="mobile-nav-submenu mobile-amia-document-submenu" id="mobile-amia-document-menu">{amiaDocumentTrackingLinks.map((link) => <a className="mobile-nav-submenu-link" href={link.href} key={link.label} target="_blank" rel="noopener noreferrer" onClick={closeMobileNavigation}>{link.label}</a>)}</div>}</>}
 </> }</div><button type="button" className="mobile-sign-out" onClick={() => { closeMobileNavigation(); if (auth) void signOut(auth); }}>Sign Out</button></nav></>}{profileOpen && <div className="profile-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeProfile(); }} onKeyDown={(event) => { if (event.key === "Escape") closeProfile(); }}><section className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-title"><header className="profile-dialog-header"><div><p className="eyebrow">Account</p><h2 id="profile-title">Profile</h2></div><button type="button" className="ghost-button" onClick={closeProfile}>Close</button></header><form className="profile-form" onSubmit={saveChanges} aria-busy={profileLoading || profileSaving}>
-  <ProfilePhotoUpload user={user} photoURL={profilePhotoURL} disabled={profileLoading || profileSaving} onUploaded={setProfilePhotoURL} />
+  <div className="profile-media-row">
+    <ProfilePhotoUpload user={user} photoURL={profilePhotoURL} disabled={profileLoading || profileSaving} onUploaded={setProfilePhotoURL} />
+    <ProfileSignatureUpload user={user} label="Full Signature" fieldName="fullSignatureURL" signatureURL={profileFullSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileFullSignatureURL} />
+    <ProfileSignatureUpload user={user} label="Initial Signature" fieldName="initialSignatureURL" signatureURL={profileInitialSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileInitialSignatureURL} />
+  </div>
   <label>First Name<input autoComplete="given-name" maxLength={60} value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
   <label>Middle Name<input autoComplete="additional-name" maxLength={60} value={profileMiddleName} onChange={(event) => setProfileMiddleName(event.target.value)} disabled={profileLoading || profileSaving} /></label>
   <label>Last Name<input autoComplete="family-name" maxLength={60} value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
@@ -3081,5 +3391,5 @@ export default function Home() {
   </div>
   <div className="profile-password-actions"><button type="button" className="ghost-button" disabled={profileSaving || resetEmailBusy} onClick={() => void sendResetLink()}>{resetEmailBusy ? "Sending..." : "Reset Password"}</button><button className="primary-button" disabled={profileLoading || profileSaving || resetEmailBusy}>{profileLoading ? "Loading..." : profileSaving ? "Saving..." : "Save Changes"}</button></div>
   {profileMessage && <p className={`auth-message auth-message-${profileMessage.kind}`} role={profileMessage.kind === "error" ? "alert" : "status"}>{profileMessage.text}</p>}
-  </form></section></div>}<main className="dashboard"><div className={`dashboard-header${section === "messenger" ? " hide-on-mobile" : ""}`}><div className="dashboard-header-content"><p className="eyebrow">{philippineDateTime && <>{philippineDateTime.split(" | ")[0]} | <span className="dashboard-time">{philippineDateTime.split(" | ")[1]}</span></>}</p><h1>{biometricsGreeting === "Masaganang Buntag" ? <>Masaganang Buntag{firstName ? <> <span className="dashboard-greeting-name">{firstName}</span>!</> : "!"}</> : <>{biometricsGreeting ?? "Masaganang Agrikultura"}{firstName ? <>, <span className="dashboard-greeting-name">{firstName}!</span></> : "!"}</>}</h1></div><div className="status-pill"><span /> Secure session</div></div>{error && <div className="error-message">{error}</div>}{isSuperAdmin ? (section === "users-profile" ? <SuperAdminRecordManager kind="users-profile" user={user} /> : section === "users-nta" ? <SuperAdminRecordManager kind="users-nta" user={user} /> : section === "users-so" ? <SuperAdminRecordManager kind="users-so" user={user} /> : section === "users-to" ? <SuperAdminRecordManager kind="users-to" user={user} /> : section === "users-appearances" ? <SuperAdminRecordManager kind="users-appearances" user={user} /> : section === "document-notifications" ? <DocumentNotificationAdmin /> : section === "pending-permit-slips" ? <PendingPermitSlipAdmin /> : <UserMasterList user={user} />) : !isAdmin && (section === "permit-status" || section === "permit-statistics" || section === "calendar-of-activities-records" || section === "certificate-approval" || section === "user-master-list") ? <WhereaboutsCalendarModule user={user} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} /> : section === "findDocs" ? <FindDocsModule user={user} unit={accountUnit} onOpenRecord={openFindDocsRecord} /> : section === "user-master-list" ? (isSuperAdmin ? <UserMasterList user={user} /> : null) : section === "certificate-approval" ? <CertificateApproval user={user} role={accountRole} office={activeAccountProfile?.office} division={activeAccountProfile?.division} unit={activeAccountProfile?.unit} assignment={activeAccountProfile?.assignment} designation={activeAccountProfile?.designation} accountName={activeAccountProfile?.name} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Approval" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "appreciation" ? <AppreciationCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "appreciationCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "completion" ? <CompletionCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "completionCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "participation" ? <ParticipationCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "participationCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "certificate-of-appearance" ? <CertificateOfAppearance user={user} ownerOffice={certificateOwnerScope.office} ownerDivision={certificateOwnerScope.division} ownerUnit={certificateOwnerScope.unit} role={accountRole} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "certificatesOfAppearance" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "leave-application" ? <LeaveApplicationModule user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Leave Application" ? notificationFocus.id : notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "leave-application-status" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "myar" ? <AccomplishmentReportModule user={user} focusMonth={notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "accomplishment-report" ? notificationFocus.month : undefined} focusCycle={notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "accomplishment-report" ? notificationFocus.cycle : undefined} onFocusHandled={clearNotificationFocus} /> : section === "my-notes" ? <MyNotesModule user={user} /> : section === "my-tevs" ? <MyTevModule user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Travel Expense Voucher" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "nta" ? <NtaModule user={user} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={accountUnit} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Notice to Attend" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "travel-orders" ? <TravelOrderModule user={user} office={activeAccountProfile?.office ?? ""} unit={accountUnit} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Travel Order" ? notificationFocus.id : notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "travel-order-status" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "calendar-of-activities" ? <CalendarOfActivitiesModule user={user} profileRevision={profileRevision} focusCalendarId={notificationFocus?.kind === "calendar" && notificationFocus.mode === "prepared" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "calendar-of-activities-records" ? <CalendarOfActivitiesModule user={user} mode="approved-records" focusCalendarId={notificationFocus?.kind === "calendar" && notificationFocus.mode === "approved-records" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "messenger" ? <MessengerModule user={user} profileOffice={activeAccountProfile?.office} profileAssignment={accountUnit} /> : section === "whereabouts-calendar" ? <><WhereaboutsCalendarModule user={user} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} />{canViewCleaningTask && <CleaningTaskModule user={user} role={accountRole} unit={accountUnit ?? ""} name={activeAccountProfile?.name ?? fullName} mode="landing" />}</> : section === "cleaning-task" ? (canAccessCleaningTask ? <CleaningTaskModule user={user} role={accountRole} unit={accountUnit ?? ""} name={activeAccountProfile?.name ?? fullName} canUpload mode="workspace" /> : null) : section === "my-drive" ? <MyDriveModule user={user} /> : section === "cleaning-task-assignments" ? (isSuperAdmin ? <CleaningTaskAssignmentAdmin user={user} /> : null) : section === "permit-statistics" ? <PermitSlipAdmin user={user} mode="statistics" canManagePermits={isAdmin} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={activeAccountProfile?.unit ?? ""} designation={activeAccountProfile?.designation ?? ""} /> : section === "permit-status" ? <PermitSlipAdmin user={user} mode="status" focusNotificationKey={focusedPermitNotificationKey} canManagePermits={isAdmin} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={activeAccountProfile?.unit ?? ""} designation={activeAccountProfile?.designation ?? ""} /> : section === "permits" ? (view === "new" ? <PermitForm user={user} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} onSaved={(permit) => { setPermits([permit, ...permits]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : <PermitList permits={permits} approvedPermitNumbers={approvedPermitNumbers} ownerId={user.uid} preparedByNames={permitPreparedByNames} fallbackPreparedBy={activeAccountProfile?.name || user.displayName || ""} deletingId={deletingPermitId} onNew={() => { setError(""); setView("new"); }} onPrint={(permit) => { setSingleSlipPreview(false); setPreview(permit); }} onDelete={setPendingPermitDelete} />) : editingSpecialOrder ? <SpecialOrderParticipantEditor order={editingSpecialOrder} userId={user.uid} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} onCancel={() => setEditingSpecialOrder(null)} onSaved={(updatedOrder) => { setSpecialOrders((current) => current.map((order) => order.id === updatedOrder.id ? updatedOrder : order)); setEditingSpecialOrder(null); }} /> : (view === "new" ? <SpecialOrderForm user={user} ownerOffice={activeAccountProfile?.office ?? ""} ownerDivision={activeAccountProfile?.division ?? ""} ownerUnit={accountUnit} onSaved={(order) => { setSpecialOrders([order, ...specialOrders]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : <SpecialOrderList orders={specialOrders} ownerId={user.uid} preparedByNames={specialOrderPreparedByNames} fallbackPreparedBy={activeAccountProfile?.name || user.displayName || ""} deletingId={deletingSpecialOrderId} onNew={() => { setError(""); setView("new"); }} onEdit={setEditingSpecialOrder} onPrint={setSpecialOrderPreview} copyingId={copyingSpecialOrderId} onCopy={(order) => void copySpecialOrder(order)} onDelete={setPendingSpecialOrderDelete} />)}</main><DeleteConfirmation open={Boolean(pendingPermitDelete)} title="Confirm Permit Slip Deletion?" description="Are you sure you want to delete this Permit Slip? This action cannot be undone." busy={Boolean(pendingPermitDelete && deletingPermitId === pendingPermitDelete.id)} onCancel={() => setPendingPermitDelete(null)} onConfirm={() => { if (pendingPermitDelete) void deletePermit(pendingPermitDelete); }} /><DeleteConfirmation open={Boolean(pendingSpecialOrderDelete)} title="Confirm Special Order Deletion?" description="Are you sure you want to delete this Special Order? This action cannot be undone." busy={Boolean(pendingSpecialOrderDelete && deletingSpecialOrderId === pendingSpecialOrderDelete.id)} onCancel={() => setPendingSpecialOrderDelete(null)} onConfirm={() => { if (pendingSpecialOrderDelete) void deleteSpecialOrder(pendingSpecialOrderDelete); }} />{findDocsRecord && findDocsRecord.type !== "Special Order" && findDocsRecord.type !== "Permit Slip" && <FindDocsRecordPreview record={findDocsRecord} user={user} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={accountUnit} onClose={() => setFindDocsRecord(null)} />}{preview && <PrintPreview permit={preview} approvedPermitNumbers={approvedPermitNumbers} singleSlip={singleSlipPreview} ownerOffice={activeAccountProfile?.office ?? ""} ownerAssignment={accountUnit ?? ""} onClose={() => { setPreview(null); setSingleSlipPreview(false); if (findDocsRecord?.type === "Permit Slip") setFindDocsRecord(null); }} />}{specialOrderPreview && <SpecialOrderPreview order={specialOrderPreview} onClose={() => { setSpecialOrderPreview(null); if (findDocsRecord?.type === "Special Order") setFindDocsRecord(null); }} />}</div>;
+  </form></section></div>}<main className="dashboard"><div className={`dashboard-header${section === "messenger" ? " hide-on-mobile" : ""}`}><div className="dashboard-header-content"><p className="eyebrow">{philippineDateTime && <>{philippineDateTime.split(" | ")[0]} | <span className="dashboard-time">{philippineDateTime.split(" | ")[1]}</span></>}</p><h1>{biometricsGreeting === "Masaganang Buntag" ? <>Masaganang Buntag{firstName ? <> <span className="dashboard-greeting-name">{firstName}</span>!</> : "!"}</> : <>{biometricsGreeting ?? "Masaganang Agrikultura"}{firstName ? <>, <span className="dashboard-greeting-name">{firstName}!</span></> : "!"}</>}</h1></div><div className="status-pill"><span /> Secure session</div></div>{error && <div className="error-message">{error}</div>}{isSuperAdmin ? (section === "cleaning-task" ? <CleaningTaskModule user={user} role={accountRole} unit={accountUnit ?? ""} name={activeAccountProfile?.name ?? fullName} canUpload mode="workspace" /> : section === "cleaning-task-assignments" ? <CleaningTaskAssignmentAdmin user={user} /> : section === "users-profile" ? <SuperAdminRecordManager kind="users-profile" user={user} /> : section === "users-nta" ? <SuperAdminRecordManager kind="users-nta" user={user} /> : section === "users-so" ? <SuperAdminRecordManager kind="users-so" user={user} /> : section === "users-to" ? <SuperAdminRecordManager kind="users-to" user={user} /> : section === "users-appearances" ? <SuperAdminRecordManager kind="users-appearances" user={user} /> : section === "document-notifications" ? <DocumentNotificationAdmin /> : section === "pending-permit-slips" ? <PendingPermitSlipAdmin /> : <UserMasterList user={user} />) : !isAdmin && (section === "permit-status" || section === "permit-statistics" || section === "calendar-of-activities-records" || section === "certificate-approval" || section === "so-approval" || section === "nta-approval" || section === "user-master-list") ? <WhereaboutsCalendarModule user={user} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} /> : section === "findDocs" ? <FindDocsModule user={user} unit={accountUnit} onOpenRecord={openFindDocsRecord} /> : section === "user-master-list" ? (isSuperAdmin ? <UserMasterList user={user} /> : null) : section === "so-approval" && canAccessSpecialOrderApproval ? <SpecialOrderApproval user={user} stage={specialOrderApprovalStage ?? "initial"} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Special Order" && notificationFocus.approvalStep ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} onView={(record) => setSpecialOrderPreview(record as SpecialOrder)} /> : section === "certificate-approval" ? <CertificateApproval user={user} role={accountRole} office={activeAccountProfile?.office} division={activeAccountProfile?.division} unit={activeAccountProfile?.unit} assignment={activeAccountProfile?.assignment} designation={activeAccountProfile?.designation} accountName={activeAccountProfile?.name} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Approval" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "appreciation" ? <AppreciationCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "appreciationCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "completion" ? <CompletionCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "completionCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "participation" ? <ParticipationCertificate user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "participationCertificates" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "certificate-of-appearance" ? <CertificateOfAppearance user={user} ownerOffice={certificateOwnerScope.office} ownerDivision={certificateOwnerScope.division} ownerUnit={certificateOwnerScope.unit} role={accountRole} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Certificate Decision" && notificationFocus.certificateCollection === "certificatesOfAppearance" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "leave-application" ? <LeaveApplicationModule user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Leave Application" ? notificationFocus.id : notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "leave-application-status" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "myar" ? <AccomplishmentReportModule user={user} focusMonth={notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "accomplishment-report" ? notificationFocus.month : undefined} focusCycle={notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "accomplishment-report" ? notificationFocus.cycle : undefined} onFocusHandled={clearNotificationFocus} /> : section === "my-notes" ? <MyNotesModule user={user} /> : section === "my-tevs" ? <MyTevModule user={user} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Travel Expense Voucher" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "nta-approval" ? <NtaApproval user={user} stage={ntaApprovalStage ?? "initial"} canReview={canAccessNtaApproval} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Notice to Attend" && notificationFocus.approvalStep ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "nta" ? <NtaModule user={user} ownerRole={accountRole} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={accountUnit} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Notice to Attend" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "travel-orders" ? <TravelOrderModule user={user} office={activeAccountProfile?.office ?? ""} unit={accountUnit} focusRecordId={notificationFocus?.kind === "document" && notificationFocus.documentType === "Travel Order" ? notificationFocus.id : notificationFocus?.kind === "reminder" && notificationFocus.reminderKind === "travel-order-status" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "calendar-of-activities" ? <CalendarOfActivitiesModule user={user} profileRevision={profileRevision} focusCalendarId={notificationFocus?.kind === "calendar" && notificationFocus.mode === "prepared" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "calendar-of-activities-records" ? <CalendarOfActivitiesModule user={user} mode="approved-records" focusCalendarId={notificationFocus?.kind === "calendar" && notificationFocus.mode === "approved-records" ? notificationFocus.id : undefined} onFocusHandled={clearNotificationFocus} /> : section === "messenger" ? <MessengerModule user={user} profileOffice={activeAccountProfile?.office} profileAssignment={accountUnit} /> : section === "whereabouts-calendar" ? <><WhereaboutsCalendarModule user={user} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} />{canViewCleaningTask && <CleaningTaskModule user={user} role={accountRole} unit={accountUnit ?? ""} name={activeAccountProfile?.name ?? fullName} mode="landing" />}</> : section === "cleaning-task" ? (canAccessCleaningTask ? <CleaningTaskModule user={user} role={accountRole} unit={accountUnit ?? ""} name={activeAccountProfile?.name ?? fullName} canUpload mode="workspace" /> : null) : section === "my-drive" ? <MyDriveModule user={user} /> : section === "cleaning-task-assignments" ? (isSuperAdmin ? <CleaningTaskAssignmentAdmin user={user} /> : null) : section === "permit-statistics" ? <PermitSlipAdmin user={user} mode="statistics" canManagePermits={isAdmin} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={activeAccountProfile?.unit ?? ""} designation={activeAccountProfile?.designation ?? ""} /> : section === "permit-status" ? <PermitSlipAdmin user={user} mode="status" focusNotificationKey={focusedPermitNotificationKey} canManagePermits={isAdmin} accountRole={accountRole} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={activeAccountProfile?.unit ?? ""} designation={activeAccountProfile?.designation ?? ""} /> : section === "permits" ? (view === "new" ? <PermitForm user={user} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} onSaved={(permit) => { setPermits([permit, ...permits]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : <PermitList permits={permits} approvedPermitNumbers={approvedPermitNumbers} ownerId={user.uid} preparedByNames={permitPreparedByNames} fallbackPreparedBy={activeAccountProfile?.name || user.displayName || ""} deletingId={deletingPermitId} onNew={() => { setError(""); setView("new"); }} onPrint={(permit) => { setSingleSlipPreview(false); setPreview(permit); }} onDelete={setPendingPermitDelete} />) : editingSpecialOrder ? <SpecialOrderParticipantEditor order={editingSpecialOrder} userId={user.uid} office={activeAccountProfile?.office ?? ""} assignment={accountUnit ?? ""} onCancel={() => setEditingSpecialOrder(null)} onSaved={(updatedOrder) => { setSpecialOrders((current) => current.map((order) => order.id === updatedOrder.id ? updatedOrder : order)); setEditingSpecialOrder(null); }} /> : (view === "new" ? <SpecialOrderForm user={user} ownerRole={accountRole} ownerOffice={activeAccountProfile?.office ?? ""} ownerDivision={activeAccountProfile?.division ?? ""} ownerUnit={accountUnit} onSaved={(order) => { setSpecialOrders([order, ...specialOrders]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : <SpecialOrderList orders={specialOrders} ownerId={user.uid} preparedByNames={specialOrderPreparedByNames} fallbackPreparedBy={activeAccountProfile?.name || user.displayName || ""} deletingId={deletingSpecialOrderId} onNew={() => { setError(""); setView("new"); }} onEdit={setEditingSpecialOrder} onPrint={setSpecialOrderPreview} copyingId={copyingSpecialOrderId} onCopy={(order) => void copySpecialOrder(order)} onDelete={setPendingSpecialOrderDelete} />)}</main><DeleteConfirmation open={Boolean(pendingPermitDelete)} title="Confirm Permit Slip Deletion?" description="Are you sure you want to delete this Permit Slip? This action cannot be undone." busy={Boolean(pendingPermitDelete && deletingPermitId === pendingPermitDelete.id)} onCancel={() => setPendingPermitDelete(null)} onConfirm={() => { if (pendingPermitDelete) void deletePermit(pendingPermitDelete); }} /><DeleteConfirmation open={Boolean(pendingSpecialOrderDelete)} title="Confirm Special Order Deletion?" description="Are you sure you want to delete this Special Order? This action cannot be undone." busy={Boolean(pendingSpecialOrderDelete && deletingSpecialOrderId === pendingSpecialOrderDelete.id)} onCancel={() => setPendingSpecialOrderDelete(null)} onConfirm={() => { if (pendingSpecialOrderDelete) void deleteSpecialOrder(pendingSpecialOrderDelete); }} />{findDocsRecord && findDocsRecord.type !== "Special Order" && findDocsRecord.type !== "Permit Slip" && <FindDocsRecordPreview record={findDocsRecord} user={user} office={activeAccountProfile?.office ?? ""} division={activeAccountProfile?.division ?? ""} unit={accountUnit} onClose={() => setFindDocsRecord(null)} />}{preview && <PrintPreview permit={preview} approvedPermitNumbers={approvedPermitNumbers} singleSlip={singleSlipPreview} ownerOffice={activeAccountProfile?.office ?? ""} ownerAssignment={accountUnit ?? ""} onClose={() => { setPreview(null); setSingleSlipPreview(false); if (findDocsRecord?.type === "Permit Slip") setFindDocsRecord(null); }} />}{specialOrderPreview && <SpecialOrderPreview key={specialOrderPreview.id} order={specialOrderPreview} onClose={() => { setSpecialOrderPreview(null); if (findDocsRecord?.type === "Special Order") setFindDocsRecord(null); }} />}</div>;
 }

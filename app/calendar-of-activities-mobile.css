@@ -1,11 +1,11 @@
 @media(max-width:720px){
   .calendar-of-activities-list-head{display:none}
   .calendar-of-activities-list-row{align-items:start;gap:8px;grid-template-columns:1fr 1fr;padding:17px 0}
-  .calendar-of-activities-list-row>strong,.calendar-of-activities-list-unit,.calendar-of-activities-list-count,.calendar-of-activities-list-status,.calendar-of-activities-row-actions{grid-column:1/-1}
+  .calendar-of-activities-list-row>strong,.calendar-of-activities-list-count,.calendar-of-activities-list-affix,.calendar-of-activities-list-status,.calendar-of-activities-row-actions{grid-column:1/-1}
   .calendar-of-activities-list-row>strong{font-size:14px}
-  .calendar-of-activities-list-unit::before,.calendar-of-activities-list-count::before,.calendar-of-activities-list-status::before{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase}
-  .calendar-of-activities-list-unit::before{content:"Office: "}
+  .calendar-of-activities-list-count::before,.calendar-of-activities-list-affix::before,.calendar-of-activities-list-status::before{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase}
   .calendar-of-activities-list-count::before{content:"Activities: "}
+  .calendar-of-activities-list-affix::before{content:"Affix Signature: "}
   .calendar-of-activities-list-status::before{content:"Status: "}
   .calendar-of-activities-row-actions{flex-wrap:wrap;gap:18px;justify-content:flex-start;padding-top:3px}
   .calendar-of-activities-form{gap:17px;grid-template-columns:minmax(0,1fr)}

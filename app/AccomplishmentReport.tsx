@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type Ref } from "react";
 import type { User } from "firebase/auth";
-import { collection, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { accountDivision, accountOffice, accountOfficeOptions, accountUnit, divisionsForOffice, executiveOfficeDivisionOptions, fieldOperationsAssignments, unitsForOfficeDivision } from "@/lib/account-profile";
 import { divisionSignatory, tevDivisions } from "@/lib/mytev";
@@ -12,7 +12,7 @@ import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./myar.css";
 
 type Unit = string;
-type Profile = { name: string; position: string; unit: Unit; immediateSupervisor: string };
+type Profile = { name: string; position: string; unit: Unit; immediateSupervisor: string; fullSignatureURL: string };
 type Report = {
   id: string;
   ownerId: string;
@@ -24,6 +24,10 @@ type Report = {
   unit: Unit;
   preparedName: string;
   preparedPosition: string;
+  affixSignature?: "Yes" | "No";
+  affixSignatureURL?: string;
+  affixSignatureName?: string;
+  affixSignatureAt?: unknown;
   signatoryName?: string;
   signatoryPosition?: string;
   signatoryDivision?: string;
@@ -183,9 +187,21 @@ function supervisorSelectionForReport(report: Report) {
 }
 
 function createdTime(value: unknown) {
-  return value && typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function"
-    ? value.toMillis() as number
-    : 0;
+  if (value && typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function") return value.toMillis() as number;
+  return value instanceof Date ? value.getTime() : 0;
+}
+
+function signatureDate(value: unknown) {
+  const millis = createdTime(value);
+  if (!millis) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(millis));
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}.${part("month")}.${part("day")}`;
+}
+
+function signatureTime(value: unknown) {
+  const millis = createdTime(value);
+  return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +0800` : "";
 }
 
 function AccomplishmentReportNotedSignatory({ report }: { report: Report }) {
@@ -210,7 +226,7 @@ function AccomplishmentReportDocument({ report, pageRef }: { report: Report; pag
       <header className="ar-document-heading"><h1>ACCOMPLISHMENT REPORT</h1><p>{reportPeriod(report)}</p></header>
       <p className="ar-document-unit">{reportUnit(report.unit)}</p>
       <ol className="ar-document-activities">{report.activities.map((activity, index) => <li key={`${index}-${activity}`}>{activity}</li>)}</ol>
-      <section className="ar-document-prepared"><p>Prepared:</p><div><strong>{report.preparedName.toLocaleUpperCase("en-PH")}</strong><em>{report.preparedPosition}</em></div></section>
+      <section className={`ar-document-prepared${report.affixSignature === "Yes" && report.affixSignatureURL ? " has-affixed-signature" : ""}`}><p>Prepared:</p>{report.affixSignature === "Yes" && report.affixSignatureURL && <div className="ar-document-digital-signature"><img src={report.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${report.affixSignatureName || report.preparedName}`} /><div><span>Digitally Signed By</span><strong>{(report.affixSignatureName || report.preparedName).toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixSignatureAt)}</small><small>Time: {signatureTime(report.affixSignatureAt)}</small></div></div>}<div className="ar-document-prepared-name"><strong>{report.preparedName.toLocaleUpperCase("en-PH")}</strong><em>{report.preparedPosition}</em></div></section>
       <section className="ar-document-noted"><p>Noted:</p><AccomplishmentReportNotedSignatory report={report} /></section>
     </div>
   </article>;
@@ -274,6 +290,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
   const [dropActivityIndex, setDropActivityIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingAffixSignatureId, setUpdatingAffixSignatureId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
@@ -369,7 +386,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         const office = data ? accountOffice(data) ?? "" : "";
         const accountRole = normalizeAccountRole(data?.accountRole, user.email);
         if (profileSnapshot.exists() && data && typeof data.name === "string" && typeof data.position === "string" && isReportUnit(assignment)) {
-          setProfile({ name: data.name, position: data.position, unit: assignment, immediateSupervisor: defaultImmediateSupervisor(office, division, assignment, accountRole) });
+          setProfile({ name: data.name, position: data.position, unit: assignment, immediateSupervisor: defaultImmediateSupervisor(office, division, assignment, accountRole), fullSignatureURL: typeof data.fullSignatureURL === "string" ? data.fullSignatureURL : "" });
         } else {
           setProfile(null);
         }
@@ -486,6 +503,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         signatoryName: selectedSignatory.name,
         signatoryPosition: selectedSignatory.position,
         signatoryDivision: selectedSignatory.division,
+        affixSignature: "No" as const,
         createdAt: serverTimestamp(),
       };
       const reportId = `${user.uid}_${month}_${cycle === 1 ? "first" : "second"}`;
@@ -500,6 +518,52 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       setMessage({ kind: "error", text: cause instanceof Error ? `Could not ${editingReport ? "update the report activities" : "save this report"}. ${cause.message}` : `Could not ${editingReport ? "update the report activities" : "save this report"}. Try again.` });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function updateAffixSignature(report: Report, value: "Yes" | "No") {
+    if (!db) {
+      setMessage({ kind: "error", text: "Database is not configured." });
+      return;
+    }
+    if (value === "Yes" && (!profile?.fullSignatureURL.trim() || !profile.name.trim())) {
+      setMessage({ kind: "error", text: "Upload your Full Signature in Profile before affixing it to a report." });
+      return;
+    }
+
+    setUpdatingAffixSignatureId(report.id);
+    setMessage(null);
+    const signatureFields = value === "Yes"
+      ? {
+          affixSignature: "Yes" as const,
+          affixSignatureURL: profile!.fullSignatureURL.trim(),
+          affixSignatureName: profile!.name.trim(),
+          affixSignatureAt: serverTimestamp(),
+        }
+      : {
+          affixSignature: "No" as const,
+          affixSignatureURL: deleteField(),
+          affixSignatureName: deleteField(),
+          affixSignatureAt: deleteField(),
+        };
+    try {
+      await updateDoc(doc(db, "accomplishmentReports", report.id), signatureFields);
+      let updatedReport: Report = value === "Yes"
+        ? { ...report, affixSignature: "Yes", affixSignatureURL: profile!.fullSignatureURL.trim(), affixSignatureName: profile!.name.trim(), affixSignatureAt: new Date() }
+        : { ...report, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
+      try {
+        const savedReport = await getDoc(doc(db, "accomplishmentReports", report.id));
+        if (savedReport.exists()) updatedReport = { id: report.id, ...savedReport.data() } as Report;
+      } catch {
+        // The successful update remains usable with the local timestamp fallback.
+      }
+      setReports((current) => current.map((item) => item.id === report.id ? updatedReport : item));
+      setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
+      setMessage({ kind: "success", text: value === "Yes" ? "Signature affixed to this report." : "Signature removed from this report." });
+    } catch (cause) {
+      setMessage({ kind: "error", text: cause instanceof Error ? `Could not update the report signature. ${cause.message}` : "Could not update the report signature. Try again." });
+    } finally {
+      setUpdatingAffixSignatureId(null);
     }
   }
 
@@ -524,7 +588,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
     {!showForm && <section className="content-section ar-records-section">
       <div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Saved Reports</h2><p className="muted">{reports.length} {reports.length === 1 ? "report" : "reports"} saved to your account.</p></div><button type="button" className="primary-button ar-add-report-button document-create-action" onClick={startNewReport}>Add</button></div>
       {message && <p className={`auth-message auth-message-${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}</p>}
-      {loading ? <p className="muted">Loading reports...</p> : reports.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No accomplishment reports yet</h3><p>Saved reports will appear here.</p></div> : <div className="permit-table ar-saved-table"><RecordPagination totalRecords={reports.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Saved Report" /><div className="table-head"><span>Month</span><span>Half-month Cycle</span><span aria-hidden="true" /></div>{visibleRecords.map((report) => <div className="table-row" key={report.id}><strong>{reportMonth(report.month)}</strong><span>{report.startDay}-{report.endDay}</span><div className="ar-record-actions">{isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div></div>)}</div>}
+      {loading ? <p className="muted">Loading reports...</p> : reports.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No accomplishment reports yet</h3><p>Saved reports will appear here.</p></div> : <div className="permit-table ar-saved-table"><RecordPagination totalRecords={reports.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Saved Report" /><div className="table-head"><span>Month</span><span>Half-month Cycle</span><span>Affix Signature</span><span aria-hidden="true" /></div>{visibleRecords.map((report) => <div className="table-row" key={report.id}><strong>{reportMonth(report.month)}</strong><span>{report.startDay}-{report.endDay}</span><label className="ar-record-affix"><select className="affix-signature-select" aria-label={`Affix signature for ${reportMonth(report.month)} ${report.startDay}-${report.endDay}`} value={report.affixSignature === "Yes" ? "Yes" : "No"} disabled={updatingAffixSignatureId === report.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void updateAffixSignature(report, event.target.value); }}><option value="Yes" disabled={!profile?.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label><div className="ar-record-actions">{isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div></div>)}</div>}
     </section>}
 
     {previewReport && <AccomplishmentReportPreview report={previewReport} onClose={() => { setSelectedReport(null); onPreviewClose?.(); }} />}

@@ -17,7 +17,9 @@ service cloud.firestore {
     function isVerifiedUser() {
       let userPath = currentUserPath();
       return isEmailVerified() && (isSuperAdmin()
-        || (exists(userPath) && get(userPath).data.get("accountStatus", "Approved") == "Approved"));
+        // Legacy profiles may store accountStatus as null. The app treats
+        // both a missing and null status as Approved.
+        || (exists(userPath) && get(userPath).data.get("accountStatus", "Approved") in ["Approved", null]));
     }
     function isCalendarActivityAdminAccount(userId) {
       let userPath = /databases/$(database)/documents/users/$(userId);
@@ -101,6 +103,16 @@ service cloud.firestore {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(userPath) ? profileAssignment(get(userPath).data) : null;
     }
+    function normalizedAccountRole(profile) {
+      let role = profile.get("accountRole", "");
+      return role is string ? role.lower() : "";
+    }
+    function sameTextIgnoreCase(value, expected) {
+      return value is string && expected is string && value.lower() == expected.lower();
+    }
+    function ownerUnitMatchesSignedIn(data) {
+      return sameTextIgnoreCase(data.get("ownerUnit", ""), signedInUnit());
+    }
     function isCleaningTaskUnit(unit) {
       return unit in ["AGRISTAT", "AMIA", "DRRM"];
     }
@@ -108,16 +120,10 @@ service cloud.firestore {
       let userPath = currentUserPath();
       return isVerifiedUser() && exists(userPath)
         && get(userPath).data.get("accountStatus", "Approved") == "Approved"
-        && (get(userPath).data.get("accountRole", "") in ["admin", "superadmin"]
-          || (get(userPath).data.get("accountRole", "") in ["regular", "user"] && signedInUnit() in ["AGRISTAT", "AMIA", "DRRM"]));
+        && get(userPath).data.get("accountRole", "") in ["regular", "user", "admin", "superadmin"];
     }
     function canUploadCleaningTask() {
-      let userPath = currentUserPath();
-      return isVerifiedUser() && exists(userPath)
-        && get(userPath).data.get("accountStatus", "Approved") == "Approved"
-        && ((get(userPath).data.get("accountRole", "") in ["regular", "user"] && signedInUnit() in ["AGRISTAT", "AMIA", "DRRM"])
-          || (get(userPath).data.get("accountRole", "") == "admin"
-            && get(userPath).data.get("designation", "") == "AGRISTAT/DRRM/AMIA Project Leader"));
+      return canReadCleaningTasks();
     }
     function validCleaningTaskAssignment(data, weekStart) {
       return data.keys().hasAll(["weekStart", "month", "weekNumber", "unit", "startAt", "endAt", "assignedBy", "assignedAt"])
@@ -139,11 +145,11 @@ service cloud.firestore {
         && get(assignmentPath).data.get("startAt", request.time) <= request.time
         && request.time < get(assignmentPath).data.get("endAt", request.time);
     }
-    function validCleaningTaskImage(data, unit) {
+    function validCleaningTaskImage(data, imageId) {
       return data.keys().hasAll(["unit", "imageURL", "fileKey", "previousFileKey", "previousFileOwnerId", "uploaderId", "uploaderName", "submittedWeekStart", "location", "uploadedAt"])
         && data.keys().hasOnly(["unit", "imageURL", "fileKey", "previousFileKey", "previousFileOwnerId", "uploaderId", "uploaderName", "submittedWeekStart", "location", "uploadedAt"])
-        && isCleaningTaskUnit(unit)
-        && data.unit == unit
+        && isCleaningTaskUnit(data.unit)
+        && (imageId == "current" || imageId == data.unit)
         && data.imageURL is string && data.imageURL.size() <= 2048
         && data.fileKey is string && data.fileKey.matches("^[A-Za-z0-9_.-]{1,128}$")
         && (data.imageURL == "https://utfs.io/f/" + data.fileKey
@@ -570,7 +576,7 @@ service cloud.firestore {
     }
     function validUserProfile(data) {
       return data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin"])
-        && data.keys().hasOnly(["name", "position", "office", "division", "unit", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "address", "taxIdentificationNo", "accountRole", "accountStatus", "isRootSuperAdmin", "emailVerified", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
+        && data.keys().hasOnly(["name", "position", "office", "division", "unit", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "accountRole", "accountStatus", "isRootSuperAdmin", "emailVerified", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
         && data.emailVerified is bool
         && data.isRootSuperAdmin is bool
         && data.accountRole in ["superadmin", "admin", "regular"]
@@ -580,6 +586,8 @@ service cloud.firestore {
         && (!data.keys().hasAny(["middleName"]) || (data.middleName is string && data.middleName.size() <= 60))
         && (!data.keys().hasAny(["lastName"]) || (data.lastName is string && data.lastName.size() <= 60))
         && (!data.keys().hasAny(["photoURL"]) || (data.photoURL is string && data.photoURL.size() <= 2048))
+        && (!data.keys().hasAny(["fullSignatureURL"]) || (data.fullSignatureURL is string && data.fullSignatureURL.size() <= 2048))
+        && (!data.keys().hasAny(["initialSignatureURL"]) || (data.initialSignatureURL is string && data.initialSignatureURL.size() <= 2048))
         && (!data.keys().hasAny(["address"]) || (data.address is string && data.address.size() > 0 && data.address.size() <= 200))
         && (!data.keys().hasAny(["taxIdentificationNo"]) || (data.taxIdentificationNo is string && data.taxIdentificationNo.size() > 0 && data.taxIdentificationNo.size() <= 30))
         && data.name is string
@@ -628,6 +636,299 @@ service cloud.firestore {
             && (currentMonth <= report.month
               || (previousMonth == report.month && manilaNow.day() < 6))));
     }
+    function isFodDivisionOffice(profile) {
+      // Match accountProfileSelection's legacy office / assignment normalization.
+      let version = profile.get("profileFieldsVersion", 0);
+      let office = profileOffice(profile);
+      let assignment = profileAssignment(profile);
+      return version >= 4
+        ? sameTextIgnoreCase(office, "Division") && sameTextIgnoreCase(profile.get("division", ""), "Field Operations Division")
+        : sameTextIgnoreCase(office, "Field Operations Division")
+          || (sameTextIgnoreCase(office, "Division") && assignment is string && assignment.lower() in ["agristat", "amia", "drrm", "field operations division"])
+          || (sameTextIgnoreCase(office, "Regional Field Office") && assignment is string && assignment.lower() in ["drrm", "field operations division"]);
+    }
+    function isRegularSpecialOrderOwner(profile) {
+      let role = normalizedAccountRole(profile);
+      let email = request.auth.token.get("email", "").lower();
+      return role in ["regular", "user"]
+        || (!(role in ["admin", "superadmin"])
+          && email != "rjamescute2@gmail.com"
+          && email != "gerlieantipaso27@gmail.com");
+    }
+    function isActiveFodSpecialOrderAdmin(userId, designation) {
+      let userPath = /databases/$(database)/documents/users/$(userId);
+      return userId is string
+        && userId.size() > 0
+        && exists(userPath)
+        && (normalizedAccountRole(get(userPath).data) == "admin"
+          || (!(normalizedAccountRole(get(userPath).data) in ["superadmin", "regular", "user"])
+            && get(userPath).data.get("email", "") is string
+            && get(userPath).data.get("email", "").lower() == "gerlieantipaso27@gmail.com"))
+        && get(userPath).data.get("accountStatus", "Approved") in ["Approved", null]
+        && isFodDivisionOffice(get(userPath).data)
+        && sameTextIgnoreCase(profileAssignment(get(userPath).data), "Field Operations Division")
+        && get(userPath).data.get("designation", "") is string
+        && (get(userPath).data.get("designation", "") == designation
+          || (designation == "Chief" && get(userPath).data.get("designation", "").matches("(^|.*;)\\s*Chief\\s*(;.*|$)"))
+          || (designation == "AGRISTAT/DRRM/AMIA Project Leader"
+            && get(userPath).data.get("designation", "").matches("(^|.*;)\\s*AGRISTAT/DRRM/AMIA Project Leader\\s*(;.*|$)")));
+    }
+    function isFodSpecialOrderWorkflowOwner() {
+      let profile = get(currentUserPath()).data;
+      return isRegularSpecialOrderOwner(profile)
+        && isFodDivisionOffice(profile)
+        && profileAssignment(profile) is string
+        && profileAssignment(profile).lower() in ["agristat", "amia", "drrm"];
+    }
+    function isAccountlessFodSpecialOrderSignatory(data) {
+      let designation = data.get("signatoryDesignation", "");
+      let name = data.get("signatoryName", "");
+      return (designation == "Regional Executive Director" && name == "ENGR. RICARDO M. OÑATE JR.")
+        || (designation == "RTD for Operations" && name == "REBECCA R. ATEGA")
+        || (designation == "RTD for Research and Regulations" && name == "MARCO ANTONIO C. MORIDO");
+    }
+    function isFodSpecialOrderDivisionSignatory(data) {
+      let designation = data.get("signatoryDesignation", "");
+      let name = data.get("signatoryName", "");
+      return (name == "Claide Jane D. Calamba" && designation == "OIC, Administrative Division")
+        || (name == "Lynn A. Pareñas" && designation == "Chief, Agribusiness and Marketing Assistance Division")
+        || (name == "Melody M. Guimary" && designation == "Chief, Field Operations Division")
+        || (name == "Primitiva O. Arquion" && designation == "Chief, Finance Division")
+        || (name == "Esther B. Cardeño, DVM" && designation == "Chief, Integrated Laboratories Division")
+        || (name == "Gemma A. Asufre" && designation == "Chief, Planning, Monitoring and Evaluation Division")
+        || (name == "Engr. Rene Q. Morales" && designation == "Chief, Regional Agricultural Engineering Division")
+        || (name == "Johnny M. Concon" && designation == "Chief, Regulatory Division")
+        || (name == "Edelmira R. Luminarias" && designation == "Chief, Research Division");
+    }
+    function isFodSoApproverProfile(profile, designation, unit) {
+      let role = normalizedAccountRole(profile);
+      let email = profile.get("email", "");
+      let storedDesignation = profile.get("designation", "");
+      return (role == "admin"
+          || (!(role in ["superadmin", "regular", "user"])
+            && email is string
+            && email.lower() == "gerlieantipaso27@gmail.com"))
+        && profile.get("accountStatus", "Approved") in ["Approved", null]
+        && isFodDivisionOffice(profile)
+        && sameTextIgnoreCase(profile.get("unit", ""), unit)
+        && storedDesignation is string
+        && (storedDesignation == designation
+          || (designation == "Chief" && storedDesignation.matches("(^|.*;)\\s*Chief\\s*(;.*|$)"))
+          || (designation == "AGRISTAT/DRRM/AMIA Project Leader"
+            && storedDesignation.matches("(^|.*;)\\s*AGRISTAT/DRRM/AMIA Project Leader\\s*(;.*|$)")));
+    }
+    function isActiveFodSoApproverForUnit(userId, designation, unit) {
+      let userPath = /databases/$(database)/documents/users/$(userId);
+      return userId is string
+        && userId.size() > 0
+        && exists(userPath)
+        && isFodSoApproverProfile(get(userPath).data, designation, unit);
+    }
+    function validFodSpecialOrderWorkflow(data, ownerProfile) {
+      return data.get("approvalWorkflow", "") == "fod"
+        && data.get("approvalStage", "") == "initial"
+        && data.get("ownerOffice", "") == "Division"
+        && data.get("ownerDivision", "") == "Field Operations Division"
+        && data.get("ownerUnit", "") is string
+        && data.get("ownerUnit", "").lower() in ["agristat", "amia", "drrm"]
+        && isFodDivisionOffice(ownerProfile)
+        && sameTextIgnoreCase(data.get("ownerUnit", ""), profileAssignment(ownerProfile))
+        && isRegularSpecialOrderOwner(ownerProfile)
+        && data.get("initialSignerId", "") is string
+        && data.get("initialSignerId", "").size() > 0
+        && data.get("initialSignerId", "").size() <= 128
+        && isActiveFodSoApproverForUnit(data.initialSignerId, "AGRISTAT/DRRM/AMIA Project Leader", "Field Operations Division")
+        // Validate the saved route against current Admin profiles. Signature
+        // actions also recheck the signer against their live profile.
+        && data.get("chiefSignerId", "") is string
+        && data.get("chiefSignerId", "").size() > 0
+        && data.get("chiefSignerId", "").size() <= 128
+        && isActiveFodSoApproverForUnit(data.chiefSignerId, "Chief", "Field Operations Division")
+        && data.initialSignerId != data.chiefSignerId
+        && data.initialSignerId != request.auth.uid
+        && data.chiefSignerId != request.auth.uid
+        && data.get("signatoryName", "") is string
+        && data.get("signatoryName", "").size() > 0
+        && data.get("signatoryName", "").size() <= 120
+        // The selected SO signatory is a display choice. The approval route
+        // is determined by initialSignerId and chiefSignerId, so allow every
+        // configured dropdown choice without coupling it to those approvers.
+        && data.get("signatoryDesignation", "") is string
+        && data.get("signatoryDesignation", "").size() > 0
+        && data.get("signatoryDesignation", "").size() <= 120
+        && data.get("affixInitialSignature", "") == "No"
+        && data.get("affixChiefInitialSignature", "") == "No";
+    }
+    function canCreateFodSpecialOrder(data) {
+      let ownerPath = currentUserPath();
+      let ownerProfile = get(ownerPath).data;
+      return isEmailVerified()
+        && exists(ownerPath)
+        && data.get("ownerId", "") == request.auth.uid
+        && ownerProfile.get("accountStatus", "Approved") in ["Approved", null]
+        && validFodSpecialOrderWorkflow(data, ownerProfile);
+    }
+    function isFodSoInitialSigner(order) {
+      return isVerifiedUser()
+        && order.get("approvalWorkflow", "") == "fod"
+        && order.get("initialSignerId", "") == request.auth.uid
+        && isActiveFodSoApproverForUnit(request.auth.uid, "AGRISTAT/DRRM/AMIA Project Leader", "Field Operations Division")
+        && order.get("approvalStage", "") in ["initial", "chief", "returned"];
+    }
+    function isFodSoChiefSigner(order) {
+      return isVerifiedUser()
+        && order.get("approvalWorkflow", "") == "fod"
+        && order.get("chiefSignerId", "") == request.auth.uid
+        && isActiveFodSoApproverForUnit(request.auth.uid, "Chief", "Field Operations Division")
+        && order.get("affixInitialSignature", "") == "Yes"
+        && order.get("approvalStage", "") in ["chief", "returned"];
+    }
+    function canAffixFodSoInitialSignature() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let userPath = currentUserPath();
+      return isFodSoInitialSigner(resource.data)
+        && resource.data.get("approvalStage", "") == "initial"
+        && changed.hasOnly(["affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "approvalStage"])
+        && request.resource.data.get("affixInitialSignature", "") in ["Yes", "No"]
+        && (request.resource.data.affixInitialSignature == "No"
+          ? request.resource.data.get("approvalStage", "") == "initial"
+            && changed.hasOnly(["affixInitialSignature"])
+          : request.resource.data.get("approvalStage", "") == "chief"
+            && request.resource.data.get("affixInitialSignatureURL", "") == get(userPath).data.get("initialSignatureURL", "")
+            && request.resource.data.get("affixInitialSignatureURL", "") is string
+            && request.resource.data.get("affixInitialSignatureURL", "").size() > 0
+            && request.resource.data.get("affixInitialSignatureName", "") == get(userPath).data.get("name", "")
+            && request.resource.data.get("affixInitialSignatureAt", null) == request.time);
+    }
+    function canAffixFodSoChiefSignature() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let userPath = currentUserPath();
+      return isFodSoChiefSigner(resource.data)
+        && resource.data.get("approvalStage", "") == "chief"
+        && changed.hasOnly(["affixChiefInitialSignature", "affixChiefInitialSignatureURL", "affixChiefInitialSignatureName", "affixChiefInitialSignatureAt", "approvalStage"])
+        && request.resource.data.get("affixChiefInitialSignature", "") in ["Yes", "No"]
+        && (request.resource.data.affixChiefInitialSignature == "No"
+          ? request.resource.data.get("approvalStage", "") == "chief"
+            && changed.hasOnly(["affixChiefInitialSignature"])
+          : request.resource.data.get("approvalStage", "") == "returned"
+            && request.resource.data.get("affixChiefInitialSignatureURL", "") == get(userPath).data.get("initialSignatureURL", "")
+            && request.resource.data.get("affixChiefInitialSignatureURL", "") is string
+            && request.resource.data.get("affixChiefInitialSignatureURL", "").size() > 0
+            && request.resource.data.get("affixChiefInitialSignatureName", "") == get(userPath).data.get("name", "")
+            && request.resource.data.get("affixChiefInitialSignatureAt", null) == request.time);
+    }
+    function isFodNtaWorkflowOwner() {
+      let profile = get(currentUserPath()).data;
+      return isRegularSpecialOrderOwner(profile)
+        && isFodDivisionOffice(profile)
+        && profileAssignment(profile) in ["AGRISTAT", "AMIA", "DRRM"];
+    }
+    function ntaSignatoryDesignation(profile) {
+      let designation = profile.get("designation", "");
+      return designation is string
+        && (designation == "Chief" || designation.matches("(^|.*;)\\s*Chief\\s*(;.*|$)")) ? "Chief"
+        : designation is string
+          && (designation == "OIC" || designation.matches("(^|.*;)\\s*OIC\\s*(;.*|$)")) ? "OIC"
+          : "";
+    }
+    function isActiveNtaAdminSignatory(userId) {
+      let userPath = /databases/$(database)/documents/users/$(userId);
+      return userId is string
+        && userId.size() > 0
+        && userId.size() <= 128
+        && exists(userPath)
+        && normalizedAccountRole(get(userPath).data) == "admin"
+        && get(userPath).data.get("accountStatus", "Approved") in ["Approved", null]
+        && ntaSignatoryDesignation(get(userPath).data) in ["Chief", "OIC"]
+        && get(userPath).data.get("name", "") is string
+        && get(userPath).data.get("name", "").size() > 0
+        && get(userPath).data.get("name", "").size() <= 120;
+    }
+    function validNtaSignatory(data) {
+      let signatoryId = data.get("signatoryAdminId", "");
+      let signatoryPath = /databases/$(database)/documents/users/$(signatoryId);
+      let profile = exists(signatoryPath) ? get(signatoryPath).data : {};
+      let designation = ntaSignatoryDesignation(profile);
+      let selectedDesignation = data.get("signatoryDesignation", "");
+      return isActiveNtaAdminSignatory(signatoryId)
+        && data.get("signatoryName", "") == profile.get("name", "")
+        && selectedDesignation is string && selectedDesignation.size() <= 200
+        && (selectedDesignation == designation
+          || (designation == "Chief" && selectedDesignation.matches("^Chief, .+$"))
+          || (designation == "OIC" && selectedDesignation.matches("^OIC, .+$")));
+    }
+    function validFodNtaWorkflow(data) {
+      let ownerProfile = get(currentUserPath()).data;
+      return data.get("approvalWorkflow", "") == "fod"
+        && data.get("approvalStage", "") == "initial"
+        && data.get("ownerOffice", "") == "Division"
+        && data.get("ownerDivision", "") == "Field Operations Division"
+        && data.get("ownerUnit", "") is string
+        && data.get("ownerUnit", "").lower() in ["agristat", "amia", "drrm"]
+        && isFodDivisionOffice(ownerProfile)
+        && sameTextIgnoreCase(data.get("ownerUnit", ""), profileAssignment(ownerProfile))
+        && isRegularSpecialOrderOwner(ownerProfile)
+        && data.get("initialSignerId", "") is string
+        && data.get("initialSignerId", "").size() > 0
+        && data.get("initialSignerId", "").size() <= 128
+        && exists(/databases/$(database)/documents/users/$(data.initialSignerId))
+        && data.get("chiefSignerId", "") is string
+        && data.get("chiefSignerId", "").size() > 0
+        && data.get("chiefSignerId", "").size() <= 128
+        && exists(/databases/$(database)/documents/users/$(data.chiefSignerId))
+        && data.initialSignerId != data.chiefSignerId
+        && data.get("affixInitialSignature", "") == "No"
+        && !data.keys().hasAny(["affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"]);
+    }
+    function isFodNtaInitialSigner(nta) {
+      return isVerifiedUser()
+        && nta.get("approvalWorkflow", "") == "fod"
+        && nta.get("initialSignerId", "") == request.auth.uid
+        && isActiveFodSpecialOrderAdmin(request.auth.uid, "AGRISTAT/DRRM/AMIA Project Leader")
+        && nta.get("approvalStage", "") in ["initial", "chief", "approved"];
+    }
+    function isFodNtaChiefSigner(nta) {
+      return isVerifiedUser()
+        && nta.get("approvalWorkflow", "") == "fod"
+        && nta.get("chiefSignerId", "") == request.auth.uid
+        && isActiveFodSpecialOrderAdmin(request.auth.uid, "Chief")
+        && nta.get("affixInitialSignature", "") == "Yes"
+        && nta.get("approvalStage", "") in ["chief", "approved"];
+    }
+    function canAffixFodNtaInitialSignature() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let userPath = currentUserPath();
+      return isFodNtaInitialSigner(resource.data)
+        && resource.data.get("approvalStage", "") == "initial"
+        && changed.hasOnly(["affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "approvalStage"])
+        && request.resource.data.get("affixInitialSignature", "") in ["Yes", "No"]
+        && (request.resource.data.affixInitialSignature == "No"
+          ? request.resource.data.get("approvalStage", "") == "initial"
+            && changed.hasOnly(["affixInitialSignature"])
+          : request.resource.data.get("approvalStage", "") == "chief"
+            && request.resource.data.get("affixInitialSignatureURL", "") == get(userPath).data.get("initialSignatureURL", "")
+            && request.resource.data.get("affixInitialSignatureURL", "") is string
+            && request.resource.data.get("affixInitialSignatureURL", "").size() > 0
+            && request.resource.data.get("affixInitialSignatureName", "") == get(userPath).data.get("name", "")
+            && request.resource.data.get("affixInitialSignatureAt", null) == request.time);
+    }
+    function canAffixFodNtaChiefSignature() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let userPath = currentUserPath();
+      return isFodNtaChiefSigner(resource.data)
+        && resource.data.get("approvalStage", "") == "chief"
+        && changed.hasOnly(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt", "approvalStage"])
+        && request.resource.data.get("affixSignature", "") in ["Yes", "No"]
+        && (request.resource.data.affixSignature == "No"
+          ? request.resource.data.get("approvalStage", "") == "chief"
+            && changed.hasOnly(["affixSignature"])
+          : request.resource.data.get("approvalStage", "") == "approved"
+            && request.resource.data.get("affixSignatureURL", "") == get(userPath).data.get("fullSignatureURL", "")
+            && request.resource.data.get("affixSignatureURL", "") is string
+            && request.resource.data.get("affixSignatureURL", "").size() > 0
+            && request.resource.data.get("affixSignatureName", "") == get(userPath).data.get("name", "")
+            && request.resource.data.get("affixSignatureAt", null) == request.time);
+    }
     match /users/{userId} {
       // Approved users can read profiles for personnel pickers. A verified pending user can read only their own profile.
       allow read: if isVerifiedUser() || isSuperAdmin()
@@ -648,7 +949,17 @@ service cloud.firestore {
       // Users may edit their own profile and mark their email verified, but cannot approve themselves or change their role.
       allow update: if (isEmailVerified()
           && request.auth.uid == userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "position", "office", "division", "unit", "assignment", "projectProgram", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "address", "taxIdentificationNo", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasAny(["fullSignatureURL", "initialSignatureURL"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["fullSignatureURL", "initialSignatureURL"])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["fullSignatureURL"])
+            || !request.resource.data.keys().hasAny(["fullSignatureURL"])
+            || (request.resource.data.fullSignatureURL is string && request.resource.data.fullSignatureURL.size() <= 2048))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["initialSignatureURL"])
+            || !request.resource.data.keys().hasAny(["initialSignatureURL"])
+            || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048)))
+        || (isEmailVerified()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "position", "office", "division", "unit", "assignment", "projectProgram", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
           && request.resource.data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion", "emailVerified"])
           && !request.resource.data.keys().hasAny(["assignment", "projectProgram"])
           && request.resource.data.emailVerified == true
@@ -691,6 +1002,8 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["middleName"]) || (request.resource.data.middleName is string && request.resource.data.middleName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["lastName"]) || (request.resource.data.lastName is string && request.resource.data.lastName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["photoURL"]) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 2048))
+          && (!request.resource.data.keys().hasAny(["fullSignatureURL"]) || (request.resource.data.fullSignatureURL is string && request.resource.data.fullSignatureURL.size() <= 2048))
+          && (!request.resource.data.keys().hasAny(["initialSignatureURL"]) || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048))
           && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 200))
           && (!request.resource.data.keys().hasAny(["taxIdentificationNo"]) || (request.resource.data.taxIdentificationNo is string && request.resource.data.taxIdentificationNo.size() > 0 && request.resource.data.taxIdentificationNo.size() <= 30))
           && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))
@@ -737,25 +1050,26 @@ service cloud.firestore {
         && validCleaningTaskAssignment(request.resource.data, weekStart);
       allow delete: if isSuperAdmin();
     }
-    match /cleaningTaskImages/{unit} {
+    match /cleaningTaskImages/{imageId} {
       allow read: if canReadCleaningTasks();
-      allow create: if canUploadCleaningTask()
-        && validCleaningTaskImage(request.resource.data, unit)
+      allow create: if imageId == "current"
+        && canUploadCleaningTask()
+        && validCleaningTaskImage(request.resource.data, imageId)
         && request.resource.data.uploaderId == request.auth.uid
         && request.resource.data.previousFileKey == ""
         && request.resource.data.previousFileOwnerId == ""
-        && signedInUnit() == unit
-        && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, unit);
-      allow update: if (canUploadCleaningTask()
-          && resource.data.unit == unit
-          && validCleaningTaskImage(request.resource.data, unit)
+        && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, request.resource.data.unit);
+      allow update: if (imageId == "current"
+          && canUploadCleaningTask()
+          && resource.data.unit in ["AGRISTAT", "AMIA", "DRRM"]
+          && validCleaningTaskImage(request.resource.data, imageId)
           && request.resource.data.uploaderId == request.auth.uid
           && request.resource.data.previousFileKey == resource.data.fileKey
           && request.resource.data.previousFileOwnerId == resource.data.uploaderId
-          && signedInUnit() == unit
-          && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, unit))
-        || (canUploadCleaningTask()
-          && resource.data.uploaderId == request.auth.uid
+          && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, request.resource.data.unit))
+        || (imageId == "current"
+          && canUploadCleaningTask()
+          && resource.data.unit in ["AGRISTAT", "AMIA", "DRRM"]
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["previousFileKey", "previousFileOwnerId"])
           && request.resource.data.previousFileKey == ""
           && request.resource.data.previousFileOwnerId == "");
@@ -835,7 +1149,7 @@ service cloud.firestore {
           || isCalendarOwnerOrSameUnit(calendarId));
       allow create: if isVerifiedUser()
         && request.resource.data.keys().hasAll(["ownerId", "unit", "month", "status", "activities", "preparedName", "preparedPosition", "checkedBy", "notedBy", "approvedBy", "createdAt"])
-        && request.resource.data.keys().hasOnly(["ownerId", "unit", "month", "status", "activities", "preparedName", "preparedPosition", "checkedBy", "notedBy", "approvedBy", "createdAt"])
+        && request.resource.data.keys().hasOnly(["ownerId", "unit", "month", "status", "activities", "preparedName", "preparedPosition", "affixSignature", "checkedBy", "notedBy", "approvedBy", "createdAt"])
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.unit is string
         && request.resource.data.unit == signedInUnit()
@@ -851,6 +1165,7 @@ service cloud.firestore {
         && request.resource.data.preparedPosition is string
         && request.resource.data.preparedPosition.size() > 0
         && request.resource.data.preparedPosition.size() <= 120
+        && (!request.resource.data.keys().hasAny(["affixSignature"]) || request.resource.data.affixSignature == "No")
         && isCalendarActivityAdminSignatory(request.resource.data.checkedBy)
         && isCalendarActivityAdminAccount(request.resource.data.checkedBy.userId)
         && isCalendarActivityAdminSignatory(request.resource.data.notedBy)
@@ -865,8 +1180,23 @@ service cloud.firestore {
         && request.resource.data.preparedName == resource.data.preparedName
         && request.resource.data.preparedPosition == resource.data.preparedPosition
         && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.diff(resource.data).affectedKeys().hasAny(["activities", "status", "checkedBy", "notedBy", "approvedBy"])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["activities", "status", "checkedBy", "notedBy", "approvedBy"])
+        && request.resource.data.diff(resource.data).affectedKeys().hasAny(["activities", "status", "checkedBy", "notedBy", "approvedBy", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["activities", "status", "checkedBy", "notedBy", "approvedBy", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+          || (resource.data.ownerId == request.auth.uid
+            && request.resource.data.affixSignature in ["Yes", "No"]
+            && (request.resource.data.affixSignature == "No"
+              ? !request.resource.data.keys().hasAny(["affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+              : request.resource.data.affixSignatureURL is string
+                && request.resource.data.affixSignatureURL.size() > 0
+                && request.resource.data.affixSignatureURL.size() <= 2048
+                && request.resource.data.affixSignatureName is string
+                && request.resource.data.affixSignatureName.size() > 0
+                && request.resource.data.affixSignatureName.size() <= 120
+                && request.resource.data.affixSignatureAt is timestamp
+                && request.resource.data.affixSignatureAt == request.time
+                && get(currentUserPath()).data.get("fullSignatureURL", "") == request.resource.data.affixSignatureURL
+                && get(currentUserPath()).data.get("name", "") == request.resource.data.affixSignatureName)))
         && (!request.resource.data.keys().hasAny(["checkedBy"]) || isCalendarActivityAdminSignatory(request.resource.data.checkedBy))
         && (!request.resource.data.keys().hasAny(["notedBy"]) || isCalendarActivityAdminSignatory(request.resource.data.notedBy))
         && (!request.resource.data.keys().hasAny(["approvedBy"]) || isCalendarActivityApprover(request.resource.data.approvedBy))
@@ -1006,16 +1336,50 @@ service cloud.firestore {
         && (
           (request.resource.data.documentType == "Special Order"
             && existsAfter(documentPath("specialOrders", request.resource.data.documentId))
-            && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.ownerId == request.auth.uid
-            && request.resource.data.recipientId in getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.recipientIds
+            && ((request.resource.data.get("approvalStep", "") == "initial"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.ownerId == request.auth.uid
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalStage", "") == "initial"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("initialSignerId", "") == request.resource.data.recipientId)
+              || (request.resource.data.get("approvalStep", "") == "chief"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("initialSignerId", "") == request.auth.uid
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("affixInitialSignature", "") == "Yes"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalStage", "") == "chief"
+                && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("chiefSignerId", "") == request.resource.data.recipientId)
+              || (!request.resource.data.keys().hasAny(["approvalStep"])
+                && ((getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.ownerId == request.auth.uid
+                    && request.resource.data.recipientId in getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("recipientIds", [])
+                  || (request.resource.data.recipientId == getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.ownerId
+                    && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                    && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("chiefSignerId", "") == request.auth.uid
+                    && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("approvalStage", "") == "returned"
+                    && getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.get("affixChiefInitialSignature", "") == "Yes")))))
             && request.resource.data.activityTitle == getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.activityTitle
             && request.resource.data.dateFrom == getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.dateFrom
             && request.resource.data.dateTo == getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.dateTo
             && request.resource.data.venue == getAfter(documentPath("specialOrders", request.resource.data.documentId)).data.venue)
           || (request.resource.data.documentType == "Notice to Attend"
             && existsAfter(documentPath("ntaRecords", request.resource.data.documentId))
-            && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.ownerId == request.auth.uid
-            && request.resource.data.recipientId in getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.recipientIds
+            && ((request.resource.data.get("approvalStep", "") == "initial"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.ownerId == request.auth.uid
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalStage", "") == "initial"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("initialSignerId", "") == request.resource.data.recipientId)
+              || (request.resource.data.get("approvalStep", "") == "chief"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("initialSignerId", "") == request.auth.uid
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("affixInitialSignature", "") == "Yes"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalStage", "") == "chief"
+                && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("chiefSignerId", "") == request.resource.data.recipientId)
+              || (!request.resource.data.keys().hasAny(["approvalStep"])
+                && ((getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.ownerId == request.auth.uid
+                    && request.resource.data.recipientId in getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("recipientIds", [])
+                  || (request.resource.data.recipientId == getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.ownerId
+                    && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalWorkflow", "") == "fod"
+                    && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("chiefSignerId", "") == request.auth.uid
+                    && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("approvalStage", "") == "approved"
+                    && getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.get("affixSignature", "") == "Yes")))))
             && request.resource.data.activityTitle == getAfter(documentPath("ntaRecords", request.resource.data.documentId)).data.activityTitle
             && request.resource.data.schedules is list)
           || (request.resource.data.documentType == "Permit Slip"
@@ -1158,13 +1522,34 @@ service cloud.firestore {
     match /specialOrders/{orderId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])));
-      allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerUnit == signedInUnit();
+        || request.auth.uid in resource.data.get("recipientIds", [])))
+        || isFodSoInitialSigner(resource.data)
+        || isFodSoChiefSigner(resource.data);
+      allow create: if (request.resource.data.get("approvalWorkflow", "") == "fod"
+          && canCreateFodSpecialOrder(request.resource.data))
+        || (request.resource.data.get("approvalWorkflow", "") != "fod"
+          && isVerifiedUser()
+          && request.resource.data.ownerId == request.auth.uid
+          && ownerUnitMatchesSignedIn(request.resource.data)
+          && !request.resource.data.keys().hasAny(["approvalWorkflow", "approvalStage", "externalSignatory", "initialSignerId", "chiefSignerId", "affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixChiefInitialSignature", "affixChiefInitialSignatureURL", "affixChiefInitialSignatureName", "affixChiefInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"]));
       allow update: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
+        && resource.data.get("affixInitialSignature", "No") != "Yes"
+        && resource.data.get("affixChiefInitialSignature", "No") != "Yes"
+        && resource.data.get("affixSignature", "No") != "Yes"
+        && !(resource.data.get("affixInitialSignatureURL", "") is string && resource.data.get("affixInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixChiefInitialSignatureURL", "") is string && resource.data.get("affixChiefInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixSignatureURL", "") is string && resource.data.get("affixSignatureURL", "") != "")
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["approvalWorkflow", "approvalStage", "externalSignatory", "initialSignerId", "chiefSignerId", "affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixChiefInitialSignature", "affixChiefInitialSignatureURL", "affixChiefInitialSignatureName", "affixChiefInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
         && ownerUnitCanBeUpdated());
-      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid);
+      allow update: if canAffixFodSoInitialSignature() || canAffixFodSoChiefSignature();
+      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
+        && resource.data.get("affixInitialSignature", "No") != "Yes"
+        && resource.data.get("affixChiefInitialSignature", "No") != "Yes"
+        && resource.data.get("affixSignature", "No") != "Yes"
+        && !(resource.data.get("affixInitialSignatureURL", "") is string && resource.data.get("affixInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixChiefInitialSignatureURL", "") is string && resource.data.get("affixChiefInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixSignatureURL", "") is string && resource.data.get("affixSignatureURL", "") != ""));
     }
     match /certificatesOfAppearance/{certificateId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReadAppearanceCertificate(resource.data)));
@@ -1403,7 +1788,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(["ownerId", "filedDate", "name", "firstName", "middleName", "lastName", "office", "position", "salary", "leaveType", "leaveDetails", "specifyAbroad", "specifyIllness", "studyLeaveOtherPurpose", "workingDays", "inclusiveDateFrom", "inclusiveDateTo", "division", "signatoryName", "signatoryPosition", "status", "createdAt"])
-        && request.resource.data.keys().hasOnly(["ownerId", "filedDate", "name", "firstName", "middleName", "lastName", "office", "position", "salary", "leaveType", "leaveDetails", "specifyAbroad", "specifyIllness", "studyLeaveOtherPurpose", "workingDays", "inclusiveDateFrom", "inclusiveDateTo", "division", "signatoryName", "signatoryPosition", "status", "createdAt"])
+        && request.resource.data.keys().hasOnly(["ownerId", "filedDate", "name", "firstName", "middleName", "lastName", "office", "position", "salary", "leaveType", "leaveDetails", "specifyAbroad", "specifyIllness", "studyLeaveOtherPurpose", "workingDays", "inclusiveDateFrom", "inclusiveDateTo", "division", "signatoryName", "signatoryPosition", "affixSignature", "status", "createdAt"])
         && request.resource.data.filedDate is string
         && request.resource.data.filedDate.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
         && request.resource.data.name is string
@@ -1472,13 +1857,30 @@ service cloud.firestore {
         && request.resource.data.signatoryName.size() > 0
         && request.resource.data.signatoryName.size() <= 120
         && request.resource.data.signatoryPosition in ["Chief", "OIC"]
+        && (!request.resource.data.keys().hasAny(["affixSignature"]) || request.resource.data.affixSignature == "No")
         && request.resource.data.status == "Pending"
         && request.resource.data.createdAt is timestamp;
       allow update: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
-        && resource.data.status == "Pending"
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
-        && request.resource.data.status in ["Pending", "Approved", "Disapproved"];
+        && (
+          (resource.data.status == "Pending"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"])
+            && request.resource.data.status in ["Pending", "Approved", "Disapproved"])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasAny(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+            && request.resource.data.affixSignature in ["Yes", "No"]
+            && (request.resource.data.affixSignature == "No"
+              ? !request.resource.data.keys().hasAny(["affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+              : request.resource.data.affixSignatureURL is string
+                && request.resource.data.affixSignatureURL.size() > 0
+                && request.resource.data.affixSignatureURL.size() <= 2048
+                && request.resource.data.affixSignatureName is string
+                && request.resource.data.affixSignatureName.size() > 0
+                && request.resource.data.affixSignatureName.size() <= 120
+                && request.resource.data.affixSignatureAt is timestamp
+                && request.resource.data.affixSignatureAt == request.time
+                && get(currentUserPath()).data.get("fullSignatureURL", "") == request.resource.data.affixSignatureURL
+                && get(currentUserPath()).data.get("name", "") == request.resource.data.affixSignatureName)));
       allow delete: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
         && resource.data.status == "Pending";
@@ -1587,13 +1989,35 @@ service cloud.firestore {
     match /ntaRecords/{ntaId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])));
+        || request.auth.uid in resource.data.get("recipientIds", [])))
+        || isFodNtaInitialSigner(resource.data)
+        || isFodNtaChiefSigner(resource.data);
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerUnit == signedInUnit();
+        && ownerUnitMatchesSignedIn(request.resource.data)
+        && validNtaSignatory(request.resource.data)
+        && (isFodNtaWorkflowOwner()
+          ? validFodNtaWorkflow(request.resource.data)
+          : !request.resource.data.keys().hasAny(["approvalWorkflow", "approvalStage", "initialSignerId", "chiefSignerId", "affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"]));
       allow update: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
+        && resource.data.get("affixInitialSignature", "No") != "Yes"
+        && resource.data.get("affixSignature", "No") != "Yes"
+        && !(resource.data.get("affixInitialSignatureURL", "") is string && resource.data.get("affixInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixSignatureURL", "") is string && resource.data.get("affixSignatureURL", "") != "")
+        && request.resource.data.get("ownerOffice", null) == resource.data.get("ownerOffice", null)
+        && request.resource.data.get("ownerDivision", null) == resource.data.get("ownerDivision", null)
+        && (resource.data.get("approvalWorkflow", "") != "fod"
+          || (request.resource.data.get("signatoryName", "") == resource.data.get("signatoryName", "")
+            && request.resource.data.get("signatoryDesignation", "") == resource.data.get("signatoryDesignation", "")))
+        && request.resource.data.get("signatoryAdminId", null) == resource.data.get("signatoryAdminId", null)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["signatoryAdminId", "approvalWorkflow", "approvalStage", "initialSignerId", "chiefSignerId", "affixInitialSignature", "affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
         && ownerUnitCanBeUpdated());
-      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid);
+      allow update: if canAffixFodNtaInitialSignature() || canAffixFodNtaChiefSignature();
+      allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
+        && resource.data.get("affixInitialSignature", "No") != "Yes"
+        && resource.data.get("affixSignature", "No") != "Yes"
+        && !(resource.data.get("affixInitialSignatureURL", "") is string && resource.data.get("affixInitialSignatureURL", "") != "")
+        && !(resource.data.get("affixSignatureURL", "") is string && resource.data.get("affixSignatureURL", "") != ""));
     }
     match /myNotes/{noteId} {
       allow read: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
@@ -1809,7 +2233,7 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && reportId == request.auth.uid + "_" + request.resource.data.month + (request.resource.data.cycle == 1 ? "_first" : "_second")
         && request.resource.data.keys().hasAll(["ownerId", "month", "cycle", "startDay", "endDay", "activities", "unit", "preparedName", "preparedPosition", "signatoryName", "signatoryPosition", "signatoryDivision", "createdAt"])
-        && request.resource.data.keys().hasOnly(["ownerId", "month", "cycle", "startDay", "endDay", "activities", "unit", "preparedName", "preparedPosition", "signatoryName", "signatoryPosition", "signatoryDivision", "createdAt"])
+        && request.resource.data.keys().hasOnly(["ownerId", "month", "cycle", "startDay", "endDay", "activities", "unit", "preparedName", "preparedPosition", "signatoryName", "signatoryPosition", "signatoryDivision", "affixSignature", "createdAt"])
         && request.resource.data.month is string
         && request.resource.data.month.size() == 7
         && ((request.resource.data.cycle == 1
@@ -1834,15 +2258,32 @@ service cloud.firestore {
         && request.resource.data.signatoryName.size() <= 120
         && request.resource.data.signatoryPosition in ["Chief", "OIC", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"]
         && request.resource.data.signatoryDivision in ["", "Administrative Division", "Agribusiness and Marketing Assistance Division", "Field Operations Division", "Finance Division", "Integrated Laboratories Division", "Planning, Monitoring and Evaluation Division", "Regional Agricultural Engineering Division", "Regulatory Division", "Research Division"]
+        && (!request.resource.data.keys().hasAny(["affixSignature"]) || request.resource.data.affixSignature == "No")
         && request.resource.data.createdAt is timestamp;
       allow update: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
-        && isAccomplishmentReportEditable(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasAny(["activities"])
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["activities"])
-        && request.resource.data.activities is list
-        && request.resource.data.activities.size() > 0
-        && request.resource.data.activities.size() <= 30;
+        && (
+          (isAccomplishmentReportEditable(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasAny(["activities"])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["activities"])
+            && request.resource.data.activities is list
+            && request.resource.data.activities.size() > 0
+            && request.resource.data.activities.size() <= 30)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasAny(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+            && request.resource.data.affixSignature in ["Yes", "No"]
+            && (request.resource.data.affixSignature == "No"
+              ? !request.resource.data.keys().hasAny(["affixSignatureURL", "affixSignatureName", "affixSignatureAt"])
+              : request.resource.data.affixSignatureURL is string
+                && request.resource.data.affixSignatureURL.size() > 0
+                && request.resource.data.affixSignatureURL.size() <= 2048
+                && request.resource.data.affixSignatureName is string
+                && request.resource.data.affixSignatureName.size() > 0
+                && request.resource.data.affixSignatureName.size() <= 120
+                && request.resource.data.affixSignatureAt is timestamp
+                && request.resource.data.affixSignatureAt == request.time
+                && get(currentUserPath()).data.get("fullSignatureURL", "") == request.resource.data.affixSignatureURL
+                && get(currentUserPath()).data.get("name", "") == request.resource.data.affixSignatureName)));
       allow delete: if false;
     }
   }

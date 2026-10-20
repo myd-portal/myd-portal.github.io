@@ -2,7 +2,6 @@ import { createRouteHandler, createUploadthing, UploadThingError, UTApi } from "
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const cleaningTaskUnits = new Set(["AGRISTAT", "AMIA", "DRRM"]);
-const cleaningTaskLeaderDesignation = "AGRISTAT/DRRM/AMIA Project Leader";
 
 function firebaseIdToken(request) {
   const [, idToken] = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i) ?? [];
@@ -140,24 +139,9 @@ function firestoreValue(value) {
   return undefined;
 }
 
-function normalizeUnit(value) {
-  const unit = typeof value === "string" ? value.trim() : "";
-  if (unit === "FOD-AGRISTAT") return "AGRISTAT";
-  if (unit === "FOD-AMIA") return "AMIA";
-  if (unit === "FOD-DRRM") return "DRRM";
-  return unit;
-}
-
-function profileUnit(profile) {
-  if (profile.profileFieldsVersion >= 4) return normalizeUnit(profile.unit || profile.division);
-  return normalizeUnit(profile.assignment || profile.projectProgram || profile.unit || profile.office || "");
-}
-
 function isEligibleCleaningTaskProfile(profile) {
   if (!profile || (profile.accountStatus ?? "Approved") !== "Approved") return false;
-  const role = profile.accountRole;
-  return ((role === "regular" || role === "user") && cleaningTaskUnits.has(profileUnit(profile)))
-    || (role === "admin" && profile.designation?.trim() === cleaningTaskLeaderDesignation);
+  return ["regular", "user", "admin", "superadmin"].includes(profile.accountRole);
 }
 
 function manilaCurrentWeekStart(now = new Date()) {
@@ -189,6 +173,27 @@ function createUploadRouter(env) {
       })
       .onUploadComplete(async ({ file }) => ({ photoURL: file.ufsUrl })),
 
+    profileSignature: upload({
+      image: { maxFileSize: "4MB", maxFileCount: 1 },
+    })
+      .middleware(async ({ req, files }) => {
+        const idToken = firebaseIdToken(req);
+        const user = await verifiedFirebaseUser(idToken, env.FIREBASE_API_KEY);
+        if (!user) throw new UploadThingError("A verified account is required to upload a signature.");
+        if (files.length !== 1 || files[0].type !== "image/png" || !files[0].name.toLowerCase().endsWith(".png")) {
+          throw new UploadThingError("Choose a PNG signature image.");
+        }
+
+        const profile = await getFirestoreDocument(env, idToken, "users", user.localId);
+        const role = profile?.accountRole;
+        if (!profile || (profile.accountStatus ?? "Approved") !== "Approved"
+          || !["regular", "user", "admin", "superadmin"].includes(role)) {
+          throw new UploadThingError("Signature uploads are available to approved Regular and Admin accounts.");
+        }
+        return { userId: user.localId };
+      })
+      .onUploadComplete(async ({ file }) => ({ signatureURL: file.ufsUrl })),
+
     cleaningTaskImage: upload({
       blob: { maxFileSize: "32MB", maxFileCount: 1 },
     })
@@ -202,20 +207,19 @@ function createUploadRouter(env) {
 
         const profile = await getFirestoreDocument(env, idToken, "users", user.localId);
         if (!isEligibleCleaningTaskProfile(profile)) {
-          throw new UploadThingError("Cleaning Task uploads are available only to an eligible Regular account or the AGRISTAT/DRRM/AMIA Project Leader Admin.");
+          throw new UploadThingError("Cleaning Task uploads are available to verified, approved accounts.");
         }
 
-        const unit = profileUnit(profile);
         const weekStart = manilaCurrentWeekStart();
         const assignment = await getFirestoreDocument(env, idToken, "cleaningTaskAssignments", weekStart);
         const now = Date.now();
-        if (!assignment || assignment.unit !== unit
+        if (!assignment || !cleaningTaskUnits.has(assignment.unit)
           || !(assignment.startAt instanceof Date) || !(assignment.endAt instanceof Date)
           || now < assignment.startAt.getTime() || now >= assignment.endAt.getTime()) {
-          throw new UploadThingError("Your Unit / Program / Project is not assigned for the current work week.");
+          throw new UploadThingError("There is no active Cleaning Task assignment for the current work week.");
         }
 
-        return { userId: user.localId, unit, weekStart };
+        return { userId: user.localId, unit: assignment.unit, weekStart };
       })
       .onUploadComplete(async ({ file }) => ({ imageURL: file.ufsUrl, fileKey: file.key })),
 
@@ -348,12 +352,12 @@ async function deletePreviousCleaningTaskImage(request, env) {
   const profile = await getFirestoreDocument(env, idToken, "users", user.localId);
   if (!isEligibleCleaningTaskProfile(profile)) return new Response("Forbidden", { status: 403 });
 
-  const { unit, fileKey } = await request.json().catch(() => ({}));
-  if (!cleaningTaskUnits.has(unit) || typeof fileKey !== "string" || !/^[\w.-]{1,128}$/.test(fileKey)) {
+  const { unit, imageId, fileKey } = await request.json().catch(() => ({}));
+  if (!cleaningTaskUnits.has(unit) || imageId !== "current" || typeof fileKey !== "string" || !/^[\w.-]{1,128}$/.test(fileKey)) {
     return new Response("Invalid Cleaning Task image", { status: 400 });
   }
-  const image = await getFirestoreDocument(env, idToken, "cleaningTaskImages", unit);
-  if (!image || image.uploaderId !== user.localId || image.previousFileKey !== fileKey) {
+  const image = await getFirestoreDocument(env, idToken, "cleaningTaskImages", imageId);
+  if (!image || image.unit !== unit || image.previousFileKey !== fileKey || !image.previousFileOwnerId) {
     return new Response("The previous image does not belong to this Cleaning Task replacement", { status: 403 });
   }
   await new UTApi({ token: env.UPLOADTHING_TOKEN }).deleteFiles(fileKey);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PDFFont, PDFPage, RGB } from "pdf-lib";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
-import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import { accountOffice } from "@/lib/account-profile";
@@ -52,6 +52,10 @@ type LeaveApplicationRecord = {
   division?: TevDivision;
   signatoryName?: string;
   signatoryPosition?: "Chief" | "OIC";
+  affixSignature?: "Yes" | "No";
+  affixSignatureURL?: string;
+  affixSignatureName?: string;
+  affixSignatureAt?: unknown;
   status: LeaveStatus;
   createdAt?: unknown;
 };
@@ -88,6 +92,24 @@ function localDateValue() {
 function formatDate(value: string) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function timestampMillis(value: unknown) {
+  if (value && typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function") return value.toMillis() as number;
+  return value instanceof Date ? value.getTime() : 0;
+}
+
+function signatureDate(value: unknown) {
+  const millis = timestampMillis(value);
+  if (!millis) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(millis));
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}.${part("month")}.${part("day")}`;
+}
+
+function signatureTime(value: unknown) {
+  const millis = timestampMillis(value);
+  return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +0800` : "";
 }
 
 function middleInitial(value: string) {
@@ -289,6 +311,22 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   drawFitText(page, bold, String(record.workingDays), 98.27, 466.51, 240, 9.5);
   drawFitText(page, bold, inclusiveDates(record), 97.65, 429.73, 303, 9.5);
 
+  if (record.affixSignature === "Yes" && record.affixSignatureURL) {
+    const signatureResponse = await fetch(record.affixSignatureURL, { cache: "force-cache", mode: "cors" });
+    if (!signatureResponse.ok) throw new Error("The saved Full Signature could not be loaded for this Leave Application.");
+    const signatureImage = await pdf.embedPng(await signatureResponse.arrayBuffer());
+    const signatureImageX = 520;
+    const fittedSignature = signatureImage.scaleToFit(68, 35);
+    const signatureTextX = signatureImageX + fittedSignature.width + 6;
+    const signatureBlockWidth = 116;
+    const signatureName = safePdfText((record.affixSignatureName || fullName(record)).toLocaleUpperCase("en-PH"));
+    drawFitText(page, font, "Digitally Signed By", signatureTextX, 474, signatureBlockWidth, 7);
+    drawFitText(page, bold, signatureName, signatureTextX, 465, signatureBlockWidth, 7);
+    drawFitText(page, font, `Date: ${signatureDate(record.affixSignatureAt)}`, signatureTextX, 456, signatureBlockWidth, 7);
+    drawFitText(page, font, `Time: ${signatureTime(record.affixSignatureAt)}`, signatureTextX, 447, signatureBlockWidth, 7);
+    page.drawImage(signatureImage, { x: signatureImageX, y: 445, width: fittedSignature.width, height: fittedSignature.height });
+  }
+
   if (record.division && record.signatoryName && record.signatoryPosition) {
     const signatureCenter = 561.6;
     const signatureMaxWidth = 205;
@@ -330,6 +368,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [affixUpdatingId, setAffixUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<LeaveApplicationRecord | null>(null);
   const [error, setError] = useState("");
@@ -342,7 +381,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const handledFocusIdRef = useRef<string | null>(null);
 
-  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; applicant?: { first: string; middle: string; last: string } }>({ name: user.displayName ?? "", office: "", position: "" });
+  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; fullSignatureURL: string; applicant?: { first: string; middle: string; last: string } }>({ name: user.displayName ?? "", office: "", position: "", fullSignatureURL: "" });
   const [filedDate, setFiledDate] = useState(localDateValue());
   const [firstName, setFirstName] = useState(() => parseName(user.displayName ?? "").first);
   const [middleName, setMiddleName] = useState(() => parseName(user.displayName ?? "").middle);
@@ -402,6 +441,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
           name: typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "",
           position: typeof profile.position === "string" ? profile.position : "",
           office: officeFromProfile(accountOffice(profile)),
+          fullSignatureURL: typeof profile.fullSignatureURL === "string" ? profile.fullSignatureURL : "",
           applicant,
         };
         setProfileDefaults(defaults);
@@ -416,6 +456,19 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
     }
     void loadProfileDefaults();
     return () => { active = false; };
+  }, [user.uid]);
+
+  useEffect(() => {
+    if (!db) return;
+    return onSnapshot(doc(db, "users", user.uid), (snapshot) => {
+      if (!snapshot.exists()) return;
+      const profile = snapshot.data();
+      setProfileDefaults((current) => ({
+        ...current,
+        name: typeof profile.name === "string" && profile.name.trim() ? profile.name : current.name,
+        fullSignatureURL: typeof profile.fullSignatureURL === "string" ? profile.fullSignatureURL : "",
+      }));
+    });
   }, [user.uid]);
 
   useEffect(() => () => {
@@ -545,6 +598,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
         division,
         signatoryName: selectedDivisionSignatory.name,
         signatoryPosition: selectedDivisionSignatory.position,
+        affixSignature: "No" as const,
         status: "Pending",
         createdAt: serverTimestamp(),
       };
@@ -605,6 +659,47 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
       const code = (cause as { code?: string }).code;
       setError(code ? `Could not update Leave Application status (${code}).` : "Could not update Leave Application status.");
     } finally { setUpdatingId(null); }
+  }
+
+  async function changeAffixSignature(record: LeaveApplicationRecord, value: "Yes" | "No") {
+    if (!db) { setError("Firebase is not configured."); return; }
+    if (value === "Yes" && (!profileDefaults.fullSignatureURL.trim() || !profileDefaults.name.trim())) {
+      setError("Upload your Full Signature in Profile before affixing it to a Leave Application.");
+      return;
+    }
+    setAffixUpdatingId(record.id);
+    setError("");
+    setMessage("");
+    const signatureFields = value === "Yes"
+      ? {
+          affixSignature: "Yes" as const,
+          affixSignatureURL: profileDefaults.fullSignatureURL.trim(),
+          affixSignatureName: profileDefaults.name.trim(),
+          affixSignatureAt: serverTimestamp(),
+        }
+      : {
+          affixSignature: "No" as const,
+          affixSignatureURL: deleteField(),
+          affixSignatureName: deleteField(),
+          affixSignatureAt: deleteField(),
+        };
+    try {
+      await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
+      let updatedRecord: LeaveApplicationRecord = value === "Yes"
+        ? { ...record, affixSignature: "Yes", affixSignatureURL: profileDefaults.fullSignatureURL.trim(), affixSignatureName: profileDefaults.name.trim(), affixSignatureAt: new Date() }
+        : { ...record, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
+      try {
+        const savedRecord = await getDoc(doc(db, "leaveApplications", record.id));
+        if (savedRecord.exists()) updatedRecord = { id: record.id, ...savedRecord.data(), status: leaveStatuses.includes(savedRecord.data().status) ? savedRecord.data().status : "Pending" } as LeaveApplicationRecord;
+      } catch {
+        // Keep the successful update and local timestamp if the follow-up read fails.
+      }
+      setRecords((current) => current.map((item) => item.id === record.id ? updatedRecord : item));
+      setMessage(value === "Yes" ? "Signature affixed to this Leave Application." : "Signature removed from this Leave Application.");
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code ? `Could not update the Leave Application signature (${code}).` : "Could not update the Leave Application signature. Try again.");
+    } finally { setAffixUpdatingId(null); }
   }
 
   async function deleteRecord(record: LeaveApplicationRecord) {
@@ -714,11 +809,12 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
       <div className="section-heading leave-application-heading"><div><p className="eyebrow">Generated reports</p><h2>Leave Applications</h2><p className="muted">{records.length} {records.length === 1 ? "application" : "applications"} registered to your account.</p></div><button type="button" className="primary-button" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add</button></div>
       {loading ? <p className="muted">Loading Leave Applications...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Leave Applications yet</h3><p>Create a Leave Application to view or download the completed CSC form.</p><button type="button" className="text-button plain-action document-create-action" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add a Leave Application</button></div> : <div className="leave-application-records">
         <RecordPagination totalRecords={records.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Leave Application" />
-        <div className="leave-application-record-head"><span>Date Filed</span><span>Name</span><span>Type of Leave</span><span>Inclusive Dates</span><span>Status</span><span aria-hidden="true" /></div>
+        <div className="leave-application-record-head"><span>Date Filed</span><span>Type of Leave</span><span>Inclusive Dates</span><span>Affix Signature</span><span>Status</span><span aria-hidden="true" /></div>
         {visibleRecords.map((record) => <article className="leave-application-record" key={record.id}>
-          <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><strong className="leave-application-record-name">{fullName(record)}</strong><span className="leave-application-record-type">{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatDate(record.inclusiveDateFrom)}{record.inclusiveDateTo !== record.inclusiveDateFrom && ` – ${formatDate(record.inclusiveDateTo)}`}</span>
-          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for ${fullName(record)}`} value={record.status} disabled={record.status !== "Pending" || updatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}</label>
-          <div className="leave-application-actions"><button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{record.status === "Pending" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
+          <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><span className="leave-application-record-type">{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatDate(record.inclusiveDateFrom)}{record.inclusiveDateTo !== record.inclusiveDateFrom && ` – ${formatDate(record.inclusiveDateTo)}`}</span>
+          <label className="leave-application-affix"><select className="affix-signature-select" aria-label={`Affix signature for Leave Application filed ${formatDate(record.filedDate)}`} title={profileDefaults.fullSignatureURL ? undefined : "Upload your Full Signature in Profile to enable Yes."} value={record.affixSignature === "Yes" ? "Yes" : "No"} disabled={affixUpdatingId === record.id || updatingId === record.id || deletingId !== null} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}><option value="Yes" disabled={!profileDefaults.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label>
+          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={record.status !== "Pending" || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}</label>
+          <div className="leave-application-actions"><button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{record.status === "Pending" && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
         </article>)}
       </div>}
     </>}

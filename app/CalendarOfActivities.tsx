@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch, type DocumentReference } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch, type DocumentReference } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import NameSearchSelect from "./NameSearchSelect";
@@ -59,12 +59,16 @@ type CalendarOfActivities = {
   activities: CalendarOfActivitiesRow[];
   preparedName: string;
   preparedPosition: string;
+  affixSignature?: "Yes" | "No";
+  affixSignatureURL?: string;
+  affixSignatureName?: string;
+  affixSignatureAt?: unknown;
   checkedBy?: CalendarOfActivitiesAdminSignatory;
   notedBy?: CalendarOfActivitiesAdminSignatory;
   approvedBy?: CalendarOfActivitiesApprover;
   createdAt?: unknown;
 };
-type Profile = { name: string; position: string; office: string; division: string; unit: Unit };
+type Profile = { name: string; position: string; office: string; division: string; unit: Unit; fullSignatureURL: string };
 type CalendarOfActivitiesAdminSignatory = { userId: string; name: string; designation: string; position: string; assignment: string };
 type CalendarOfActivitiesApprover = { name: string; designation: "Regional Executive Director" | "RTD for Operations" | "RTD for Research and Regulation" };
 type Account = { id: string; name: string; adminAccount: boolean; designation: string; position: string; assignment: string };
@@ -147,6 +151,19 @@ function timestampMillis(value: unknown) {
   return 0;
 }
 
+function signatureDate(value: unknown) {
+  const millis = timestampMillis(value);
+  if (!millis) return "";
+  const dateParts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(millis));
+  const part = (type: string) => dateParts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}.${part("month")}.${part("day")}`;
+}
+
+function signatureTime(value: unknown) {
+  const millis = timestampMillis(value);
+  return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +0800` : "";
+}
+
 const compareActivityDates = (first: CalendarOfActivitiesRow, second: CalendarOfActivitiesRow) => first.dateFrom.localeCompare(second.dateFrom) || first.dateTo.localeCompare(second.dateTo);
 
 function activityPages(activities: CalendarOfActivitiesRow[]) {
@@ -169,9 +186,9 @@ function CalendarOfActivitiesPaper({ plan, activities, pageNumber, pageCount }: 
     <table className="calendar-of-activities-paper-table"><thead><tr><th>Date</th><th>Activity</th><th>Location</th><th>Responsible Personnel</th></tr></thead><tbody>
       {chronologicalActivities.map((activity, index) => <tr key={`${activity.dateFrom}-${activity.activity}-${index}`}><td className="calendar-of-activities-paper-date">{formatDateRange(activity.dateFrom, activity.dateTo)}</td><td>{activity.activity}</td><td>{activity.location}</td><td><div className="calendar-of-activities-paper-responsible">{activity.responsiblePeople.map((person, personIndex) => <span key={person.userId}>{personIndex + 1}) {person.name}</span>)}</div></td></tr>)}
     </tbody></table>
-    <footer className="calendar-of-activities-paper-footer">
+    <footer className={`calendar-of-activities-paper-footer${plan.affixSignature === "Yes" && plan.affixSignatureURL ? " has-affixed-signature" : ""}`}>
       {isLastPage && <>
-        <div className="calendar-of-activities-paper-signatory"><span>Prepared:</span><strong>{plan.preparedName}</strong><em>{plan.preparedPosition}</em></div>
+        <div className={`calendar-of-activities-paper-signatory${plan.affixSignature === "Yes" && plan.affixSignatureURL ? " is-affixed" : ""}`}><span>Prepared:</span>{plan.affixSignature === "Yes" && plan.affixSignatureURL && <div className="calendar-of-activities-paper-digital-signature"><img src={plan.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${plan.affixSignatureName || plan.preparedName}`} /><div><span>Digitally Signed By</span><strong>{(plan.affixSignatureName || plan.preparedName).toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(plan.affixSignatureAt)}</small><small>Time: {signatureTime(plan.affixSignatureAt)}</small></div></div>}<strong>{plan.preparedName}</strong><em>{plan.preparedPosition}</em></div>
         <div className="calendar-of-activities-paper-signatory"><span>Checked:</span>{plan.checkedBy ? <><strong>{plan.checkedBy.name.toLocaleUpperCase("en-PH")}</strong><em>{plan.checkedBy.designation} / {plan.checkedBy.position}</em></> : <><strong>{fixedCalendarOfActivitiesSignatories[0].name}</strong><em>{`${checkedRoleByUnit[plan.unit]}${plan.unit === "Field Operations Division" ? "" : " / Agriculturist II"}`}</em></>}</div>
         <div className="calendar-of-activities-paper-signatory"><span>Noted:</span>{plan.notedBy ? <><strong>{plan.notedBy.name.toLocaleUpperCase("en-PH")}</strong><div className="calendar-of-activities-paper-signatory-title"><em>{plan.notedBy.designation}</em>{plan.notedBy.designation === "Chief" && plan.notedBy.assignment === "Field Operations Division" ? ", " : " / "}{plan.notedBy.assignment}</div></> : <><strong>{fixedCalendarOfActivitiesSignatories[1].name}</strong><em>{fixedCalendarOfActivitiesSignatories[1].position}</em></>}</div>
         <div className="calendar-of-activities-paper-signatory"><span>Approved:</span>{plan.approvedBy ? <><strong>{plan.approvedBy.name.toLocaleUpperCase("en-PH")}</strong><div className="calendar-of-activities-paper-signatory-title"><em>{plan.approvedBy.designation}</em></div></> : <><strong>{fixedCalendarOfActivitiesSignatories[2].name}</strong><em>{fixedCalendarOfActivitiesSignatories[2].position}</em></>}</div>
@@ -318,6 +335,7 @@ function CalendarOfActivitiesForm({ user, profile, accounts, adminAccounts, plan
       activities: rows,
       preparedName: profile.name.trim(),
       preparedPosition: profile.position.trim(),
+      affixSignature: "No",
       ...signatories,
       createdAt: serverTimestamp(),
     };
@@ -453,18 +471,20 @@ function CalendarOfActivitiesForm({ user, profile, accounts, adminAccounts, plan
   </section>;
 }
 
-function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView, onDelete, onStatusChange, deletingId, updatingStatusId, adminRecordsOnly = false }: { plans: CalendarOfActivities[]; currentUserId: string; onNew: () => void; onEdit: (plan: CalendarOfActivities) => void; onView: (plan: CalendarOfActivities) => void; onDelete: (plan: CalendarOfActivities) => void; onStatusChange: (plan: CalendarOfActivities, status: CalendarOfActivitiesStatus) => void; deletingId: string | null; updatingStatusId: string | null; adminRecordsOnly?: boolean }) {
+function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView, onDelete, onStatusChange, onAffixSignatureChange, signatureAvailable, deletingId, updatingStatusId, updatingAffixSignatureId, adminRecordsOnly = false }: { plans: CalendarOfActivities[]; currentUserId: string; onNew: () => void; onEdit: (plan: CalendarOfActivities) => void; onView: (plan: CalendarOfActivities) => void; onDelete: (plan: CalendarOfActivities) => void; onStatusChange: (plan: CalendarOfActivities, status: CalendarOfActivitiesStatus) => void; onAffixSignatureChange: (plan: CalendarOfActivities, value: "Yes" | "No") => void; signatureAvailable: boolean; deletingId: string | null; updatingStatusId: string | null; updatingAffixSignatureId: string | null; adminRecordsOnly?: boolean }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(plans);
   return <section className="content-section calendar-of-activities-list-section">
     <div className="section-heading"><div><p className="eyebrow">{adminRecordsOnly ? "Approved records" : "Unit / Program / Project records"}</p><h2>{adminRecordsOnly ? "Calendar of Activities Records" : "Calendar of Activities"}</h2><p className="muted">{adminRecordsOnly ? `${plans.length} approved calendar ${plans.length === 1 ? "record" : "records"}.` : `${plans.length} calendar ${plans.length === 1 ? "record" : "records"} available to your Unit / Program / Project.`}</p></div>{!adminRecordsOnly && <button type="button" className="primary-button" onClick={onNew}>Add</button>}</div>
     {plans.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>{adminRecordsOnly ? "No approved records yet" : "No calendars of activities yet"}</h3>{!adminRecordsOnly && <><p>Create a monthly calendar and notify responsible colleagues in your Unit / Program / Project.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Add a Calendar of Activities</button></>}</div> : <div className="permit-table calendar-of-activities-list">
-      <div className="table-head calendar-of-activities-list-head"><span>Month and Year</span><span>Unit / Program / Project</span><span>Activities</span><span>Status</span></div>
+      <div className="table-head calendar-of-activities-list-head"><span>Month and Year</span><span>Activities</span><span>Affix Signature</span><span>Status</span></div>
       {visibleRecords.map((plan) => {
         const status = calendarOfActivitiesStatus(plan);
+        const affixSignature = plan.affixSignature === "Yes" ? "Yes" : "No";
+        const canEditAffixSignature = !adminRecordsOnly && plan.ownerId === currentUserId && status === "Pending";
         return <div className="table-row calendar-of-activities-list-row" key={plan.id}>
           <strong>{formatMonth(plan.month)}</strong>
-          <span className="calendar-of-activities-list-unit">{unitLabel(plan.unit)}</span>
           <span className="calendar-of-activities-list-count">{plan.activities.length}</span>
+          <label className="calendar-of-activities-list-affix"><select className="affix-signature-select" aria-label={`Affix signature for ${unitLabel(plan.unit)}, ${formatMonth(plan.month)}`} value={affixSignature} disabled={!canEditAffixSignature || updatingAffixSignatureId !== null || deletingId !== null || updatingStatusId !== null} title={!signatureAvailable && canEditAffixSignature ? "Upload your Full Signature in Profile to enable this option." : undefined} onChange={(event) => onAffixSignatureChange(plan, event.target.value as "Yes" | "No")}><option value="Yes" disabled={canEditAffixSignature && !signatureAvailable}>Yes</option><option value="No">No</option></select></label>
           {adminRecordsOnly ? <span className="travel-order-status calendar-of-activities-list-status"><strong className="calendar-of-activities-status-badge is-approved">Approved</strong></span> : <label className={`travel-order-status travel-order-status-${status.toLowerCase()} calendar-of-activities-list-status`}><select aria-label={`Status for ${unitLabel(plan.unit)}, ${formatMonth(plan.month)}`} value={status} disabled={status !== "Pending" || updatingStatusId !== null || deletingId !== null} onChange={(event) => onStatusChange(plan, event.target.value as CalendarOfActivitiesStatus)}><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Disapproved">Disapproved</option></select></label>}
           <span className="travel-order-row-actions calendar-of-activities-row-actions">{adminRecordsOnly ? <button type="button" className="row-action" onClick={() => onView(plan)}>View</button> : <>{status === "Pending" && <button type="button" className="row-action" disabled={updatingStatusId !== null || deletingId !== null} onClick={() => onEdit(plan)}>Edit</button>}<button type="button" className="row-action" disabled={deletingId !== null} onClick={() => onView(plan)}>View</button>{plan.ownerId === currentUserId && status === "Pending" && <button type="button" className="delete-button" disabled={updatingStatusId !== null || deletingId !== null} onClick={() => onDelete(plan)}>{deletingId === plan.id ? "Deleting…" : "Delete"}</button>}</>}</span>
         </div>;
@@ -485,6 +505,7 @@ export default function CalendarOfActivitiesModule({ user, mode = "prepared", pr
   const [pendingDelete, setPendingDelete] = useState<CalendarOfActivities | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [updatingAffixSignatureId, setUpdatingAffixSignatureId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const handledFocusIdRef = useRef<string | null>(null);
@@ -512,7 +533,7 @@ export default function CalendarOfActivitiesModule({ user, mode = "prepared", pr
         const { office, division } = selection;
         const unit = selection.unit || selection.division;
         if (!office || !division || !unit) throw new Error("Set your Office, Division, and Unit / Program / Project in Profile to view its Calendar of Activities.");
-        const loadedProfile: Profile = { name: typeof profileData.name === "string" ? profileData.name : "", position: typeof profileData.position === "string" ? profileData.position : "", office, division, unit };
+        const loadedProfile: Profile = { name: typeof profileData.name === "string" ? profileData.name : "", position: typeof profileData.position === "string" ? profileData.position : "", office, division, unit, fullSignatureURL: typeof profileData.fullSignatureURL === "string" ? profileData.fullSignatureURL : "" };
         if (!cancelled) setProfile(loadedProfile);
         const [allAccountsSnapshot, unitPlansSnapshot, ownedPlansSnapshot] = await Promise.all([
           getDocs(collection(firestore, "users")),
@@ -614,6 +635,40 @@ export default function CalendarOfActivitiesModule({ user, mode = "prepared", pr
     } finally { setUpdatingStatusId(null); }
   }
 
+  async function updateCalendarAffixSignature(plan: CalendarOfActivities, value: "Yes" | "No") {
+    if (!db || !profile || updatingAffixSignatureId || plan.ownerId !== user.uid || calendarOfActivitiesStatus(plan) !== "Pending") return;
+    const currentValue = plan.affixSignature === "Yes" ? "Yes" : "No";
+    if (currentValue === value) return;
+    const signatureURL = profile.fullSignatureURL.trim();
+    if (value === "Yes" && !signatureURL) {
+      setError("Upload your Full Signature in Profile before affixing it to a Calendar of Activities.");
+      return;
+    }
+    setUpdatingAffixSignatureId(plan.id);
+    setError("");
+    const planRef = doc(db, calendarOfActivitiesCollection, plan.id);
+    try {
+      const signatureFields = value === "Yes"
+        ? { affixSignature: value, affixSignatureURL: signatureURL, affixSignatureName: profile.name.trim(), affixSignatureAt: serverTimestamp() }
+        : { affixSignature: value, affixSignatureURL: deleteField(), affixSignatureName: deleteField(), affixSignatureAt: deleteField() };
+      await updateDoc(planRef, signatureFields);
+      let affixedAt: unknown = value === "Yes" ? new Date() : undefined;
+      if (value === "Yes") {
+        try {
+          const savedPlan = await getDoc(planRef);
+          if (savedPlan.exists()) affixedAt = savedPlan.data().affixSignatureAt ?? affixedAt;
+        } catch { /* Keep the local click time if the follow-up server read is unavailable. */ }
+      }
+      const signatureUpdate: Partial<CalendarOfActivities> = value === "Yes"
+        ? { affixSignature: value, affixSignatureURL: signatureURL, affixSignatureName: profile.name.trim(), affixSignatureAt: affixedAt }
+        : { affixSignature: value, affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
+      setPlans((current) => current.map((item) => item.id === plan.id ? { ...item, ...signatureUpdate } : item));
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code ? `Could not update the Calendar of Activities signature choice (${code}).` : "Could not update the Calendar of Activities signature choice.");
+    } finally { setUpdatingAffixSignatureId(null); }
+  }
+
   async function deleteCalendarOfActivities(plan: CalendarOfActivities) {
     const firestore = db;
     if (!firestore) return;
@@ -649,7 +704,7 @@ export default function CalendarOfActivitiesModule({ user, mode = "prepared", pr
 
   return <>
     {error && <div className="error-message calendar-of-activities-error" role="alert">{error}</div>}
-    {loading ? <section className="content-section"><p className="muted">Loading Calendar of Activities records…</p></section> : mode === "prepared" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Calendar of Activities.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={plans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Calendar of Activities."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} deletingId={deletingId} updatingStatusId={updatingStatusId} adminRecordsOnly={mode === "approved-records"} />}
+    {loading ? <section className="content-section"><p className="muted">Loading Calendar of Activities records…</p></section> : mode === "prepared" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Calendar of Activities.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={plans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Calendar of Activities."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} onAffixSignatureChange={(plan, value) => void updateCalendarAffixSignature(plan, value)} signatureAvailable={Boolean(profile?.fullSignatureURL.trim())} deletingId={deletingId} updatingStatusId={updatingStatusId} updatingAffixSignatureId={updatingAffixSignatureId} adminRecordsOnly={mode === "approved-records"} />}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Calendar of Activities Deletion?" description="Are you sure you want to delete this Calendar of Activities? This action cannot be undone, and its activity notifications will also be removed." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteCalendarOfActivities(pendingDelete); }} />
     {preview && <CalendarOfActivitiesPreview plan={preview} onClose={closePreview} />}
   </>;

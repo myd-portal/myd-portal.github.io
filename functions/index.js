@@ -52,6 +52,360 @@ export const getUserEmailForPasswordReset = onCall({ region: "asia-southeast1" }
   }
 });
 
+function requiredSpecialOrderText(value, field, maxLength) {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${field} is required.`);
+  }
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) {
+    throw new HttpsError("invalid-argument", `${field} must be between 1 and ${maxLength} characters.`);
+  }
+  return normalized;
+}
+
+function specialOrderTextArray(value, field, { allowEmpty = false, maxLength = 120, maxItems = 100 } = {}) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxItems) {
+    throw new HttpsError("invalid-argument", `${field} must contain between 1 and ${maxItems} entries.`);
+  }
+  return value.map((entry) => {
+    if (typeof entry !== "string" || entry.trim().length > maxLength || (!allowEmpty && !entry.trim())) {
+      throw new HttpsError("invalid-argument", `${field} contains an invalid entry.`);
+    }
+    return entry.trim();
+  });
+}
+
+function hasSpecialOrderDesignation(value, designation) {
+  return typeof value === "string"
+    && value.split(";").map((entry) => entry.trim()).includes(designation);
+}
+
+export const createFodSpecialOrder = onCall({ region: "asia-southeast1" }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError("unauthenticated", "Sign in with a verified email before creating a Special Order.");
+  }
+
+  const ownerId = request.auth.uid;
+  const ownerSnapshot = await db.collection("users").doc(ownerId).get();
+  if (!ownerSnapshot.exists) {
+    throw new HttpsError("failed-precondition", "Your user profile could not be found.");
+  }
+  const owner = ownerSnapshot.data();
+  const role = typeof owner.accountRole === "string" ? owner.accountRole.toLowerCase() : "";
+  if (!(["regular", "user"].includes(role)
+      && (owner.accountStatus === undefined || owner.accountStatus === null || owner.accountStatus === "Approved")
+      && owner.office === "Division"
+      && owner.division === "Field Operations Division"
+      && ["AGRISTAT", "DRRM", "AMIA"].includes(owner.unit))) {
+    throw new HttpsError("permission-denied", "Only an approved Regular account in AGRISTAT, DRRM, or AMIA can use this Special Order route.");
+  }
+
+  const orderId = request.data?.orderId;
+  if (typeof orderId !== "string" || !/^[A-Za-z0-9_-]{20}$/.test(orderId)) {
+    throw new HttpsError("invalid-argument", "A valid Special Order ID is required.");
+  }
+  const signatoryName = requiredSpecialOrderText(request.data?.signatoryName, "Signatory name", 120);
+  const signatoryDesignation = requiredSpecialOrderText(request.data?.signatoryDesignation, "Signatory designation", 120);
+  const subject = requiredSpecialOrderText(request.data?.subject, "Subject", 500);
+  const activityTitle = requiredSpecialOrderText(request.data?.activityTitle, "Activity title", 500);
+  const organizer = requiredSpecialOrderText(request.data?.organizer, "Organizer or host", 300);
+  const dateFrom = requiredSpecialOrderText(request.data?.dateFrom, "Start date", 40);
+  const dateTo = requiredSpecialOrderText(request.data?.dateTo, "End date", 40);
+  const timeFrom = requiredSpecialOrderText(request.data?.timeFrom, "Start time", 20);
+  const timeTo = requiredSpecialOrderText(request.data?.timeTo, "End time", 20);
+  const venue = requiredSpecialOrderText(request.data?.venue, "Venue", 500);
+  const participants = specialOrderTextArray(request.data?.participants, "Designated personnel", { maxLength: 120 });
+  const participantPositions = specialOrderTextArray(request.data?.participantPositions, "Personnel positions", { allowEmpty: true });
+  const participantUnits = specialOrderTextArray(request.data?.participantUnits, "Personnel units", { allowEmpty: true });
+  const participantUserIds = specialOrderTextArray(request.data?.participantUserIds, "Personnel user IDs", { allowEmpty: true, maxLength: 128 });
+  if (participantPositions.length !== participants.length
+      || participantUnits.length !== participants.length
+      || participantUserIds.length !== participants.length) {
+    throw new HttpsError("invalid-argument", "Personnel names and details must have matching lengths.");
+  }
+  const participantIds = [...new Set(participantUserIds.filter(Boolean))];
+
+  const routeSnapshot = await db.collection("users")
+    .where("unit", "==", "Field Operations Division")
+    .get();
+  const routeAccounts = routeSnapshot.docs
+    .map((document) => ({ ...document.data(), userId: document.id }))
+    .filter((account) => account.accountRole === "admin"
+      && (account.accountStatus === undefined || account.accountStatus === null || account.accountStatus === "Approved")
+      && account.office === "Division"
+      && account.division === "Field Operations Division"
+      && account.unit === "Field Operations Division")
+    .sort((first, second) => first.userId.localeCompare(second.userId));
+  const projectLeader = routeAccounts.find((account) => hasSpecialOrderDesignation(account.designation, "AGRISTAT/DRRM/AMIA Project Leader"));
+  const chief = routeAccounts.find((account) => hasSpecialOrderDesignation(account.designation, "Chief"));
+  if (!projectLeader) {
+    throw new HttpsError("failed-precondition", "An approved Field Operations Division Project Leader Admin account is required.");
+  }
+  if (!chief) {
+    throw new HttpsError("failed-precondition", "An approved Field Operations Division Chief Admin account is required.");
+  }
+  if (projectLeader.userId === chief.userId || projectLeader.userId === ownerId || chief.userId === ownerId) {
+    throw new HttpsError("failed-precondition", "The Special Order approval route must use distinct approver accounts.");
+  }
+
+  const orderReference = db.collection("specialOrders").doc(orderId);
+  const record = {
+    subject,
+    activityTitle,
+    organizer,
+    dateFrom,
+    dateTo,
+    timeFrom,
+    timeTo,
+    venue,
+    participants,
+    participantPositions,
+    participantUnits,
+    participantUserIds,
+    participantIds,
+    recipientIds: participantIds.filter((userId) => userId !== ownerId),
+    signatoryName,
+    signatoryDesignation,
+    ownerId,
+    ownerOffice: owner.office,
+    ownerDivision: owner.division,
+    ownerUnit: owner.unit,
+    approvalWorkflow: "fod",
+    approvalStage: "initial",
+    externalSignatory: ["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation),
+    initialSignerId: projectLeader.userId,
+    chiefSignerId: chief.userId,
+    affixInitialSignature: "No",
+    affixChiefInitialSignature: "No",
+    createdAt: FieldValue.serverTimestamp(),
+  };
+
+  try {
+    await orderReference.create(record);
+  } catch (error) {
+    logger.error("Could not create the FOD Special Order", { ownerId, orderId, error });
+    throw new HttpsError("internal", "Could not save the Special Order.");
+  }
+  return { orderId, initialSignerId: projectLeader.userId, chiefSignerId: chief.userId };
+});
+
+function requiredNtaText(value, field, maxLength) {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${field} is required.`);
+  }
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) {
+    throw new HttpsError("invalid-argument", `${field} must be between 1 and ${maxLength} characters.`);
+  }
+  return normalized;
+}
+
+function optionalNtaText(value, field, maxLength) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string" || value.trim().length > maxLength) {
+    throw new HttpsError("invalid-argument", `${field} is invalid.`);
+  }
+  return value.trim();
+}
+
+function ntaProfileDesignation(value, requested) {
+  return typeof value === "string" && value.split(";").map((entry) => entry.trim()).includes(requested);
+}
+
+function ntaAccountDesignation(value) {
+  if (ntaProfileDesignation(value, "Chief")) return "Chief";
+  if (ntaProfileDesignation(value, "OIC")) return "OIC";
+  return "";
+}
+
+function ntaApproverProfile(account, designation) {
+  return typeof account.accountRole === "string" && account.accountRole.toLowerCase() === "admin"
+    && (account.accountStatus === undefined || account.accountStatus === null || account.accountStatus === "Approved")
+    && account.office === "Division"
+    && account.division === "Field Operations Division"
+    && account.unit === "Field Operations Division"
+    && ntaProfileDesignation(account.designation, designation);
+}
+
+function requiredNtaBatches(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100) {
+    throw new HttpsError("invalid-argument", "At least one valid NTA schedule is required.");
+  }
+  return value.map((batch, index) => {
+    if (!batch || typeof batch !== "object" || Array.isArray(batch)) {
+      throw new HttpsError("invalid-argument", `Schedule ${index + 1} is invalid.`);
+    }
+    const venueType = batch.venueType;
+    if (venueType !== "physical" && venueType !== "virtual") {
+      throw new HttpsError("invalid-argument", `Schedule ${index + 1} has an invalid venue type.`);
+    }
+    if (!Array.isArray(batch.attendees) || batch.attendees.length === 0 || batch.attendees.length > 200) {
+      throw new HttpsError("invalid-argument", `Schedule ${index + 1} needs at least one attendee.`);
+    }
+    const attendees = batch.attendees.map((attendee, attendeeIndex) => {
+      if (!attendee || typeof attendee !== "object" || Array.isArray(attendee)) {
+        throw new HttpsError("invalid-argument", `Attendee ${attendeeIndex + 1} in schedule ${index + 1} is invalid.`);
+      }
+      return {
+        name: requiredNtaText(attendee.name, "Attendee name", 120),
+        position: optionalNtaText(attendee.position, "Attendee position", 200),
+        office: optionalNtaText(attendee.office, "Attendee office", 200),
+        unit: requiredNtaText(attendee.unit, "Attendee unit", 200),
+        userId: optionalNtaText(attendee.userId, "Attendee user ID", 128),
+        manual: attendee.manual === true,
+      };
+    });
+    return {
+      number: optionalNtaText(batch.number, "Schedule number", 20) || String(index + 1),
+      dateFrom: requiredNtaText(batch.dateFrom, "Start date", 40),
+      dateTo: requiredNtaText(batch.dateTo, "End date", 40),
+      timeFrom: requiredNtaText(batch.timeFrom, "Start time", 20),
+      timeTo: requiredNtaText(batch.timeTo, "End time", 20),
+      venueType,
+      venue: requiredNtaText(batch.venue, "Venue", 500),
+      link: optionalNtaText(batch.link, "Meeting link", 2048),
+      attendees,
+    };
+  });
+}
+
+export const createFodNta = onCall({ region: "asia-southeast1" }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError("unauthenticated", "Sign in with a verified email before creating a Notice to Attend.");
+  }
+
+  const ownerId = request.auth.uid;
+  const ownerSnapshot = await db.collection("users").doc(ownerId).get();
+  if (!ownerSnapshot.exists) {
+    throw new HttpsError("failed-precondition", "Your user profile could not be found.");
+  }
+  const owner = ownerSnapshot.data();
+  const ownerRole = typeof owner.accountRole === "string" ? owner.accountRole.toLowerCase() : "";
+  if (!(ownerRole === "regular" || ownerRole === "user")
+      || !([undefined, null, "Approved"].includes(owner.accountStatus))
+      || owner.office !== "Division"
+      || owner.division !== "Field Operations Division"
+      || !["AGRISTAT", "DRRM", "AMIA"].includes(owner.unit)) {
+    throw new HttpsError("permission-denied", "Only a Regular account in AGRISTAT, DRRM, or AMIA can use this NTA route.");
+  }
+
+  const ntaId = request.data?.ntaId;
+  if (typeof ntaId !== "string" || !/^[A-Za-z0-9_-]{20}$/.test(ntaId)) {
+    throw new HttpsError("invalid-argument", "A valid Notice to Attend ID is required.");
+  }
+  const input = request.data?.record;
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new HttpsError("invalid-argument", "Notice details are required.");
+  }
+  const mode = input.mode;
+  if (!["individual", "batch", "multiple"].includes(mode)) {
+    throw new HttpsError("invalid-argument", "Select a valid notice type.");
+  }
+  const subject = requiredNtaText(input.subject, "Subject", 500);
+  const activityTitle = requiredNtaText(input.activityTitle, "Activity title", 500);
+  const organizer = requiredNtaText(input.organizer, "Organizer or host", 300);
+
+  const signatoryAdminId = requiredNtaText(input.signatoryAdminId, "Signatory account", 128);
+  const signatorySnapshot = await db.collection("users").doc(signatoryAdminId).get();
+  const signatory = signatorySnapshot.exists ? signatorySnapshot.data() : null;
+  const signatoryDesignation = signatory ? ntaAccountDesignation(signatory.designation) : "";
+  if (!signatory
+      || typeof signatory.accountRole !== "string"
+      || signatory.accountRole.toLowerCase() !== "admin"
+      || !([undefined, null, "Approved"].includes(signatory.accountStatus))
+      || !signatoryDesignation
+      || typeof signatory.name !== "string"
+      || !signatory.name.trim()
+      || signatory.name.trim().length > 120) {
+    throw new HttpsError("failed-precondition", "The selected signatory must be an approved Admin with a Chief or OIC designation.");
+  }
+  const signatoryUnit = [signatory.unit, signatory.assignment, signatory.division, signatory.office]
+    .find((value) => typeof value === "string" && value.trim())?.trim() ?? "";
+  const signatoryPosition = `${signatoryDesignation}${signatoryUnit ? `, ${signatoryUnit}` : ""}`;
+
+  const usersSnapshot = await db.collection("users").get();
+  const routeAccounts = usersSnapshot.docs
+    .map((document) => ({ ...document.data(), userId: document.id }))
+    .sort((first, second) => first.userId.localeCompare(second.userId));
+  const projectLeader = routeAccounts.find((account) => ntaApproverProfile(account, "AGRISTAT/DRRM/AMIA Project Leader"));
+  const chief = routeAccounts.find((account) => ntaApproverProfile(account, "Chief"));
+  if (!projectLeader) {
+    throw new HttpsError("failed-precondition", "An approved Field Operations Division Project Leader Admin account is required.");
+  }
+  if (!chief) {
+    throw new HttpsError("failed-precondition", "An approved Field Operations Division Chief Admin account is required.");
+  }
+  if (projectLeader.userId === chief.userId || projectLeader.userId === ownerId || chief.userId === ownerId) {
+    throw new HttpsError("failed-precondition", "The NTA approval route must use distinct approver accounts.");
+  }
+
+  const record = {
+    mode,
+    subject,
+    activityTitle,
+    organizer,
+    signatoryName: signatory.name.trim(),
+    signatoryDesignation: signatoryPosition,
+    signatoryAdminId,
+    ownerId,
+    ownerOffice: owner.office,
+    ownerDivision: owner.division,
+    ownerUnit: owner.unit,
+    approvalWorkflow: "fod",
+    approvalStage: "initial",
+    initialSignerId: projectLeader.userId,
+    chiefSignerId: chief.userId,
+    affixInitialSignature: "No",
+    createdAt: FieldValue.serverTimestamp(),
+  };
+
+  let recipientIds = [];
+  if (mode === "individual") {
+    const venueType = input.venueType;
+    if (venueType !== "physical" && venueType !== "virtual") {
+      throw new HttpsError("invalid-argument", "Select a valid venue type.");
+    }
+    const toUserId = optionalNtaText(input.toUserId, "Personnel user ID", 128);
+    const individual = {
+      to: requiredNtaText(input.to, "Personnel name", 120),
+      toUserId,
+      positionDesignation: requiredNtaText(input.positionDesignation, "Personnel position", 200),
+      dateFrom: requiredNtaText(input.dateFrom, "Start date", 40),
+      dateTo: requiredNtaText(input.dateTo, "End date", 40),
+      timeFrom: requiredNtaText(input.timeFrom, "Start time", 20),
+      timeTo: requiredNtaText(input.timeTo, "End time", 20),
+      venueType,
+      venue: requiredNtaText(input.venue, "Venue", 500),
+      link: optionalNtaText(input.link, "Meeting link", 2048),
+    };
+    if (toUserId && toUserId !== ownerId) recipientIds = [toUserId];
+    Object.assign(record, individual);
+  } else {
+    const batches = requiredNtaBatches(input.batches);
+    recipientIds = [...new Set(batches.flatMap((batch) => batch.attendees.map((attendee) => attendee.userId)).filter((userId) => userId && userId !== ownerId))];
+    Object.assign(record, { batches });
+  }
+  Object.assign(record, { recipientIds });
+
+  try {
+    await db.collection("ntaRecords").doc(ntaId).create(record);
+  } catch (error) {
+    logger.error("Could not create the FOD Notice to Attend", { ownerId, ntaId, error });
+    throw new HttpsError("internal", "Could not save the Notice to Attend.");
+  }
+  return {
+    ntaId,
+    initialSignerId: projectLeader.userId,
+    chiefSignerId: chief.userId,
+    signatoryName: signatory.name.trim(),
+    signatoryDesignation: signatoryPosition,
+    ownerOffice: owner.office,
+    ownerDivision: owner.division,
+    ownerUnit: owner.unit,
+    recipientIds,
+  };
+});
+
 function manilaParts(date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Manila",

@@ -53,6 +53,7 @@
 @media(max-width:720px){.nta-edit-actions{align-items:stretch;flex-direction:column}.nta-edit-actions .nta-remove-notice{align-self:flex-start}.nta-edit-actions .primary-button{width:100%}}
 
 .content-section.form-section.nta-form-section.nta-edit-section{max-width:none;width:100%}
+.nta-preview-portal-root{display:contents}
 .nta-edit-section .permit-form{gap:24px 28px}
 .nta-edit-section .permit-form>label>input,.nta-edit-section .permit-form>label>select,
 .nta-edit-section .date-range-field input,.nta-edit-section .nta-attendee-input>select,
@@ -134,3 +135,17 @@
 @media(max-width:720px){.nta-form-section .nta-activity-fields{grid-template-columns:minmax(0,1fr)}}
 .nta-edit-section .name-search-select-search{min-height:52px}.nta-edit-section .nta-attendee-input>.name-search-select{min-width:0;width:100%}
 .nta-to-subject p:last-child>strong:last-child{text-align:justify}
+
+.nta-signatory{position:relative}
+/* Keep signature overlays inside the existing signatory gap so they never change pagination. */
+.nta-signature-affixes{display:grid;gap:0;margin:0;position:static}
+.nta-signature-affix{align-items:flex-start;display:flex;gap:.6cqi;min-width:0}
+.nta-signature-affixes img{display:block;height:3.4cqi;max-height:3.4cqi;max-width:24cqi;object-fit:contain;object-position:left bottom;width:auto}
+.nta-signature-affix-initial img{height:2.8cqi;max-height:2.8cqi;max-width:16.8cqi}
+.nta-signature-details{display:grid;gap:.05cqi;justify-items:start;line-height:1.1;min-width:0}
+.nta-document-content .nta-signature-details strong{font-size:.95cqi;line-height:1.1;max-width:45cqi;overflow-wrap:anywhere;text-transform:none}
+.nta-document-content .nta-signature-details small{font-size:.9cqi;line-height:1.1;white-space:nowrap}
+.nta-individual-closing .nta-signatory-with-affixes,.nta-individual-closing-compact .nta-signatory-with-affixes,.nta-individual-closing-compact.nta-individual-closing-pulled .nta-signatory-with-affixes{margin-top:1lh}
+.nta-document-content.batch-overview .nta-signatory-with-affixes,.nta-document-content.nta-group-notice .nta-signatory-with-affixes{margin-top:1lh}
+.nta-roster-copy-page .nta-signatory-with-affixes{margin-top:1lh}
+.nta-document-content:not(.batch-overview) .nta-details{row-gap:0}

@@ -17,6 +17,55 @@
       ]
     },
     {
+      "collectionGroup": "specialOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalWorkflow", "order": "ASCENDING" },
+        { "fieldPath": "initialSignerId", "order": "ASCENDING" },
+        { "fieldPath": "approvalStage", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "specialOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalWorkflow", "order": "ASCENDING" },
+        { "fieldPath": "chiefSignerId", "order": "ASCENDING" },
+        { "fieldPath": "approvalStage", "order": "ASCENDING" },
+        { "fieldPath": "affixInitialSignature", "order": "ASCENDING" },
+        { "fieldPath": "ownerUnit", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "specialOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalWorkflow", "order": "ASCENDING" },
+        { "fieldPath": "initialSignerId", "order": "ASCENDING" },
+        { "fieldPath": "approvalStage", "order": "ASCENDING" },
+        { "fieldPath": "externalSignatory", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ntaRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalWorkflow", "order": "ASCENDING" },
+        { "fieldPath": "initialSignerId", "order": "ASCENDING" },
+        { "fieldPath": "approvalStage", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ntaRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "approvalWorkflow", "order": "ASCENDING" },
+        { "fieldPath": "chiefSignerId", "order": "ASCENDING" },
+        { "fieldPath": "approvalStage", "order": "ASCENDING" },
+        { "fieldPath": "affixInitialSignature", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "calendarActivityNotifications",
       "queryScope": "COLLECTION",
       "fields": [

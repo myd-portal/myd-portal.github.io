@@ -19,11 +19,21 @@
 .special-order-closing .special-order-done{margin:4.6cqi 0 0}
 .special-order-closing .special-order-signatory{margin-top:6.9cqi}
 .special-order-closing.special-order-closing-pulled .special-order-signatory{margin-top:6.9cqi}
+.special-order-signatory{position:relative}
+.special-order-signature-affixes{display:grid;gap:0;left:0;margin:0;position:absolute;right:0;top:-8.6cqi}
+.special-order-signature-affix{align-items:center;display:flex;gap:.6cqi;min-width:0}
+.special-order-signature-affixes img{display:block;height:5cqi;justify-self:start;max-height:5cqi;max-width:24cqi;object-fit:contain;object-position:left bottom;width:auto}
+.special-order-signature-affix-initial img{height:3.5cqi;max-height:3.5cqi;max-width:16.8cqi}
+.special-order-signature-details{display:grid;gap:.05cqi;justify-items:start;line-height:1.1;min-width:0}
+.special-order-content .special-order-signature-details strong{font-size:.95cqi;line-height:1.1;max-width:45cqi;overflow-wrap:anywhere;text-transform:none}
+.special-order-content .special-order-signature-details small{font-size:.9cqi;line-height:1.1;white-space:nowrap}
 .special-order-closing-tight .special-order-obligations{margin:2.32cqi 0}
 .special-order-closing-tight .special-order-obligation-list{margin:.35cqi 0}
 .special-order-closing-tight .special-order-expenses{margin:.5cqi 0}
 .special-order-closing-tight .special-order-done{margin:4.6cqi 0 0}
 .special-order-closing-tight .special-order-signatory,.special-order-closing-tight.special-order-closing-pulled .special-order-signatory{margin-top:6.9cqi}
+.special-order-closing-with-affixes .special-order-done{margin-top:2.9cqi}
+.special-order-closing-with-affixes .special-order-signatory,.special-order-closing-tight.special-order-closing-with-affixes .special-order-signatory,.special-order-closing-with-affixes.special-order-closing-pulled .special-order-signatory{margin-top:11.5cqi}
 @media(max-width:720px){
   .special-order-list-head{display:none}
   .special-order-list-row{gap:12px;grid-template-columns:minmax(0,1fr);padding:17px 0}
@@ -40,3 +50,6 @@
   .special-order-edit-section .participant-input .remove-action{margin-left:auto}
   .special-order-edit-section .form-actions .primary-button{width:100%}
 }
+.so-approval-table .table-head,.so-approval-table .table-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.35fr) minmax(0,1.3fr) minmax(130px,.9fr) 72px}
+.so-approval-table .so-approval-affix{margin:0;min-width:0}
+@media(max-width:720px){.so-approval-table .table-row{gap:12px;grid-template-columns:minmax(0,1fr)}.so-approval-table .table-row>strong,.so-approval-table .table-row>[data-label]{grid-column:1;min-width:0;overflow-wrap:anywhere}.so-approval-table .table-row>[data-label]::before{color:var(--muted);content:attr(data-label);display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;margin-bottom:4px;text-transform:uppercase}.so-approval-table .permit-row-actions{padding-top:2px}.so-approval-table .row-action{text-align:left}}

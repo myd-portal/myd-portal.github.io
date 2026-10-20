@@ -240,9 +240,13 @@ export default function MessengerModule({ user, profileOffice, profileDivision, 
   const visiblePeople = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     return people
-      .filter((person) => !term || person.name.toLocaleLowerCase().includes(term))
-      .filter((person) => divisionFilter === allDivisionsFilter || person.division === divisionFilter)
-      .filter((person) => unitFilter === allUnitsFilter || person.unit === unitFilter)
+      .filter((person) => {
+        const hasVisibleMessages = lastVisibleAt(chatByPerson.get(person.id)) > 0;
+        const matchesFilters = (!term || person.name.toLocaleLowerCase().includes(term))
+          && (divisionFilter === allDivisionsFilter || person.division === divisionFilter)
+          && (unitFilter === allUnitsFilter || person.unit === unitFilter);
+        return hasVisibleMessages || matchesFilters;
+      })
       .sort((left, right) => lastVisibleAt(chatByPerson.get(right.id)) - lastVisibleAt(chatByPerson.get(left.id)) || left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
   }, [people, search, divisionFilter, unitFilter, chatByPerson]);
 

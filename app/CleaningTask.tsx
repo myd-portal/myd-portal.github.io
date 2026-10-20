@@ -6,7 +6,6 @@ import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, se
 import { Timestamp } from "firebase/firestore";
 import { generateReactHelpers } from "@uploadthing/react";
 import { db } from "@/lib/firebase";
-import { accountDesignation } from "@/lib/account-profile";
 import type { AccountRole } from "@/lib/user-roles";
 import DeleteConfirmation from "./DeleteConfirmation";
 import {
@@ -30,6 +29,7 @@ const uploadThingUrl = process.env.NEXT_PUBLIC_UPLOADTHING_URL || "/api/uploadth
 const uploadThingConfigured = Boolean(process.env.NEXT_PUBLIC_UPLOADTHING_URL);
 const maxCleaningImageBytes = 32 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const currentCleaningTaskImageId = "current";
 const { useUploadThing } = generateReactHelpers<any>({ url: uploadThingUrl });
 
 function errorMessage(error: unknown, fallback: string) {
@@ -140,13 +140,12 @@ function taskStatus(assignment: CleaningTaskAssignment, now: Date) {
   return "Completed";
 }
 
-export function canAccessCleaningTaskNavigation(role: AccountRole, unit: string, designation: string) {
-  return (role === "regular" && isCleaningTaskUnit(unit))
-    || (role === "admin" && accountDesignation(designation) === "AGRISTAT/DRRM/AMIA Project Leader");
+export function canAccessCleaningTaskNavigation(role: AccountRole, _unit: string, _designation: string) {
+  return role === "regular" || role === "admin" || role === "superadmin";
 }
 
-export function canViewCleaningTaskLanding(role: AccountRole, unit: string) {
-  return role === "admin" || role === "superadmin" || (role === "regular" && isCleaningTaskUnit(unit));
+export function canViewCleaningTaskLanding(role: AccountRole, _unit: string) {
+  return role === "regular" || role === "admin" || role === "superadmin";
 }
 
 export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, mode = "landing" }: {
@@ -199,23 +198,28 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
 
   const currentWeekStart = currentCleaningWeekStart(now);
   const currentAssignment = assignments.find((assignment) => assignment.weekStart === currentWeekStart) ?? null;
-  const ownUnitImage = images.find((image) => image.id === unit) ?? null;
+  const currentImage = images.find((image) => image.id === currentCleaningTaskImageId) ?? null;
+  const visibleImages = currentImage ? [currentImage] : images.slice(0, 1);
   const selectedWeeks = useMemo(() => cleaningTaskCalendarWeeks(month), [month]);
 
   async function uploadCleaningPhotos(files: File[], location: string) {
     setBusy(true);
     try {
       const collageFile = await mergeCleaningPhotos(files);
-      const existing = ownUnitImage;
+      const assignmentUnit = currentAssignment?.unit;
+      if (!currentAssignment || !isCleaningTaskUnit(assignmentUnit) || !isOngoing(currentAssignment, new Date())) {
+        throw new Error("There is no active Cleaning Task assignment for the current work week.");
+      }
+      const existing = currentImage;
       if (existing?.previousFileKey) {
         const cleanedPendingFile = await fetch(uploadThingUrl.replace(/\/api\/uploadthing\/?$/, "/api/delete-cleaning-task-image"), {
           method: "POST",
           headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ unit, fileKey: existing.previousFileKey }),
+          body: JSON.stringify({ unit: existing.unit, imageId: currentCleaningTaskImageId, fileKey: existing.previousFileKey }),
         });
         if (!cleanedPendingFile.ok) throw new Error("The prior photo cleanup is still pending. Try the replacement again in a moment.");
         if (!db) throw new Error("Cleaning Task storage is unavailable.");
-        await updateDoc(doc(db, "cleaningTaskImages", unit), { previousFileKey: "", previousFileOwnerId: "" });
+        await updateDoc(doc(db, "cleaningTaskImages", currentCleaningTaskImageId), { previousFileKey: "", previousFileOwnerId: "" });
       }
       const uploadedFiles = await startUpload([collageFile]);
       const uploaded = uploadedFiles?.[0] as {
@@ -230,7 +234,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
       if (!db) throw new Error("Cleaning Task storage is unavailable.");
 
       const imageData = {
-        unit,
+        unit: assignmentUnit,
         imageURL,
         fileKey,
         previousFileKey: existing?.fileKey ?? "",
@@ -241,7 +245,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
         location,
         uploadedAt: serverTimestamp(),
       };
-      const imageReference = doc(db, "cleaningTaskImages", unit);
+      const imageReference = doc(db, "cleaningTaskImages", currentCleaningTaskImageId);
       if (existing) await setDoc(imageReference, imageData, { merge: true });
       else await setDoc(imageReference, imageData);
 
@@ -251,7 +255,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
           const cleaned = await fetch(uploadThingUrl.replace(/\/api\/uploadthing\/?$/, "/api/delete-cleaning-task-image"), {
             method: "POST",
             headers: { Authorization: `Bearer ${await user.getIdToken()}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ unit, fileKey: existing.fileKey }),
+            body: JSON.stringify({ unit: existing.unit, imageId: currentCleaningTaskImageId, fileKey: existing.fileKey }),
           });
           if (cleaned.ok) {
             await updateDoc(imageReference, { previousFileKey: "", previousFileOwnerId: "" });
@@ -261,9 +265,11 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
           // Keep the prior key on the record so a future replacement can retry its cleanup.
         }
       }
-      setSuccess(oldPhotoRemoved
-        ? "Your four-photo Cleaning Task collage is now posted; the previous photo has been removed."
-        : "Your four-photo Cleaning Task collage is posted. The previous photo cleanup will retry after a future replacement.");
+      setSuccess(!existing?.fileKey
+        ? "The Cleaning Task verification post is now published."
+        : oldPhotoRemoved
+          ? "The Cleaning Task verification post is updated; the previous photo has been removed."
+          : "The Cleaning Task verification post is updated. The previous photo cleanup will retry after a future replacement.");
     } catch (cause) {
       setError(errorMessage(cause, "Could not save your Cleaning Task image."));
     } finally {
@@ -277,16 +283,12 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
     if (files.length === 0) return;
     setError("");
     setSuccess("");
-    if (!canUpload || role === "superadmin") {
+    if (!canUpload) {
       setError("This account cannot upload Cleaning Task images.");
       return;
     }
-    if (!isCleaningTaskUnit(unit)) {
-      setError("Your profile must have AGRISTAT, AMIA, or DRRM as its Unit / Program / Project.");
-      return;
-    }
-    if (!currentAssignment || currentAssignment.unit !== unit || !isOngoing(currentAssignment, now)) {
-      setError("Your Unit / Program / Project is not assigned for the current work week.");
+    if (!currentAssignment || !isOngoing(currentAssignment, now)) {
+      setError("There is no active Cleaning Task assignment for the current work week.");
       return;
     }
     if (files.length !== 4) {
@@ -318,16 +320,16 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
         <p className="eyebrow">Weekly office upkeep</p>
         <div className="cleaning-task-title-row">
           <h2>{mode === "workspace" ? "Cleaning Task" : "Cleaning Task Updates"}</h2>
-          {mode === "workspace" && canUpload && <label className={`cleaning-task-upload-button${busy ? " is-busy" : ""}`}><span>Upload</span><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose exactly 4 photos to upload as one collage" multiple onChange={(event) => void handleImageSelection(event)} disabled={busy || !currentAssignment || currentAssignment.unit !== unit || !isOngoing(currentAssignment, now)} /></label>}
+          {mode === "workspace" && canUpload && <label className={`cleaning-task-upload-button${busy ? " is-busy" : ""}`}><span>{visibleImages.length > 0 ? "Replace photos" : "Upload"}</span><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose exactly 4 photos to upload as one collage" multiple onChange={(event) => void handleImageSelection(event)} disabled={busy || !currentAssignment || !isOngoing(currentAssignment, now)} /></label>}
         </div>
-        <p className="muted">{mode === "workspace" ? "Post the current week’s photo when your Unit / Program / Project is assigned." : "Latest photos and the AGRISTAT, AMIA, and DRRM weekly cleaning schedule."}</p>
+        <p className="muted">{mode === "workspace" ? "Post or replace the shared verification during the active weekly assignment." : "Latest photo verification and the AGRISTAT, AMIA, and DRRM weekly cleaning schedule."}</p>
       </div>
     </header>
     {error && <p className="cleaning-task-message is-error" role="alert">{error}</p>}
     {success && <p className="cleaning-task-message is-success" role="status">{success}</p>}
     <div className="cleaning-task-layout">
       <section className="cleaning-task-photos" aria-label="Latest cleaning task photos">
-        {loading ? <p className="muted">Loading Cleaning Task posts...</p> : images.length === 0 ? <div className="cleaning-task-empty"><strong>No photos posted yet</strong><span>The first assigned team photo will appear here.</span></div> : images.map((image) => {
+        {loading ? <p className="muted">Loading Cleaning Task posts...</p> : visibleImages.length === 0 ? <div className="cleaning-task-empty"><strong>No photos posted yet</strong><span>The first assigned team photo will appear here.</span></div> : visibleImages.map((image) => {
           const outdated = !loading && isCleaningTaskImageOutdated(image, currentWeekStart);
           return <article className={`cleaning-task-photo${outdated ? " has-outdated-warning" : ""}`} key={image.id}>
             <header className="cleaning-task-photo-heading"><h3>Cleaning Task Photo Verification</h3></header>

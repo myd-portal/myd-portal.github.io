@@ -1,10 +1,11 @@
 .calendar-of-activities-list-section,.calendar-of-activities-form-section{margin:0 auto;max-width:1100px;min-width:0}
 .calendar-of-activities-list{min-width:0}
-.calendar-of-activities-list-head,.calendar-of-activities-list-row{grid-template-columns:1.2fr .85fr .6fr 1.2fr 1.2fr;min-width:0}
+.calendar-of-activities-list-head,.calendar-of-activities-list-row{grid-template-columns:1.25fr .65fr 1fr 1.15fr 1.2fr;min-width:0}
 .calendar-of-activities-list-row>span,.calendar-of-activities-list-row>strong{min-width:0;overflow-wrap:anywhere}
 .calendar-of-activities-row-actions{min-width:0}
 .calendar-of-activities-list-status{min-width:0}
 .calendar-of-activities-list-status select{background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font-size:12px;font-weight:700;padding:7px 8px;width:100%}
+.calendar-of-activities-list-affix{min-width:0}
 .calendar-of-activities-list-status select:focus{border-color:var(--accent-dark);outline:2px solid #df603c33}
 .calendar-of-activities-list-status.travel-order-status-pending select{background:#fff5e8;color:#8e5712}
 .calendar-of-activities-list-status.travel-order-status-disapproved select{background:#fff0ed;color:#a23d2d}
@@ -81,6 +82,14 @@
 .calendar-of-activities-paper-signatory>strong{font-size:1.23cqi;margin-top:3.5cqi;text-transform:uppercase}
 .calendar-of-activities-paper-signatory>em{font-size:1.02cqi;font-style:italic;line-height:1.15}
 .calendar-of-activities-paper-signatory-title{font-size:1.02cqi;line-height:1.15;overflow-wrap:anywhere}
+.calendar-of-activities-paper-signatory.is-affixed>strong{margin-top:.35cqi}
+.calendar-of-activities-paper-digital-signature{align-items:start;display:grid;gap:.2cqi;justify-items:start;line-height:1.08;min-width:0}
+.calendar-of-activities-paper-digital-signature>img{display:block;height:4.5cqi;max-height:4.5cqi;max-width:72%;object-fit:contain;object-position:left center;width:72%}
+.calendar-of-activities-paper-digital-signature>div{display:grid;font-size:.82cqi;gap:.12cqi;line-height:1.08;overflow-wrap:anywhere}
+.calendar-of-activities-paper-digital-signature>div>span{font-size:.88cqi}
+.calendar-of-activities-paper-digital-signature>div>strong{font-size:.9cqi;font-weight:700}
+.calendar-of-activities-paper-digital-signature>div>small{font-size:.78cqi}
+.calendar-of-activities-paper-footer.has-affixed-signature .calendar-of-activities-paper-signatory:not(.is-affixed)>strong{margin-top:9.2cqi}
 @media print{
   @page calendar-of-activities{size:A4 landscape;margin:0}
   body:has(.calendar-of-activities-preview-backdrop) *{visibility:hidden!important}

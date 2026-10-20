@@ -1,4 +1,5 @@
-.profile-photo-field{align-items:center;border-bottom:1px solid var(--line);display:flex;gap:18px;grid-column:1/-1;padding:0 0 18px}
+.profile-media-row{align-items:center;border-bottom:1px solid var(--line);display:grid;gap:18px;grid-column:1/-1;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr));padding:0 0 18px}
+.profile-photo-field{align-items:center;display:flex;gap:14px;min-width:0}
 .profile-photo-preview{background:var(--mint);border-radius:50%;flex:0 0 auto;height:76px;object-fit:cover;width:76px}
 .profile-photo-controls{align-items:flex-start;display:flex;flex-direction:column;gap:7px}
 .profile-photo-controls strong{font-size:13px}
@@ -6,3 +7,12 @@
 .profile-photo-select{display:inline-flex;position:relative;width:max-content}
 .profile-photo-select input{cursor:pointer;height:100%;inset:0;opacity:0;position:absolute;width:100%}
 .profile-photo-controls .auth-message{font-size:12px;margin:0}
+.profile-signature-field{align-items:center;display:flex;gap:10px;min-width:0}
+.profile-signature-preview-wrap{align-items:center;background:#fff;border:1px solid var(--line);display:flex;flex:0 0 62px;height:52px;justify-content:center;overflow:hidden}
+.profile-signature-preview{display:block;height:100%;object-fit:contain;width:100%}
+.profile-signature-placeholder{background:linear-gradient(135deg,transparent calc(50% - .5px),var(--line) 50%,transparent calc(50% + .5px))}
+.profile-signature-controls{align-items:flex-start;display:flex;flex-direction:column;gap:7px;min-width:0}
+.profile-signature-controls strong{font-size:13px}
+.profile-signature-controls small{color:var(--muted);font-size:12px}
+.profile-signature-controls .auth-message{font-size:12px;margin:0}
+@media(max-width:720px){.profile-media-row{grid-template-columns:1fr}.profile-photo-field{align-items:flex-start}}

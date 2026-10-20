@@ -27,11 +27,11 @@
 .leave-application-form-actions{border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;padding-top:20px}
 .leave-application-form-actions button{min-width:120px}
 .leave-application-records{border-top:1px solid var(--line);min-width:0}
-.leave-application-record-head,.leave-application-record{align-items:center;display:grid;gap:14px;grid-template-columns:1fr 1.25fr 1.15fr 1.35fr 142px 126px;min-width:0}
+.leave-application-record-head,.leave-application-record{align-items:center;display:grid;gap:14px;grid-template-columns:1fr 1.2fr 1.3fr 138px 142px 126px;min-width:0}
 .leave-application-record-head{color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;padding:14px 8px;text-transform:uppercase}
 .leave-application-record{border-top:1px solid var(--line);font-size:12px;padding:14px 8px}
-.leave-application-record>span,.leave-application-record>strong{min-width:0;overflow-wrap:anywhere}
-.leave-application-record>strong{font-size:12px;font-weight:400}
+.leave-application-record>span{min-width:0;overflow-wrap:anywhere}
+.leave-application-affix{display:block;min-width:0}
 .leave-application-status{align-items:start;display:grid;gap:4px;min-width:0}
 .leave-application-status select{background:#fff;border:1px solid var(--line);font-size:11px;font-weight:700;min-width:0;padding:7px 8px;width:100%}
 .leave-application-status-pending select{background:#fff5e8;color:#8e5712}
@@ -51,7 +51,7 @@
 .leave-application-preview-loading{color:var(--muted)}
 .leave-application-preview-render-error{color:#9e3824}
 @media(max-width:980px){
-  .leave-application-record-head,.leave-application-record{grid-template-columns:1fr 1.2fr 1.2fr 1.2fr 132px 112px;gap:10px}
+  .leave-application-record-head,.leave-application-record{grid-template-columns:1fr 1.2fr 1.2fr 125px 132px 112px;gap:10px}
 }
 @media(max-width:760px){
   .leave-application-leave-type-row-1{grid-template-columns:minmax(0,1fr)}
@@ -59,9 +59,9 @@
   .leave-application-date-division-row{grid-template-columns:minmax(0,1fr)}
   .leave-application-record-head{display:none}
   .leave-application-record{align-items:start;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));padding:17px 0}
-  .leave-application-record-date,.leave-application-record-name,.leave-application-record-type,.leave-application-record-dates,.leave-application-status,.leave-application-actions{grid-column:1/-1}
+  .leave-application-record-date,.leave-application-record-type,.leave-application-record-dates,.leave-application-affix,.leave-application-status,.leave-application-actions{grid-column:1/-1}
   .leave-application-record-date{color:var(--ink);font-family:'DM Mono',monospace;font-size:12px;font-weight:700}
-  .leave-application-record-name{font-size:14px}
+  .leave-application-affix::before{color:var(--muted);content:"Affix Signature";display:block;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;margin:0 0 5px;text-transform:uppercase}
   .leave-application-status{max-width:none}
   .leave-application-actions{align-self:start;justify-content:flex-end;padding-top:2px}
 }
