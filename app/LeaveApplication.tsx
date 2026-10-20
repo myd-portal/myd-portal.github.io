@@ -964,6 +964,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
 
   async function changeApprovalSignature(record: LeaveApplicationRecord, value: "Yes" | "No") {
     if (!db || !record.approvalWorkflow) return;
+    const firestore = db;
     const isProjectLeader = approvalDesignation === "AGRISTAT/DRRM/AMIA Project Leader" && record.approvalStage === "project-leader" && record.initialSignerId === user.uid;
     const isChief = approvalDesignation === "Chief" && record.approvalStage === "chief" && record.chiefSignerId === user.uid;
     if (!isProjectLeader && !isChief) { setError("This Leave Application is not awaiting your signature."); return; }
@@ -982,10 +983,10 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         : { affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profileDefaults.name.trim(), affixChiefSignatureAt: serverTimestamp(), approvalStage: "returned" };
     try {
       if (value === "Yes") {
-        const batch = writeBatch(db);
-        batch.update(doc(db, "leaveApplications", record.id), signatureFields);
+        const batch = writeBatch(firestore);
+        batch.update(doc(firestore, "leaveApplications", record.id), signatureFields);
         const addNotification = (recipientId: string, approvalStep: "chief" | "project-leader-completed" | "returned") => {
-          const notification = makeDocumentNotification(db, {
+          const notification = makeDocumentNotification(firestore, {
             recipientId,
             ownerId: record.ownerId,
             documentId: record.id,

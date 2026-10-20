@@ -759,6 +759,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
 
   async function updateApprovalSignature(report: Report, value: "Yes" | "No") {
     if (!db || !profile || report.approvalWorkflow !== "fod-myar") return;
+    const firestore = db;
     const isProjectLeader = profile.designation === "AGRISTAT/DRRM/AMIA Project Leader" && report.approvalStage === "project-leader" && report.initialSignerId === user.uid;
     const isChief = profile.designation === "Chief" && report.approvalStage === "chief" && report.chiefSignerId === user.uid;
     if (!isProjectLeader && !isChief) {
@@ -780,9 +781,9 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         ? { affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profile.name.trim(), affixChiefSignatureAt: serverTimestamp(), approvalStage: "returned" }
         : { affixChiefSignature: "No", affixChiefSignatureURL: deleteField(), affixChiefSignatureName: deleteField(), affixChiefSignatureAt: deleteField() };
     try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, "accomplishmentReports", report.id), signatureFields);
-      const addNotification = (recipientId: string, event: AccomplishmentReportWorkflowEvent) => batch.set(doc(collection(db, accomplishmentReportNotificationsCollection)), {
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, "accomplishmentReports", report.id), signatureFields);
+      const addNotification = (recipientId: string, event: AccomplishmentReportWorkflowEvent) => batch.set(doc(collection(firestore, accomplishmentReportNotificationsCollection)), {
         recipientId,
         ownerId: report.ownerId,
         reportId: report.id,
