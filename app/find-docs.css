@@ -1,6 +1,6 @@
 .find-docs-section{min-width:0}
 .find-docs-count{background:var(--mint);color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;padding:11px 14px;white-space:nowrap}
-.find-docs-filters{align-items:end;display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(220px,.48fr);margin:0 0 24px;max-width:880px}
+.find-docs-filters{align-items:end;display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,.48fr);margin:0 0 24px;width:100%}
 .find-docs-filters label{min-width:0}
 .find-docs-filters input,.find-docs-filters select{min-width:0;width:100%}
 .find-docs-results{max-height:min(68vh,900px);overflow:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-gutter:stable}
