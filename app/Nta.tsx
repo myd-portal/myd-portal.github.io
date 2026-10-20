@@ -13,6 +13,7 @@ import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
 import { normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
+import { safeAttachmentHref } from "@/lib/attachment-link";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./nta.css";
@@ -40,6 +41,7 @@ type NtaRecord = {
   subject: string;
   activityTitle: string;
   organizer: string;
+  attachmentLink?: string;
   signatoryName?: string;
   signatoryDesignation?: string;
   signatoryAdminId?: string;
@@ -142,6 +144,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
   const [subject, setSubject] = useState("");
   const [activityTitle, setActivityTitle] = useState("");
   const [organizer, setOrganizer] = useState("");
+  const [attachmentLink, setAttachmentLink] = useState("");
   const [signatorySelection, setSignatorySelection] = useState("");
   const workflowScope = isFodNtaWorkflowScope(ownerRole, office, division ?? "", unit ?? "");
   const [workflowAccounts, setWorkflowAccounts] = useState<NtaWorkflowAccounts | null>(null);
@@ -154,7 +157,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
     adminUserId: account.userId,
   }));
   const selectedSignatory = signatoryOptions.find((option) => option.value === signatorySelection);
-  const signatoryField = (wide = false) => <label className={wide ? "wide-field" : undefined}>Signatory<select value={signatorySelection} onChange={(event) => setSignatorySelection(event.target.value)} required disabled={workflowAccountsLoading || signatoryOptions.length === 0}><option value="" disabled>{workflowAccountsLoading ? "Loading active signatories..." : "Select a signatory"}</option>{signatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{!workflowAccountsLoading && signatoryOptions.length === 0 && <small className="muted">No approved Admin accounts with the Chief or OIC designation are available.</small>}{workflowScope && !workflowAccountsLoading && (!workflowAccounts?.head || !workflowAccounts.chief) && <small className="muted">The active FOD Project Leader and Chief accounts must be set up before an NTA can be submitted.</small>}</label>;
+  const signatoryField = (wide = false) => <><label className="wide-field">Attachment Link<input type="url" value={attachmentLink} onChange={(event) => setAttachmentLink(event.target.value)} maxLength={2048} placeholder="https://" /></label><label className={wide ? "wide-field" : undefined}>Signatory<select value={signatorySelection} onChange={(event) => setSignatorySelection(event.target.value)} required disabled={workflowAccountsLoading || signatoryOptions.length === 0}><option value="" disabled>{workflowAccountsLoading ? "Loading active signatories..." : "Select a signatory"}</option>{signatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{!workflowAccountsLoading && signatoryOptions.length === 0 && <small className="muted">No approved Admin accounts with the Chief or OIC designation are available.</small>}{workflowScope && !workflowAccountsLoading && (!workflowAccounts?.head || !workflowAccounts.chief) && <small className="muted">The active FOD Project Leader and Chief accounts must be set up before an NTA can be submitted.</small>}</label></>;
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [timeFrom, setTimeFrom] = useState("08:00");
@@ -212,6 +215,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
     if (!unit) { setError("Your Unit / Program / Project is still loading. Try saving again in a moment."); return; }
     if (!selectedSignatory) { setError("Select a signatory."); return; }
     if (!selectedSignatory?.adminUserId) { setError("Select an available Admin Chief or OIC as the signatory."); return; }
+    if (attachmentLink.trim() && !safeAttachmentHref(attachmentLink)) { setError("Enter a valid HTTP or HTTPS attachment link."); return; }
     if (workflowScope && (!workflowAccounts?.head || !workflowAccounts.chief)) {
       setError("An active FOD Project Leader and Chief Admin account are required before creating this NTA.");
       return;
@@ -253,7 +257,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
     const workflowFields = workflowScope && workflowAccounts?.head && workflowAccounts.chief
       ? { approvalWorkflow: "fod" as const, approvalStage: "initial" as const, initialSignerId: workflowAccounts.head.userId, chiefSignerId: workflowAccounts.chief.userId, affixInitialSignature: "No" as const }
       : {};
-    const common = { mode, subject: submittedSubject, activityTitle: submittedActivityTitle, organizer: submittedOrganizer, signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position, signatoryAdminId: selectedSignatory.adminUserId, recipientIds, ownerId: user.uid, ownerOffice: workflowScope ? "Division" : office, ownerDivision: workflowScope ? "Field Operations Division" : division ?? "", ownerUnit: unit, ...workflowFields, createdAt: serverTimestamp() };
+    const common = { mode, subject: submittedSubject, activityTitle: submittedActivityTitle, organizer: submittedOrganizer, attachmentLink: attachmentLink.trim(), signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position, signatoryAdminId: selectedSignatory.adminUserId, recipientIds, ownerId: user.uid, ownerOffice: workflowScope ? "Division" : office, ownerDivision: workflowScope ? "Field Operations Division" : division ?? "", ownerUnit: unit, ...workflowFields, createdAt: serverTimestamp() };
     try {
       const data = mode === "individual"
         ? { ...common, to: to.trim(), toUserId: manualRecipient ? "" : toUserId, positionDesignation: positionDesignation.trim(), dateFrom: submittedDateFrom, dateTo: submittedDateTo, timeFrom: submittedTimeFrom, timeTo: submittedTimeTo, venueType, venue: submittedVenue, link: venueType === "virtual" ? link.trim() : "" }
@@ -365,6 +369,7 @@ function NtaEditor({ record, userId, office, division, unit, onCancel, onSaved, 
   const [subject, setSubject] = useState(cleanNtaField(record.subject));
   const [activityTitle, setActivityTitle] = useState(cleanNtaField(record.activityTitle));
   const [organizer, setOrganizer] = useState(cleanNtaField(record.organizer));
+  const [attachmentLink, setAttachmentLink] = useState(record.attachmentLink ?? "");
   const [dateFrom, setDateFrom] = useState(record.dateFrom ?? "");
   const [dateTo, setDateTo] = useState(record.dateTo ?? record.dateFrom ?? "");
   const [timeFrom, setTimeFrom] = useState(record.timeFrom ?? "");
@@ -409,6 +414,7 @@ function NtaEditor({ record, userId, office, division, unit, onCancel, onSaved, 
     event.preventDefault();
     if (!db) { setError("Database is not configured."); return; }
     if ([subject, activityTitle, organizer].some((value) => !cleanNtaField(value.trim()))) { setError("Enter a subject, activity title, and organizer before saving."); return; }
+    if (attachmentLink.trim() && !safeAttachmentHref(attachmentLink)) { setError("Enter a valid HTTP or HTTPS attachment link."); return; }
     if (record.mode === "individual" && (!dateFrom || !dateTo || !venue.trim())) { setError("Enter the date and venue before saving."); return; }
     const cleanedBatches = batches.map((batch) => ({ ...batch, attendees: batch.attendees.map((attendee) => { const selected = attendee.manual ? undefined : personnel.find((person) => person.userId === attendee.userId); return { ...attendee, userId: attendee.manual ? "" : attendee.userId ?? "", name: attendee.manual ? attendee.name.trim() : selected?.name ?? attendee.name.trim(), position: attendee.manual ? attendee.position?.trim() ?? "" : selected?.position ?? attendee.position?.trim() ?? "", unit: attendee.manual ? attendee.unit?.trim() ?? "" : selected?.unit ?? attendee.unit?.trim() ?? "" }; }) }));
     const selectedPerson = !manualRecipient ? personnel.find((person) => person.userId === toUserId) : undefined;
@@ -433,7 +439,7 @@ function NtaEditor({ record, userId, office, division, unit, onCancel, onSaved, 
       schedulesByRecipient.forEach((schedules, recipientId) => {
         notificationDrafts.set(recipientId, { recipientId, ownerId: userId, documentId: record.id, documentType: "Notice to Attend", activityTitle: activityTitle.trim(), schedules });
       });
-      const sharedUpdates = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim() };
+      const sharedUpdates = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), attachmentLink: attachmentLink.trim() };
       const updates = record.mode === "individual"
         ? { ...sharedUpdates, to: individualName, toUserId: manualRecipient ? "" : toUserId, positionDesignation: individualPosition, dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venueType, venue: venue.trim(), link: venueType === "virtual" ? link.trim() : "", recipientIds }
         : { ...sharedUpdates, batches: cleanedBatches, recipientIds };
@@ -482,6 +488,7 @@ function NtaEditor({ record, userId, office, division, unit, onCancel, onSaved, 
         <label>Title of Activity<input value={activityTitle} onChange={(event) => setActivityTitle(cleanNtaField(event.target.value))} required /></label>
         <label>Organizer / Host<input value={organizer} onChange={(event) => setOrganizer(cleanNtaField(event.target.value))} required /></label>
       </div>
+      <label className="wide-field">Attachment Link<input type="url" value={attachmentLink} onChange={(event) => setAttachmentLink(event.target.value)} maxLength={2048} placeholder="https://" /></label>
       {record.mode === "individual" ? <>
         <div className="wide-field nta-recipient-fields">
           <div className={`nta-recipient-field-grid${manualRecipient ? "" : " nta-recipient-dropdown-grid"}`}>
@@ -1025,6 +1032,7 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
         subject: record.subject,
         activityTitle: record.activityTitle,
         organizer: record.organizer,
+        attachmentLink: record.attachmentLink ?? "",
         ...(copiedSignatoryName !== undefined ? { signatoryName: copiedSignatoryName } : {}),
         ...(copiedSignatoryDesignation !== undefined ? { signatoryDesignation: copiedSignatoryDesignation } : {}),
         signatoryAdminId: copiedSignatory.userId,
@@ -1191,11 +1199,12 @@ export function NtaApproval({ user, stage, canReview, focusRecordId, onFocusHand
     <div className="section-heading"><div><p className="eyebrow">Admin panel</p><h2>NTA Approval</h2><p className="muted">{records.length} Notice{records.length === 1 ? "" : "s"} to Attend awaiting {isInitial ? "initial signature" : "full signature"}.</p></div></div>
     {error && <p className="error-message" role="alert">{error}</p>}
     {!canReview ? <div className="empty-state"><h3>NTA approval access is restricted</h3><p>Only the assigned FOD Project Leader and Field Operations Division Chief can initialize or sign notices.</p></div> : loading ? <p className="muted">Loading NTA approvals...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Notices to Attend awaiting your action</h3><p>New requests will appear here.</p></div> : <div className="permit-table so-approval-table nta-approval-table">
-      <div className="table-head"><span>Subject</span><span>Activity</span><span>Notice type</span><span>{signatureLabel}</span><span>View</span></div>
+      <div className="table-head"><span>Subject</span><span>Activity</span><span>Notice type</span><span>Attachment</span><span>{signatureLabel}</span><span>View</span></div>
       {records.map((record) => <div className="table-row" key={record.id}>
         <strong data-label="Subject">{cleanNtaField(record.subject) || "—"}</strong>
         <span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span>
         <span data-label="Notice type">{record.mode === "individual" ? "Individual" : record.mode === "multiple" ? "Multiple Personnel" : "Group"}</span>
+        <span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span>
         <label className="so-approval-affix" data-label={signatureLabel}><select className="affix-signature-select" aria-label={`${signatureLabel} for ${record.subject}`} value={isInitial ? record.affixInitialSignature ?? "No" : record.affixSignature ?? "No"} disabled={busyId === record.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}><option value="Yes" disabled={!signature.trim()}>Yes</option><option value="No">No</option></select></label>
         <span className="permit-row-actions" data-label="View"><button type="button" className="row-action" onClick={() => setPreview(record)}>View</button></span>
       </div>)}

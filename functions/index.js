@@ -114,6 +114,12 @@ export const createFodSpecialOrder = onCall({ region: "asia-southeast1" }, async
   const timeFrom = requiredSpecialOrderText(request.data?.timeFrom, "Start time", 20);
   const timeTo = requiredSpecialOrderText(request.data?.timeTo, "End time", 20);
   const venue = requiredSpecialOrderText(request.data?.venue, "Venue", 500);
+  const attachmentLink = typeof request.data?.attachmentLink === "string" ? request.data.attachmentLink.trim() : "";
+  let attachmentUrl;
+  try { if (attachmentLink) attachmentUrl = new URL(attachmentLink); } catch {}
+  if (attachmentLink.length > 2048 || (attachmentLink && (!attachmentUrl || !["http:", "https:"].includes(attachmentUrl.protocol) || !attachmentUrl.hostname))) {
+    throw new HttpsError("invalid-argument", "Attachment Link must be a valid HTTP or HTTPS URL of at most 2048 characters.");
+  }
   const participants = specialOrderTextArray(request.data?.participants, "Designated personnel", { maxLength: 120 });
   const participantPositions = specialOrderTextArray(request.data?.participantPositions, "Personnel positions", { allowEmpty: true });
   const participantUnits = specialOrderTextArray(request.data?.participantUnits, "Personnel units", { allowEmpty: true });
@@ -158,6 +164,7 @@ export const createFodSpecialOrder = onCall({ region: "asia-southeast1" }, async
     timeFrom,
     timeTo,
     venue,
+    attachmentLink,
     participants,
     participantPositions,
     participantUnits,
@@ -304,6 +311,12 @@ export const createFodNta = onCall({ region: "asia-southeast1" }, async (request
   const subject = requiredNtaText(input.subject, "Subject", 500);
   const activityTitle = requiredNtaText(input.activityTitle, "Activity title", 500);
   const organizer = requiredNtaText(input.organizer, "Organizer or host", 300);
+  const attachmentLink = optionalNtaText(input.attachmentLink, "Attachment Link", 2048);
+  let attachmentUrl;
+  try { if (attachmentLink) attachmentUrl = new URL(attachmentLink); } catch {}
+  if (attachmentLink && (!attachmentUrl || !["http:", "https:"].includes(attachmentUrl.protocol) || !attachmentUrl.hostname)) {
+    throw new HttpsError("invalid-argument", "Attachment Link must be a valid HTTP or HTTPS URL.");
+  }
 
   const signatoryAdminId = requiredNtaText(input.signatoryAdminId, "Signatory account", 128);
   const signatorySnapshot = await db.collection("users").doc(signatoryAdminId).get();
@@ -344,6 +357,7 @@ export const createFodNta = onCall({ region: "asia-southeast1" }, async (request
     subject,
     activityTitle,
     organizer,
+    attachmentLink,
     signatoryName: signatory.name.trim(),
     signatoryDesignation: signatoryPosition,
     signatoryAdminId,

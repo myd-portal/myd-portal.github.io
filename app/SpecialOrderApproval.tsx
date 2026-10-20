@@ -5,6 +5,7 @@ import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch 
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import { makeDocumentNotification } from "@/lib/document-notifications";
+import { safeAttachmentHref } from "@/lib/attachment-link";
 
 export type SpecialOrderApprovalRecord = {
   id: string;
@@ -13,6 +14,7 @@ export type SpecialOrderApprovalRecord = {
   dateFrom: string;
   dateTo: string;
   venue: string;
+  attachmentLink?: string;
   signatoryName?: string;
   signatoryDesignation?: string;
   participants: string[];
@@ -190,11 +192,12 @@ export default function SpecialOrderApproval({ user, stage, focusRecordId, onVie
     <div className="section-heading"><div><p className="eyebrow">Admin panel</p><h2>{heading}</h2><p className="muted">{records.length} Special Order{records.length === 1 ? "" : "s"} awaiting {isInitial ? "FOD Project Leader initial signature" : "Field Operations Division Chief initial signature"}.</p></div></div>
     {error && <p className="error-message" role="alert">{error}</p>}
     {loading ? <p className="muted">Loading SO approvals...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Special Orders awaiting your action</h3><p>New requests will appear here.</p></div> : <div className="permit-table so-approval-table">
-      <div className="table-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>{signatureLabel}</span><span>View</span></div>
+      <div className="table-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>Attachment</span><span>{signatureLabel}</span><span>View</span></div>
       {records.map((record) => <div className="table-row" key={record.id}>
         <strong data-label="Subject">{record.subject}</strong>
         <span data-label="Activity">{record.activityTitle}</span>
         <span data-label="Schedule">{scheduleLabel(record.dateFrom, record.dateTo)}</span>
+        <span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span>
         <label className="so-approval-affix" data-label="Affix Initial Signature"><select className="affix-signature-select" aria-label={`Affix Initial Signature for ${record.subject}`} value={record.approvalActionStage === "initial" ? record.affixInitialSignature ?? "No" : record.affixChiefInitialSignature ?? "No"} disabled={busyId === record.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}>
           <option value="Yes" disabled={!initialSignature.trim()}>Yes</option><option value="No">No</option>
         </select></label>

@@ -58,6 +58,7 @@ import { assignApprovedPermitNumbers, displayPermitNumber } from "./permit-numbe
 import { divisionSignatory, formatTaxIdentificationNo, formatTevAmount, tevDivisions } from "@/lib/mytev";
 import { getDocumentNotificationReferences, makeDocumentNotification, type DocumentNotification } from "@/lib/document-notifications";
 import { documentRemindersCollection, type DocumentReminder } from "@/lib/document-reminders";
+import { safeAttachmentHref } from "@/lib/attachment-link";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
 import { canAccessCleaningTaskNavigation, canViewCleaningTaskLanding } from "./CleaningTask";
@@ -97,7 +98,7 @@ type Unit = string;
 type AccountAssignment = string;
 type PermitDecision = { status?: "Pending" | "Approved" | "Disapproved"; decidedAt?: unknown; signerName?: string; decidedBy?: string; approvedPermitNo?: string };
 type Permit = { id: string; permitNo: string; permitNos?: string[]; date: string; names: string[]; personIds?: string[]; recipientIds?: string[]; personUnits?: Unit[]; unit: Unit; purpose: string; ownerId?: string; ownerRole?: AccountRole; ownerOffice?: string; ownerDivision?: string; ownerUnit?: string; ownerDesignation?: string; ownerAssignment?: string; personStatuses?: Record<string, PermitDecision>; createdAt?: unknown };
-type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; ownerOffice?: string; ownerDivision?: string; createdAt?: unknown; approvalWorkflow?: "fod"; approvalStage?: "initial" | "chief" | "returned" | "approved"; externalSignatory?: boolean; initialSignerId?: string; chiefSignerId?: string; affixInitialSignature?: "Yes" | "No"; affixInitialSignatureURL?: string; affixInitialSignatureName?: string; affixInitialSignatureAt?: unknown; affixChiefInitialSignature?: "Yes" | "No"; affixChiefInitialSignatureURL?: string; affixChiefInitialSignatureName?: string; affixChiefInitialSignatureAt?: unknown; affixSignature?: "Yes" | "No"; affixSignatureURL?: string; affixSignatureName?: string; affixSignatureAt?: unknown };
+type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; attachmentLink?: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; ownerOffice?: string; ownerDivision?: string; createdAt?: unknown; approvalWorkflow?: "fod"; approvalStage?: "initial" | "chief" | "returned" | "approved"; externalSignatory?: boolean; initialSignerId?: string; chiefSignerId?: string; affixInitialSignature?: "Yes" | "No"; affixInitialSignatureURL?: string; affixInitialSignatureName?: string; affixInitialSignatureAt?: unknown; affixChiefInitialSignature?: "Yes" | "No"; affixChiefInitialSignatureURL?: string; affixChiefInitialSignatureName?: string; affixChiefInitialSignatureAt?: unknown; affixSignature?: "Yes" | "No"; affixSignatureURL?: string; affixSignatureName?: string; affixSignatureAt?: unknown };
 
 const specialOrderSignatories = [
   { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
@@ -1408,6 +1409,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
   const [timeFrom, setTimeFrom] = useState("08:00");
   const [timeTo, setTimeTo] = useState("17:00");
   const [venue, setVenue] = useState("");
+  const [attachmentLink, setAttachmentLink] = useState("");
   const [signatorySelection, setSignatorySelection] = useState("");
   const workflowScope = isFodSpecialOrderWorkflowScope(ownerRole, ownerOffice, ownerDivision ?? "", ownerUnit ?? "");
   const [workflowAccounts, setWorkflowAccounts] = useState<{ head: SpecialOrderWorkflowAccount | null; chief: SpecialOrderWorkflowAccount | null } | null>(null);
@@ -1483,6 +1485,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
     const participantUserIds = participantRecords.map((participant) => participant.userId);
     if (!participantList.length) { onError("Select at least one designated personnel."); return; }
     if (!selectedSignatory) { onError("Select a signatory."); return; }
+    if (attachmentLink.trim() && !safeAttachmentHref(attachmentLink)) { onError("Enter a valid HTTP or HTTPS attachment link."); return; }
     setBusy(true); onError("");
     let saveStage = "prepare";
     const saveWorkflowAccounts = workflowAccounts;
@@ -1490,7 +1493,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
       const signatory = { signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position };
       const firestore = db;
       const orderRef = doc(collection(firestore, "specialOrders"));
-      const baseRecord = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venue: venue.trim(), participants: participantList, participantPositions, participantUnits, participantUserIds, participantIds, recipientIds: participantIds.filter((id) => id !== user.uid), ...signatory, ownerId: user.uid, ownerOffice, ownerDivision: ownerDivision ?? "", ownerUnit };
+      const baseRecord = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venue: venue.trim(), attachmentLink: attachmentLink.trim(), participants: participantList, participantPositions, participantUnits, participantUserIds, participantIds, recipientIds: participantIds.filter((id) => id !== user.uid), ...signatory, ownerId: user.uid, ownerOffice, ownerDivision: ownerDivision ?? "", ownerUnit };
       let initialSignerId = saveWorkflowAccounts?.head?.userId;
       let record: Omit<SpecialOrder, "id">;
       if (workflowScope) {
@@ -1506,6 +1509,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
           timeFrom: string;
           timeTo: string;
           venue: string;
+          attachmentLink: string;
           participants: string[];
           participantPositions: string[];
           participantUnits: string[];
@@ -1523,6 +1527,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
           timeFrom: baseRecord.timeFrom,
           timeTo: baseRecord.timeTo,
           venue: baseRecord.venue,
+          attachmentLink: baseRecord.attachmentLink,
           participants: baseRecord.participants,
           participantPositions: baseRecord.participantPositions,
           participantUnits: baseRecord.participantUnits,
@@ -1629,6 +1634,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
   return <section className="content-section form-section special-order-form-section"><div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create special order</h2><p className="muted">Add the activity details and designated personnel.</p></div><button className="ghost-button" onClick={onCancel}>Cancel</button></div><form className="permit-form" onSubmit={save}><div className="wide-field special-order-activity-fields"><label>Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} required /></label><label>Title of the Activity<input value={activityTitle} onChange={(event) => setActivityTitle(event.target.value)} required /></label><label>Organizer or Host<input value={organizer} onChange={(event) => setOrganizer(event.target.value)} required /></label></div><div className="special-order-schedule-fields"><div className="date-range-field"><span>Date</span><div><input aria-label="Date from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} required /><span>to</span><input aria-label="Date to" type="date" min={dateFrom} value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></div></div><div className="date-range-field"><span>Time</span><div><input aria-label="Time from" type="time" value={timeFrom} onChange={(event) => setTimeFrom(event.target.value)} required /><span>to</span><input aria-label="Time to" type="time" value={timeTo} onChange={(event) => setTimeTo(event.target.value)} required /></div></div></div><label className="wide-field">Venue<input value={venue} onChange={(event) => setVenue(event.target.value)} placeholder="Street, Building, City, Province" required /></label><div className="participant-fields wide-field"><span>Designated Personnel</span>{participants.map((participant, index) => { return <div className="participant-input" key={index}>{participant.manual ? <div className="participant-manual-fields"><label>Personnel Name<input aria-label={`Personnel ${index + 1} name`} value={participant.name} onChange={(event) => updateParticipant(index, { name: event.target.value })} required /></label><label>Personnel Position<input aria-label={`Personnel ${index + 1} position`} value={participant.position} onChange={(event) => updateParticipant(index, { position: event.target.value })} required /></label><label>Personnel Unit / Program / Project<input aria-label={`Personnel ${index + 1} Unit / Program / Project`} value={participant.unit} onChange={(event) => updateParticipant(index, { unit: event.target.value })} required /></label></div> : <NameSearchSelect aria-label={`Designated personnel ${index + 1}`} value={participant.userId} onChange={(selectedId) => { const selectedPerson = personnel.find((person) => person.userId === selectedId); updateParticipant(index, { userId: selectedId, name: selectedPerson?.name ?? "", position: selectedPerson?.position ?? "", unit: selectedPerson?.unit ?? "" }); }} required={index === 0} disabled={personnelStatus !== "ready"}><option value="" disabled>{personnelStatus === "loading" ? "Loading personnel..." : personnelStatus === "error" ? "Personnel list unavailable" : "Select a personnel"}</option>{personnel.filter((person) => person.userId === participant.userId || !selectedParticipantUserIds.has(person.userId)).map((person) => <option key={person.userId} value={person.userId}>{personnelDisplayName(person)}</option>)}</NameSearchSelect>}<label className="participant-manual-toggle"><input type="checkbox" checked={participant.manual} onChange={(event) => { const enabled = event.target.checked; updateParticipant(index, enabled ? { manual: true, userId: "" } : { manual: false, userId: "", name: "", position: "", unit: "" }); }} />Manual</label>{participants.length > 1 && <button type="button" className="remove-participant remove-action" aria-label={`Remove personnel ${index + 1}`} onClick={() => setParticipants((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}
       </div>;
     })}<button type="button" className="text-button plain-action add-item-text-button add-participant" onClick={() => setParticipants((current) => [...current, { name: "", position: "", unit: "", userId: "", manual: false }])}>+ Add personnel</button>{personnelStatus === "error" && <span className="auth-message auth-message-error" role="alert">Unable to load personnel from user accounts. Use manual input or reload the page to try again.</span>}</div>
+    <label className="wide-field">Attachment Link<input type="url" value={attachmentLink} onChange={(event) => { setAttachmentLink(event.target.value); onError(""); }} maxLength={2048} placeholder="https://" /></label>
     <label className="wide-field">Signatory<select aria-label="Signatory" value={signatorySelection} onChange={(event) => { setSignatorySelection(event.target.value); onError(""); }} required disabled={workflowScope && workflowAccountsLoading}><option value="" disabled>{workflowScope && workflowAccountsLoading ? "Loading active signatory..." : "Select a signatory"}</option>{signatoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{workflowScope && !workflowAccountsLoading && (!workflowAccounts?.head || !workflowAccounts.chief) && <small className="muted">An active Field Operations Project Leader and Field Operations Division Chief account are required to route this order.</small>}</label>
     <div className="form-actions"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save"}</button></div>
   </form></section>;
@@ -3132,6 +3138,7 @@ export default function Home() {
         ...(order.timeFrom !== undefined ? { timeFrom: order.timeFrom } : {}),
         ...(order.timeTo !== undefined ? { timeTo: order.timeTo } : {}),
         venue: order.venue,
+        ...(order.attachmentLink ? { attachmentLink: order.attachmentLink } : {}),
         participants: [...order.participants],
         ...(order.participantPositions ? { participantPositions: [...order.participantPositions] } : {}),
         ...(order.participantUnits ? { participantUnits: [...order.participantUnits] } : {}),

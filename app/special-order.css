@@ -51,6 +51,6 @@
   .special-order-edit-section .participant-input .remove-action{margin-left:auto}
   .special-order-edit-section .form-actions .primary-button{width:100%}
 }
-.so-approval-table .table-head,.so-approval-table .table-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.35fr) minmax(0,1.3fr) minmax(130px,.9fr) 72px}
+.so-approval-table .table-head,.so-approval-table .table-row{grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1.1fr) minmax(120px,.9fr) minmax(130px,.9fr) 72px}
 .so-approval-table .so-approval-affix{margin:0;min-width:0}
 @media(max-width:720px){.so-approval-table .table-row{gap:12px;grid-template-columns:minmax(0,1fr)}.so-approval-table .table-row>strong,.so-approval-table .table-row>[data-label]{grid-column:1;min-width:0;overflow-wrap:anywhere}.so-approval-table .table-row>[data-label]::before{color:var(--muted);content:attr(data-label);display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;margin-bottom:4px;text-transform:uppercase}.so-approval-table .permit-row-actions{padding-top:2px}.so-approval-table .row-action{text-align:left}}
