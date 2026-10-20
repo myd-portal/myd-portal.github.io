@@ -5,7 +5,7 @@
   .calendar-of-activities-list-row>strong{font-size:14px}
   .calendar-of-activities-list-count::before,.calendar-of-activities-list-affix::before,.calendar-of-activities-list-status::before{color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase}
   .calendar-of-activities-list-count::before{content:"Activities: "}
-  .calendar-of-activities-list-affix::before{content:"Affix Signature: "}
+  .calendar-of-activities-list-affix::before{content:attr(data-label) ": "}
   .calendar-of-activities-list-status::before{content:"Status: "}
   .calendar-of-activities-row-actions{flex-wrap:wrap;gap:18px;justify-content:flex-start;padding-top:3px}
   .calendar-of-activities-form{gap:17px;grid-template-columns:minmax(0,1fr)}

@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PDFFont, PDFPage, RGB } from "pdf-lib";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
-import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
-import { accountOffice } from "@/lib/account-profile";
-import { divisionSignatory, tevDivisions, type TevDivision } from "@/lib/mytev";
+import { accountAssignment, accountDivision, accountOffice } from "@/lib/account-profile";
+import { tevDivisions, type TevDivision } from "@/lib/mytev";
 import { makeDocumentNotification } from "@/lib/document-notifications";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -56,9 +56,24 @@ type LeaveApplicationRecord = {
   affixSignatureURL?: string;
   affixSignatureName?: string;
   affixSignatureAt?: unknown;
+  approvalWorkflow?: "fod-myleave";
+  approvalStage?: "owner-full" | "project-leader" | "chief" | "returned";
+  initialSignerId?: string;
+  chiefSignerId?: string;
+  affixInitialSignature?: "Yes" | "No";
+  affixInitialSignatureURL?: string;
+  affixInitialSignatureName?: string;
+  affixInitialSignatureAt?: unknown;
+  affixChiefSignature?: "Yes" | "No";
+  affixChiefSignatureURL?: string;
+  affixChiefSignatureName?: string;
+  affixChiefSignatureAt?: unknown;
   status: LeaveStatus;
   createdAt?: unknown;
 };
+type LeaveAdminSignatory = { id: string; name: string; designation: "Chief" | "OIC"; division: string };
+type LeaveWorkflowSigners = { projectLeaderId: string; chiefId: string };
+type LeaveModuleMode = "owner" | "approval";
 
 const leaveTypes: LeaveType[] = [
   "Vacation Leave",
@@ -170,6 +185,37 @@ function officeFromProfile(value: unknown): Office | "" {
   if (normalized === "AMIA" || normalized === "FOD-AMIA") return "FOD-AMIA";
   if (normalized === "DRRM" || normalized === "FOD-DRRM") return "FOD-DRRM";
   return unit;
+}
+
+function isFodLeaveOwner(profile: Record<string, unknown>) {
+  const role = typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : "";
+  const unit = typeof profile.unit === "string" ? profile.unit : "";
+  return ["regular", "user"].includes(role)
+    && profile.office === "Division"
+    && profile.division === "Field Operations Division"
+    && ["AGRISTAT", "DRRM", "AMIA"].includes(unit === "FOD-AGRISTAT" ? "AGRISTAT" : unit === "FOD-DRRM" ? "DRRM" : unit === "FOD-AMIA" ? "AMIA" : unit);
+}
+
+function fodLeaveApproverDesignation(profile: Record<string, unknown>) {
+  const role = typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : "";
+  const status = profile.accountStatus;
+  return role === "admin"
+    && (status === undefined || status === null || status === "Approved")
+    && profile.office === "Division"
+    && profile.division === "Field Operations Division"
+    && profile.unit === "Field Operations Division"
+    && ["AGRISTAT/DRRM/AMIA Project Leader", "Chief"].includes(String(profile.designation ?? ""))
+    ? String(profile.designation)
+    : "";
+}
+
+function eligibleLeaveSignatory(profile: Record<string, unknown>, divisionName: string): profile is Record<string, unknown> & { name: string; designation: "Chief" | "OIC" } {
+  return String(profile.accountRole ?? "").toLowerCase() === "admin"
+    && (profile.accountStatus === undefined || profile.accountStatus === null || profile.accountStatus === "Approved")
+    && profile.division === divisionName
+    && (profile.designation === "Chief" || profile.designation === "OIC")
+    && typeof profile.name === "string"
+    && profile.name.trim().length > 0;
 }
 
 function safePdfText(value: string) {
@@ -349,6 +395,32 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
     page.drawText(divisionText, { x: lineX + positionWidth, y: 205.8, size: positionSize, font, color: pdfTextColor });
   }
 
+  let chiefSignatureMetadataX = 542;
+  if (record.approvalWorkflow === "fod-myleave" && record.affixChiefSignature === "Yes" && record.affixChiefSignatureURL) {
+    const response = await fetch(record.affixChiefSignatureURL, { cache: "force-cache", mode: "cors" });
+    if (!response.ok) throw new Error("The saved Chief Full Signature could not be loaded.");
+    const image = await pdf.embedPng(await response.arrayBuffer());
+    const fitted = image.scaleToFit(72, 28);
+    chiefSignatureMetadataX = 466 + fitted.width + 4;
+    const signatureBlockWidth = 686 - chiefSignatureMetadataX;
+    const signerName = safePdfText((record.affixChiefSignatureName || "FIELD OPERATIONS CHIEF").toLocaleUpperCase("en-PH"));
+    page.drawImage(image, { x: 466, y: 229, width: fitted.width, height: fitted.height });
+    drawFitText(page, bold, `Digitally Signed: ${signerName}`, chiefSignatureMetadataX, 252, signatureBlockWidth, 6.5);
+    drawFitText(page, font, `Date: ${signatureDate(record.affixChiefSignatureAt)}`, chiefSignatureMetadataX, 244, signatureBlockWidth, 6.5);
+    drawFitText(page, font, `Time: ${signatureTime(record.affixChiefSignatureAt)}`, chiefSignatureMetadataX, 236, signatureBlockWidth, 6.5);
+  }
+  if (record.approvalWorkflow === "fod-myleave" && record.affixInitialSignature === "Yes" && record.affixInitialSignatureURL) {
+    const response = await fetch(record.affixInitialSignatureURL, { cache: "force-cache", mode: "cors" });
+    if (!response.ok) throw new Error("The saved Project Leader Initial Signature could not be loaded.");
+    const image = await pdf.embedPng(await response.arrayBuffer());
+    const fitted = image.scaleToFit(34, 20);
+    const chiefTime = `Time: ${signatureTime(record.affixChiefSignatureAt)}`;
+    const timeTextWidth = font.widthOfTextAtSize(chiefTime, 6.5);
+    const x = chiefSignatureMetadataX + timeTextWidth + 4;
+    const y = 236 - (fitted.height - 6.5) / 2;
+    page.drawImage(image, { x, y, width: fitted.width, height: fitted.height });
+  }
+
   const secondPageResponse = await fetch(asset("/2nd-page-leave-application.jpg"), { cache: "force-cache" });
   if (!secondPageResponse.ok) throw new Error("The second Leave Application page could not be loaded.");
   const instructionsImage = await pdf.embedJpg(await secondPageResponse.arrayBuffer());
@@ -361,7 +433,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   return pdf.save();
 }
 
-export default function LeaveApplicationModule({ user, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
+export default function LeaveApplicationModule({ user, mode = "owner", focusRecordId, onFocusHandled, onPreviewClose }: { user: User; mode?: LeaveModuleMode; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [records, setRecords] = useState<LeaveApplicationRecord[]>([]);
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(records);
   const [view, setView] = useState<"list" | "new">("list");
@@ -381,7 +453,12 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const handledFocusIdRef = useRef<string | null>(null);
 
-  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; fullSignatureURL: string; applicant?: { first: string; middle: string; last: string } }>({ name: user.displayName ?? "", office: "", position: "", fullSignatureURL: "" });
+  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; fullSignatureURL: string; initialSignatureURL: string; accountRole: string; designation: string; division: string; unit: string; applicant?: { first: string; middle: string; last: string } }>({ name: user.displayName ?? "", office: "", position: "", fullSignatureURL: "", initialSignatureURL: "", accountRole: "", designation: "", division: "", unit: "" });
+  const [signatoryOptions, setSignatoryOptions] = useState<LeaveAdminSignatory[]>([]);
+  const [signatoryAccountsLoaded, setSignatoryAccountsLoaded] = useState(false);
+  const [selectedSignatoryUserId, setSelectedSignatoryUserId] = useState("");
+  const [workflowSigners, setWorkflowSigners] = useState<LeaveWorkflowSigners | null>(null);
+  const [adminNotificationRecipientIds, setAdminNotificationRecipientIds] = useState<string[]>([]);
   const [filedDate, setFiledDate] = useState(localDateValue());
   const [firstName, setFirstName] = useState(() => parseName(user.displayName ?? "").first);
   const [middleName, setMiddleName] = useState(() => parseName(user.displayName ?? "").middle);
@@ -397,7 +474,8 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
   const [inclusiveDateFrom, setInclusiveDateFrom] = useState("");
   const [inclusiveDateTo, setInclusiveDateTo] = useState("");
   const [division, setDivision] = useState<TevDivision | "">("");
-  const selectedDivisionSignatory = division ? divisionSignatory(division) : null;
+  const selectedDivisionSignatory = signatoryOptions.find((option) => option.id === selectedSignatoryUserId) ?? null;
+  const approvalDesignation = fodLeaveApproverDesignation(profileDefaults);
   const showLeaveDetails = ["Vacation Leave", "Special Privilege Leave", "Sick Leave", "Study Leave"].includes(leaveType);
   const showSpecifyOthers = leaveType === "Others";
   const showSpecifyAbroad = ["Vacation Leave", "Special Privilege Leave"].includes(leaveType) && leaveDetails === "Abroad";
@@ -411,20 +489,52 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
       setError("Firebase is not configured.");
       return;
     }
-    return onSnapshot(query(collection(db, "leaveApplications"), where("ownerId", "==", user.uid)), (snapshot) => {
+    let active = true;
+    let unsubscribe = () => {};
+    const applyRows = (snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => {
       const rows = snapshot.docs.map((item) => {
         const data = item.data();
-        return { id: item.id, ...data, status: leaveStatuses.includes(data.status) ? data.status : "Pending" } as LeaveApplicationRecord;
+        return { id: item.id, ...data, status: leaveStatuses.includes(data.status as LeaveStatus) ? data.status : "Pending" } as LeaveApplicationRecord;
       });
       rows.sort((left, right) => ((right.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0) - ((left.createdAt as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0));
       setRecords(rows);
       setLoading(false);
-    }, (cause) => {
+    };
+    const onFailure = (cause: unknown) => {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not load Leave Applications (${code}).` : "Could not load Leave Applications. Refresh and try again.");
+      setError(code ? `Could not load ${mode === "approval" ? "Leave Application approval tasks" : "Leave Applications"} (${code}).` : `Could not load ${mode === "approval" ? "Leave Application approval tasks" : "Leave Applications"}. Refresh and try again.`);
       setLoading(false);
-    });
-  }, [user.uid]);
+    };
+    if (mode === "owner") {
+      unsubscribe = onSnapshot(query(collection(db, "leaveApplications"), where("ownerId", "==", user.uid)), applyRows, onFailure);
+      return () => { active = false; unsubscribe(); };
+    }
+    setLoading(true);
+    void (async () => {
+      try {
+        const profileSnapshot = await getDoc(doc(db, "users", user.uid));
+        if (!active) return;
+        const designation = profileSnapshot.exists() ? fodLeaveApproverDesignation(profileSnapshot.data()) : "";
+        if (!designation) {
+          setRecords([]);
+          setError("This account is not assigned to Leave Application Approval.");
+          setLoading(false);
+          return;
+        }
+        const signerField = designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "initialSignerId" : "chiefSignerId";
+        const expectedStage = designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "project-leader" : "chief";
+        unsubscribe = onSnapshot(query(collection(db, "leaveApplications"),
+          where("approvalWorkflow", "==", "fod-myleave"),
+          where(signerField, "==", user.uid),
+          where("approvalStage", "==", expectedStage)), (snapshot) => {
+          applyRows({ docs: snapshot.docs.filter((item) => item.data().approvalWorkflow === "fod-myleave" && item.data().approvalStage === expectedStage) });
+        }, onFailure);
+      } catch (cause) {
+        if (active) onFailure(cause);
+      }
+    })();
+    return () => { active = false; unsubscribe(); };
+  }, [mode, user.uid]);
 
   useEffect(() => {
     let active = true;
@@ -434,14 +544,20 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
         const snapshot = await getDoc(doc(db, "users", user.uid));
         if (!active || !snapshot.exists()) return;
         const profile = snapshot.data();
+        const normalizedOffice = officeFromProfile(accountOffice(profile));
         const applicant = typeof profile.firstName === "string" && typeof profile.lastName === "string"
           ? { first: profile.firstName, middle: typeof profile.middleName === "string" ? profile.middleName : "", last: profile.lastName }
           : parseName(typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "");
         const defaults = {
           name: typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "",
           position: typeof profile.position === "string" ? profile.position : "",
-          office: officeFromProfile(accountOffice(profile)),
+          office: normalizedOffice,
           fullSignatureURL: typeof profile.fullSignatureURL === "string" ? profile.fullSignatureURL : "",
+          initialSignatureURL: typeof profile.initialSignatureURL === "string" ? profile.initialSignatureURL : "",
+          accountRole: typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : "",
+          designation: typeof profile.designation === "string" ? profile.designation : "",
+          division: accountDivision(profile),
+          unit: accountAssignment(profile),
           applicant,
         };
         setProfileDefaults(defaults);
@@ -466,10 +582,45 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
       setProfileDefaults((current) => ({
         ...current,
         name: typeof profile.name === "string" && profile.name.trim() ? profile.name : current.name,
+        office: officeFromProfile(accountOffice(profile)),
         fullSignatureURL: typeof profile.fullSignatureURL === "string" ? profile.fullSignatureURL : "",
+        initialSignatureURL: typeof profile.initialSignatureURL === "string" ? profile.initialSignatureURL : "",
+        accountRole: typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : current.accountRole,
+        designation: typeof profile.designation === "string" ? profile.designation : current.designation,
+        division: accountDivision(profile),
+        unit: accountAssignment(profile),
       }));
     });
   }, [user.uid]);
+
+  useEffect(() => {
+    if (!db || mode !== "owner") return;
+    let active = true;
+    setSignatoryAccountsLoaded(false);
+    void getDocs(collection(db, "users")).then((snapshot) => {
+      if (!active) return;
+      const options = snapshot.docs.flatMap((account) => {
+        const profile = account.data();
+        if (!eligibleLeaveSignatory(profile, typeof profile.division === "string" ? profile.division : "")) return [];
+        return [{ id: account.id, name: profile.name.trim(), designation: profile.designation, division: String(profile.division) }];
+      }).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
+      const projectLeader = snapshot.docs.find((account) => fodLeaveApproverDesignation(account.data()) === "AGRISTAT/DRRM/AMIA Project Leader");
+      const chief = snapshot.docs.find((account) => fodLeaveApproverDesignation(account.data()) === "Chief");
+      setSignatoryOptions(options);
+      setWorkflowSigners(projectLeader && chief && projectLeader.id !== chief.id ? { projectLeaderId: projectLeader.id, chiefId: chief.id } : null);
+      setAdminNotificationRecipientIds(snapshot.docs
+        .filter((account) => account.id !== user.uid && ["superadmin", "admin"].includes(String(account.data().accountRole ?? "").toLowerCase()) && (account.data().accountStatus ?? "Approved") === "Approved")
+        .map((account) => account.id));
+      setSignatoryAccountsLoaded(true);
+    }).catch(() => { if (active) setSignatoryAccountsLoaded(true); });
+    return () => { active = false; };
+  }, [mode, user.uid]);
+
+  useEffect(() => {
+    if (!division) { setSelectedSignatoryUserId(""); return; }
+    const matching = signatoryOptions.filter((option) => option.division === division);
+    if (!matching.some((option) => option.id === selectedSignatoryUserId)) setSelectedSignatoryUserId(matching[0]?.id ?? "");
+  }, [division, selectedSignatoryUserId, signatoryOptions]);
 
   useEffect(() => () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -542,6 +693,7 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
     setInclusiveDateFrom("");
     setInclusiveDateTo("");
     setDivision("");
+    setSelectedSignatoryUserId("");
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -576,6 +728,23 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
     setError("");
     setMessage("");
     try {
+      if (!selectedDivisionSignatory || selectedDivisionSignatory.division !== division) {
+        setError(signatoryAccountsLoaded ? "Select an available Chief or OIC Admin signatory for the selected division." : "Admin signatories are still loading. Try again in a moment.");
+        return;
+      }
+      const selectedSignatory = selectedDivisionSignatory;
+      if (!selectedSignatory || selectedSignatory.division !== division || !selectedSignatory.name.trim() || !["Chief", "OIC"].includes(selectedSignatory.designation)) {
+        setError("The selected Admin signatory is no longer available. Select another signatory.");
+        return;
+      }
+      let workflowFields: Pick<LeaveApplicationRecord, "approvalWorkflow" | "approvalStage" | "initialSignerId" | "chiefSignerId" | "affixInitialSignature" | "affixChiefSignature"> | Record<string, never> = {};
+      if (isFodLeaveOwner(profileDefaults)) {
+        if (!workflowSigners) {
+          setError("The Field Operations Division Project Leader and Chief accounts are not both configured. Contact an administrator before submitting this application.");
+          return;
+        }
+        workflowFields = { approvalWorkflow: "fod-myleave", approvalStage: "owner-full", initialSignerId: workflowSigners.projectLeaderId, chiefSignerId: workflowSigners.chiefId, affixInitialSignature: "No", affixChiefSignature: "No" };
+      }
       const leaveRef = doc(collection(db, "leaveApplications"));
       const leaveData = {
         ownerId: user.uid,
@@ -596,39 +765,49 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
         inclusiveDateFrom,
         inclusiveDateTo,
         division,
-        signatoryName: selectedDivisionSignatory.name,
-        signatoryPosition: selectedDivisionSignatory.position,
+        signatoryName: selectedSignatory.name.trim(),
+        signatoryPosition: selectedSignatory.designation,
         affixSignature: "No" as const,
         status: "Pending",
+        ...workflowFields,
         createdAt: serverTimestamp(),
       };
       const record = { id: leaveRef.id, ...leaveData } as LeaveApplicationRecord;
-      const batch = writeBatch(db);
-      batch.set(leaveRef, leaveData);
-      batch.set(doc(db, "approvedLeaveCalendar", record.id), leaveCalendarData(record, user.uid));
-      const adminAccountSnapshot = await getDocs(query(collection(db, "users"), where("accountRole", "in", ["superadmin", "admin"])));
-      adminAccountSnapshot.docs
-        .filter((account) => account.id !== user.uid && (account.data().accountStatus ?? "Approved") === "Approved")
-        .forEach((account) => {
-          const notification = makeDocumentNotification(firestore, {
-            recipientId: account.id,
-            ownerId: user.uid,
-            documentId: leaveRef.id,
-            documentType: "Leave Application",
-            applicantName: record.name,
-            leaveType: record.leaveType,
-            inclusiveDateFrom: record.inclusiveDateFrom,
-            inclusiveDateTo: record.inclusiveDateTo,
-          });
-          batch.set(notification.reference, notification.data);
-        });
-      await batch.commit();
-      setMessage("Leave Application saved.");
+      // The leave application is the primary record. Save it independently so
+      // an auxiliary calendar or notification rule cannot reject the entire
+      // submission and leave the user with no application at all.
+      await setDoc(leaveRef, leaveData);
+
+      try {
+        const batch = writeBatch(db);
+        batch.set(doc(db, "approvedLeaveCalendar", record.id), leaveCalendarData(record, user.uid));
+        if (record.approvalWorkflow !== "fod-myleave") {
+          adminNotificationRecipientIds
+            .forEach((recipientId) => {
+              const notification = makeDocumentNotification(firestore, {
+                recipientId,
+                ownerId: user.uid,
+                documentId: leaveRef.id,
+                documentType: "Leave Application",
+                applicantName: record.name,
+                leaveType: record.leaveType,
+                inclusiveDateFrom: record.inclusiveDateFrom,
+                inclusiveDateTo: record.inclusiveDateTo,
+              });
+              batch.set(notification.reference, notification.data);
+            });
+        }
+        await batch.commit();
+        setMessage("Leave Application saved.");
+      } catch (cause) {
+        const code = (cause as { code?: string }).code;
+        setMessage(`Leave Application saved, but its calendar or notification sync failed${code ? ` (${code})` : ""}.`);
+      }
       setView("list");
       resetForm();
     } catch (cause) {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not save the Leave Application (${code}).` : "Could not save the Leave Application. Try again.");
+      setError(code ? `Could not save the Leave Application record (${code}).` : "Could not save the Leave Application record. Try again.");
     } finally { setBusy(false); }
   }
 
@@ -661,6 +840,67 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
     } finally { setUpdatingId(null); }
   }
 
+  async function startLegacyLeaveApprovalWorkflow(record: LeaveApplicationRecord) {
+    if (!db) { setError("Firebase is not configured."); return; }
+    if (!isFodLeaveOwner(profileDefaults) || record.ownerId !== user.uid || record.approvalWorkflow === "fod-myleave") {
+      setError("Only the applicant can send an eligible Field Operations Division Leave Application into this approval workflow.");
+      return;
+    }
+    if (record.status === "Disapproved") {
+      setError("A disapproved Leave Application cannot be sent into the signature workflow.");
+      return;
+    }
+    if (record.affixSignature !== "Yes") {
+      setError("Affix your Full Signature before sending this application for approval.");
+      return;
+    }
+
+    setAffixUpdatingId(record.id);
+    setError("");
+    setMessage("");
+    try {
+      const accounts = await getDocs(collection(db, "users"));
+      const projectLeader = accounts.docs.find((account) => fodLeaveApproverDesignation(account.data()) === "AGRISTAT/DRRM/AMIA Project Leader");
+      const chief = accounts.docs.find((account) => fodLeaveApproverDesignation(account.data()) === "Chief");
+      if (!projectLeader || !chief || projectLeader.id === chief.id) {
+        setError("The Field Operations Division Project Leader and Chief accounts are not both configured. Contact an administrator before sending this application.");
+        return;
+      }
+
+      const workflowFields = {
+        approvalWorkflow: "fod-myleave" as const,
+        approvalStage: "project-leader" as const,
+        initialSignerId: projectLeader.id,
+        chiefSignerId: chief.id,
+        affixInitialSignature: "No" as const,
+        affixChiefSignature: "No" as const,
+        status: "Pending" as const,
+      };
+      const batch = writeBatch(db);
+      batch.update(doc(db, "leaveApplications", record.id), workflowFields);
+      batch.set(doc(db, "approvedLeaveCalendar", record.id), leaveCalendarData({ ...record, status: "Pending" }, user.uid, "Pending"));
+      const notification = makeDocumentNotification(db, {
+        recipientId: projectLeader.id,
+        ownerId: record.ownerId,
+        documentId: record.id,
+        documentType: "Leave Application",
+        approvalStep: "initial",
+        applicantName: record.name,
+        leaveType: record.leaveType,
+        inclusiveDateFrom: record.inclusiveDateFrom,
+        inclusiveDateTo: record.inclusiveDateTo,
+      });
+      batch.set(notification.reference, notification.data);
+      await batch.commit();
+      const updatedRecord = { ...record, ...workflowFields } as LeaveApplicationRecord;
+      setRecords((current) => current.map((item) => item.id === record.id ? updatedRecord : item));
+      setMessage("This application is Pending and was sent to the Project Leader.");
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code ? `Could not send the Leave Application for approval (${code}).` : "Could not send the Leave Application for approval. Try again.");
+    } finally { setAffixUpdatingId(null); }
+  }
+
   async function changeAffixSignature(record: LeaveApplicationRecord, value: "Yes" | "No") {
     if (!db) { setError("Firebase is not configured."); return; }
     if (value === "Yes" && (!profileDefaults.fullSignatureURL.trim() || !profileDefaults.name.trim())) {
@@ -676,18 +916,32 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
           affixSignatureURL: profileDefaults.fullSignatureURL.trim(),
           affixSignatureName: profileDefaults.name.trim(),
           affixSignatureAt: serverTimestamp(),
+          ...(record.approvalWorkflow === "fod-myleave" ? { approvalStage: "project-leader" as const } : {}),
         }
-      : {
-          affixSignature: "No" as const,
-          affixSignatureURL: deleteField(),
-          affixSignatureName: deleteField(),
-          affixSignatureAt: deleteField(),
-        };
+      : { affixSignature: "No" as const };
     try {
-      await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
+      if (record.approvalWorkflow === "fod-myleave" && value === "Yes" && record.initialSignerId) {
+        const batch = writeBatch(db);
+        batch.update(doc(db, "leaveApplications", record.id), signatureFields);
+        const notification = makeDocumentNotification(db, {
+          recipientId: record.initialSignerId,
+          ownerId: record.ownerId,
+          documentId: record.id,
+          documentType: "Leave Application",
+          approvalStep: "initial",
+          applicantName: record.name,
+          leaveType: record.leaveType,
+          inclusiveDateFrom: record.inclusiveDateFrom,
+          inclusiveDateTo: record.inclusiveDateTo,
+        });
+        batch.set(notification.reference, notification.data);
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
+      }
       let updatedRecord: LeaveApplicationRecord = value === "Yes"
-        ? { ...record, affixSignature: "Yes", affixSignatureURL: profileDefaults.fullSignatureURL.trim(), affixSignatureName: profileDefaults.name.trim(), affixSignatureAt: new Date() }
-        : { ...record, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
+        ? { ...record, affixSignature: "Yes", affixSignatureURL: profileDefaults.fullSignatureURL.trim(), affixSignatureName: profileDefaults.name.trim(), affixSignatureAt: new Date(), ...(record.approvalWorkflow === "fod-myleave" ? { approvalStage: "project-leader" as const } : {}) }
+        : { ...record, affixSignature: "No" };
       try {
         const savedRecord = await getDoc(doc(db, "leaveApplications", record.id));
         if (savedRecord.exists()) updatedRecord = { id: record.id, ...savedRecord.data(), status: leaveStatuses.includes(savedRecord.data().status) ? savedRecord.data().status : "Pending" } as LeaveApplicationRecord;
@@ -695,7 +949,74 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
         // Keep the successful update and local timestamp if the follow-up read fails.
       }
       setRecords((current) => current.map((item) => item.id === record.id ? updatedRecord : item));
-      setMessage(value === "Yes" ? "Signature affixed to this Leave Application." : "Signature removed from this Leave Application.");
+      setMessage(value === "Yes"
+        ? record.approvalWorkflow === "fod-myleave"
+          ? "Your Full Signature is saved. The application was sent to the Project Leader."
+          : isFodLeaveOwner(profileDefaults)
+            ? "Full Signature saved. Click Send for Approval to route this older application."
+            : "Signature affixed to this Leave Application."
+        : "Signature removed from this Leave Application.");
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setError(code ? `Could not update the Leave Application signature (${code}).` : "Could not update the Leave Application signature. Try again.");
+    } finally { setAffixUpdatingId(null); }
+  }
+
+  async function changeApprovalSignature(record: LeaveApplicationRecord, value: "Yes" | "No") {
+    if (!db || !record.approvalWorkflow) return;
+    const isProjectLeader = approvalDesignation === "AGRISTAT/DRRM/AMIA Project Leader" && record.approvalStage === "project-leader" && record.initialSignerId === user.uid;
+    const isChief = approvalDesignation === "Chief" && record.approvalStage === "chief" && record.chiefSignerId === user.uid;
+    if (!isProjectLeader && !isChief) { setError("This Leave Application is not awaiting your signature."); return; }
+    const signatureURL = isProjectLeader ? profileDefaults.initialSignatureURL.trim() : profileDefaults.fullSignatureURL.trim();
+    if (value === "Yes" && (!signatureURL || !profileDefaults.name.trim())) {
+      setError(`Upload your ${isProjectLeader ? "Initial" : "Full"} Signature in Profile before affixing it.`);
+      return;
+    }
+    setAffixUpdatingId(record.id);
+    setError("");
+    setMessage("");
+    const signatureFields = value === "No"
+      ? { [isProjectLeader ? "affixInitialSignature" : "affixChiefSignature"]: "No" }
+      : isProjectLeader
+        ? { affixInitialSignature: "Yes", affixInitialSignatureURL: signatureURL, affixInitialSignatureName: profileDefaults.name.trim(), affixInitialSignatureAt: serverTimestamp(), approvalStage: "chief" }
+        : { affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profileDefaults.name.trim(), affixChiefSignatureAt: serverTimestamp(), approvalStage: "returned" };
+    try {
+      if (value === "Yes") {
+        const batch = writeBatch(db);
+        batch.update(doc(db, "leaveApplications", record.id), signatureFields);
+        const addNotification = (recipientId: string, approvalStep: "chief" | "project-leader-completed" | "returned") => {
+          const notification = makeDocumentNotification(db, {
+            recipientId,
+            ownerId: record.ownerId,
+            documentId: record.id,
+            documentType: "Leave Application",
+            approvalStep,
+            applicantName: record.name,
+            leaveType: record.leaveType,
+            inclusiveDateFrom: record.inclusiveDateFrom,
+            inclusiveDateTo: record.inclusiveDateTo,
+          });
+          batch.set(notification.reference, notification.data);
+        };
+        if (isProjectLeader) {
+          if (record.chiefSignerId) addNotification(record.chiefSignerId, "chief");
+          addNotification(record.ownerId, "project-leader-completed");
+        } else {
+          addNotification(record.ownerId, "returned");
+        }
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
+      }
+      const updatedRecord: LeaveApplicationRecord = isProjectLeader
+        ? value === "Yes"
+          ? { ...record, affixInitialSignature: "Yes", affixInitialSignatureURL: signatureURL, affixInitialSignatureName: profileDefaults.name.trim(), affixInitialSignatureAt: new Date(), approvalStage: "chief" }
+          : { ...record, affixInitialSignature: "No" }
+        : value === "Yes"
+          ? { ...record, affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profileDefaults.name.trim(), affixChiefSignatureAt: new Date(), approvalStage: "returned" }
+          : { ...record, affixChiefSignature: "No" };
+      setRecords((current) => current.map((item) => item.id === record.id ? updatedRecord : item));
+      setMessage(value === "Yes" ? isProjectLeader ? "Initial Signature affixed. The application was sent to the Chief." : "Full Signature affixed. The application was returned to the applicant." : "Signature choice updated.");
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       setError(code ? `Could not update the Leave Application signature (${code}).` : "Could not update the Leave Application signature. Try again.");
@@ -704,6 +1025,11 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
 
   async function deleteRecord(record: LeaveApplicationRecord) {
     if (!db) return;
+    if (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "owner-full") {
+      setError("This Leave Application cannot be deleted after its signature workflow has started.");
+      setPendingDelete(null);
+      return;
+    }
     if (record.status !== "Pending") {
       setError("Approved or Disapproved Leave Applications cannot be deleted.");
       setPendingDelete(null);
@@ -803,18 +1129,19 @@ export default function LeaveApplicationModule({ user, focusRecordId, onFocusHan
           <fieldset className="leave-application-date-range"><legend>Inclusive Dates</legend><label>From<input aria-label="Inclusive start date" type="date" value={inclusiveDateFrom} onChange={(event) => setInclusiveDateFrom(event.target.value)} required /></label><span aria-hidden="true">to</span><label>To<input aria-label="Inclusive end date" type="date" min={inclusiveDateFrom} value={inclusiveDateTo} onChange={(event) => setInclusiveDateTo(event.target.value)} required /></label></fieldset>
           <label>Division<select value={division} onChange={(event) => setDivision(event.target.value as TevDivision | "")} required><option value="" disabled>Select a division</option>{tevDivisions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
         </div>
+        <label className="leave-application-wide-field">Admin Signatory<select value={selectedSignatoryUserId} onChange={(event) => setSelectedSignatoryUserId(event.target.value)} disabled={!division || !signatoryAccountsLoaded} required><option value="" disabled>{!division ? "Select a division first" : !signatoryAccountsLoaded ? "Loading Admin signatories…" : "Select a Chief or OIC"}</option>{signatoryOptions.filter((option) => option.division === division).map((option) => <option key={option.id} value={option.id}>{option.name} — {option.designation}</option>)}</select>{division && signatoryAccountsLoaded && !signatoryOptions.some((option) => option.division === division) && <small className="muted">No approved Admin account with Chief or OIC designation is available for this division.</small>}</label>
         <div className="leave-application-form-actions"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save"}</button></div>
       </form>
     </> : <>
-      <div className="section-heading leave-application-heading"><div><p className="eyebrow">Generated reports</p><h2>Leave Applications</h2><p className="muted">{records.length} {records.length === 1 ? "application" : "applications"} registered to your account.</p></div><button type="button" className="primary-button" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add</button></div>
-      {loading ? <p className="muted">Loading Leave Applications...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Leave Applications yet</h3><p>Create a Leave Application to view or download the completed CSC form.</p><button type="button" className="text-button plain-action document-create-action" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add a Leave Application</button></div> : <div className="leave-application-records">
+      <div className="section-heading leave-application-heading"><div><p className="eyebrow">{mode === "approval" ? "Admin Panel" : "Generated reports"}</p><h2>{mode === "approval" ? "Leave Application Approval" : "Leave Applications"}</h2><p className="muted">{mode === "approval" ? `${records.length} application${records.length === 1 ? "" : "s"} awaiting your signature.` : `${records.length} ${records.length === 1 ? "application" : "applications"} registered to your account.`}</p></div>{mode === "owner" && <button type="button" className="primary-button" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add</button>}</div>
+      {loading ? <p className="muted">Loading {mode === "approval" ? "approval tasks" : "Leave Applications"}...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>{mode === "approval" ? "No Leave Applications awaiting your signature" : "No Leave Applications yet"}</h3><p>{mode === "approval" ? "Applications appear here when they reach your signature step." : "Create a Leave Application to view or download the completed CSC form."}</p>{mode === "owner" && <button type="button" className="text-button plain-action document-create-action" onClick={() => { resetForm(); setError(""); setMessage(""); setView("new"); }}>Add a Leave Application</button>}</div> : <div className="leave-application-records">
         <RecordPagination totalRecords={records.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Leave Application" />
-        <div className="leave-application-record-head"><span>Date Filed</span><span>Type of Leave</span><span>Inclusive Dates</span><span>Affix Signature</span><span>Status</span><span aria-hidden="true" /></div>
+        <div className="leave-application-record-head"><span>Date Filed</span><span>{mode === "approval" ? "Applicant / Type" : "Type of Leave"}</span><span>Inclusive Dates</span><span>{mode === "approval" ? profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Affix Initial Signature" : "Affix Full Signature" : "Affix Full Signature"}</span><span>Status</span><span aria-hidden="true" /></div>
         {visibleRecords.map((record) => <article className="leave-application-record" key={record.id}>
-          <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><span className="leave-application-record-type">{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatDate(record.inclusiveDateFrom)}{record.inclusiveDateTo !== record.inclusiveDateFrom && ` – ${formatDate(record.inclusiveDateTo)}`}</span>
-          <label className="leave-application-affix"><select className="affix-signature-select" aria-label={`Affix signature for Leave Application filed ${formatDate(record.filedDate)}`} title={profileDefaults.fullSignatureURL ? undefined : "Upload your Full Signature in Profile to enable Yes."} value={record.affixSignature === "Yes" ? "Yes" : "No"} disabled={affixUpdatingId === record.id || updatingId === record.id || deletingId !== null} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}><option value="Yes" disabled={!profileDefaults.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label>
-          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={record.status !== "Pending" || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}</label>
-          <div className="leave-application-actions"><button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{record.status === "Pending" && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
+          <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><span className="leave-application-record-type">{mode === "approval" && <strong>{record.name}<br /></strong>}{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatDate(record.inclusiveDateFrom)}{record.inclusiveDateTo !== record.inclusiveDateFrom && ` – ${formatDate(record.inclusiveDateTo)}`}</span>
+          <label className="leave-application-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Affix Initial Signature" : "Affix Full Signature" : "Affix Full Signature"} for Leave Application filed ${formatDate(record.filedDate)}`} title={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL : profileDefaults.fullSignatureURL) ? undefined : `Upload your ${profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Initial" : "Full"} Signature in Profile to enable Yes.` : profileDefaults.fullSignatureURL ? undefined : "Upload your Full Signature in Profile to enable Yes."} value={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? record.affixInitialSignature : record.affixChiefSignature) === "Yes" ? "Yes" : "No" : record.affixSignature === "Yes" ? "Yes" : "No"} disabled={affixUpdatingId === record.id || updatingId === record.id || deletingId !== null || (mode === "owner" && record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "owner-full")} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? changeApprovalSignature(record, event.target.value) : changeAffixSignature(record, event.target.value)); }}><option value="Yes" disabled={mode === "approval" ? !(profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL.trim() : profileDefaults.fullSignatureURL.trim()) : !profileDefaults.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label>
+          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={mode === "approval" || record.status !== "Pending" || (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "returned") || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}{record.approvalWorkflow === "fod-myleave" && <small>{record.approvalStage === "owner-full" ? "Awaiting applicant Full Signature" : record.approvalStage === "project-leader" ? "Awaiting Project Leader Initial Signature" : record.approvalStage === "chief" ? "Awaiting Chief Full Signature" : "Signatures complete"}</small>}</label>
+          <div className="leave-application-actions"><button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{mode === "owner" && isFodLeaveOwner(profileDefaults) && !record.approvalWorkflow && record.status !== "Disapproved" && record.affixSignature === "Yes" && <button type="button" className="row-action" disabled={affixUpdatingId === record.id || deletingId !== null} onClick={() => void startLegacyLeaveApprovalWorkflow(record)}>{affixUpdatingId === record.id ? "Sending..." : "Send for Approval"}</button>}{mode === "owner" && record.status === "Pending" && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
         </article>)}
       </div>}
     </>}

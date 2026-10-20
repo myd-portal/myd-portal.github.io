@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type Ref } from "react";
 import type { User } from "firebase/auth";
-import { collection, deleteField, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { accountDivision, accountOffice, accountOfficeOptions, accountUnit, divisionsForOffice, executiveOfficeDivisionOptions, fieldOperationsAssignments, unitsForOfficeDivision } from "@/lib/account-profile";
 import { divisionSignatory, tevDivisions } from "@/lib/mytev";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { normalizeAccountRole, type AccountRole } from "@/lib/user-roles";
+import { accomplishmentReportNotificationsCollection, type AccomplishmentReportWorkflowEvent } from "@/lib/accomplishment-report-workflow-storage";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./myar.css";
 
 type Unit = string;
-type Profile = { name: string; position: string; unit: Unit; immediateSupervisor: string; fullSignatureURL: string };
+type Profile = { name: string; position: string; unit: Unit; office: string; division: string; designation: string; accountRole: AccountRole; immediateSupervisor: string; fullSignatureURL: string; initialSignatureURL: string };
+type FodMyARSigner = { id: string; name: string; designation: string; fullSignatureURL: string; initialSignatureURL: string };
 type Report = {
   id: string;
   ownerId: string;
@@ -28,6 +30,18 @@ type Report = {
   affixSignatureURL?: string;
   affixSignatureName?: string;
   affixSignatureAt?: unknown;
+  approvalWorkflow?: "fod-myar";
+  approvalStage?: "owner-full" | "project-leader" | "chief" | "returned";
+  initialSignerId?: string;
+  chiefSignerId?: string;
+  affixInitialSignature?: "Yes" | "No";
+  affixInitialSignatureURL?: string;
+  affixInitialSignatureName?: string;
+  affixInitialSignatureAt?: unknown;
+  affixChiefSignature?: "Yes" | "No";
+  affixChiefSignatureURL?: string;
+  affixChiefSignatureName?: string;
+  affixChiefSignatureAt?: unknown;
   signatoryName?: string;
   signatoryPosition?: string;
   signatoryDivision?: string;
@@ -73,6 +87,28 @@ const reportUnits = new Set([
   "Regional Executive Director",
 ]);
 const isReportUnit = (value: string): value is Unit => reportUnits.has(value);
+const fodMyARUnits = new Set(["AGRISTAT", "DRRM", "AMIA"]);
+
+function isFodMyAROwner(profile: Pick<Profile, "accountRole" | "office" | "division" | "unit">) {
+  return profile.accountRole === "regular" && profile.office === "Division" && profile.division === "Field Operations Division" && fodMyARUnits.has(profile.unit);
+}
+
+function isFodMyARAdmin(data: Record<string, unknown>, designation: string) {
+  return data.accountRole === "admin"
+    && (data.accountStatus === undefined || data.accountStatus === null || data.accountStatus === "Approved")
+    && data.office === "Division"
+    && data.division === "Field Operations Division"
+    && data.unit === "Field Operations Division"
+    && data.designation === designation;
+}
+
+function isFodMyARApprovalAccount(profile: Pick<Profile, "accountRole" | "office" | "division" | "unit" | "designation">) {
+  return profile.accountRole === "admin"
+    && profile.office === "Division"
+    && profile.division === "Field Operations Division"
+    && profile.unit === "Field Operations Division"
+    && (profile.designation === "AGRISTAT/DRRM/AMIA Project Leader" || profile.designation === "Chief");
+}
 
 function defaultImmediateSupervisor(office: string, division: string, assignment: string, accountRole: AccountRole) {
   const isAdmin = accountRole !== "regular";
@@ -210,7 +246,15 @@ function AccomplishmentReportNotedSignatory({ report }: { report: Report }) {
     position: report.signatoryPosition || legacyNotedSignatory.position,
     division: report.signatoryName ? report.signatoryDivision ?? "" : legacyNotedSignatory.division,
   };
-  return <div><strong>{signatory.name.toLocaleUpperCase("en-PH")}</strong><span><em>{signatory.position}</em>{signatory.division ? `, ${signatory.division}` : ""}</span></div>;
+  return <div className="ar-document-noted-signatory"><strong>{signatory.name.toLocaleUpperCase("en-PH")}</strong><span><em>{signatory.position}</em>{signatory.division ? `, ${signatory.division}` : ""}</span></div>;
+}
+
+function AccomplishmentReportNotedAffixes({ report }: { report: Report }) {
+  if (!report.affixInitialSignatureURL && !report.affixChiefSignatureURL) return null;
+  return <div className="ar-document-noted-affixes">
+    {report.affixInitialSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-initial"><img src={report.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${report.affixInitialSignatureName || "Project Leader"}`} /><div className="ar-document-noted-affix-details"><strong>Digitally Initialized: {(report.affixInitialSignatureName || "PROJECT LEADER").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixInitialSignatureAt)}</small><small>Time: {signatureTime(report.affixInitialSignatureAt)}</small></div></div>}
+    {report.affixChiefSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-full"><img src={report.affixChiefSignatureURL} crossOrigin="anonymous" alt={`Full signature of ${report.affixChiefSignatureName || "Field Operations Chief"}`} /><div className="ar-document-noted-affix-details"><strong>Digitally Signed: {(report.affixChiefSignatureName || "FIELD OPERATIONS CHIEF").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixChiefSignatureAt)}</small><small>Time: {signatureTime(report.affixChiefSignatureAt)}</small></div></div>}
+  </div>;
 }
 
 function AccomplishmentReportDocument({ report, pageRef }: { report: Report; pageRef?: Ref<HTMLElement> }) {
@@ -227,7 +271,7 @@ function AccomplishmentReportDocument({ report, pageRef }: { report: Report; pag
       <p className="ar-document-unit">{reportUnit(report.unit)}</p>
       <ol className="ar-document-activities">{report.activities.map((activity, index) => <li key={`${index}-${activity}`}>{activity}</li>)}</ol>
       <section className={`ar-document-prepared${report.affixSignature === "Yes" && report.affixSignatureURL ? " has-affixed-signature" : ""}`}><p>Prepared:</p>{report.affixSignature === "Yes" && report.affixSignatureURL && <div className="ar-document-digital-signature"><img src={report.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${report.affixSignatureName || report.preparedName}`} /><div><span>Digitally Signed By</span><strong>{(report.affixSignatureName || report.preparedName).toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixSignatureAt)}</small><small>Time: {signatureTime(report.affixSignatureAt)}</small></div></div>}<div className="ar-document-prepared-name"><strong>{report.preparedName.toLocaleUpperCase("en-PH")}</strong><em>{report.preparedPosition}</em></div></section>
-      <section className="ar-document-noted"><p>Noted:</p><AccomplishmentReportNotedSignatory report={report} /></section>
+      <section className="ar-document-noted"><p>Noted:</p><div className="ar-document-noted-approval"><AccomplishmentReportNotedAffixes report={report} /><AccomplishmentReportNotedSignatory report={report} /></div></section>
     </div>
   </article>;
 }
@@ -278,7 +322,7 @@ function AccomplishmentReportPreview({ report, onClose }: { report: Report; onCl
   </div>;
 }
 
-export default function AccomplishmentReportModule({ user, focusMonth, focusCycle, onFocusHandled, onPreviewClose }: { user: User; focusMonth?: string; focusCycle?: 1 | 2; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
+export default function AccomplishmentReportModule({ user, focusMonth, focusCycle, focusReportId, onFocusHandled, onPreviewClose, mode = "owner" }: { user: User; focusMonth?: string; focusCycle?: 1 | 2; focusReportId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void; mode?: "owner" | "approval" }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(reports);
@@ -302,7 +346,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
   const endDay = cycle === 1 ? 15 : cycle === 2 ? lastDay : 0;
   const preparedProfile = profile;
   const selectedSignatory = arSignatoryOptions.find((option) => option.value === signatorySelection);
-  const previewReport = selectedReport ? applyCurrentProfile(selectedReport, profile) : null;
+  const previewReport = selectedReport ? mode === "approval" ? selectedReport : applyCurrentProfile(selectedReport, profile) : null;
   const duplicateReport = !editingReport && reports.some((report) => report.month === month && report.cycle === cycle);
 
   useEffect(() => {
@@ -365,63 +409,64 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
 
   useEffect(() => {
     let current = true;
-    let profileLoaded = false;
-    let reportsLoaded = false;
-    const updateLoading = () => {
-      if (current) setLoading(!(profileLoaded && reportsLoaded));
-    };
-
-    function load() {
+    async function load() {
       if (!db) {
         setMessage({ kind: "error", text: "Database is not configured." });
         setLoading(false);
-        return () => { current = false; };
+        return;
       }
       setLoading(true);
-      const unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (profileSnapshot) => {
-        if (!current) return;
+      try {
+        const profileSnapshot = await getDoc(doc(db, "users", user.uid));
         const data = profileSnapshot.data();
         const division = data ? accountDivision(data) : "";
         const assignment = data ? accountUnit(data) || division : "";
         const office = data ? accountOffice(data) ?? "" : "";
         const accountRole = normalizeAccountRole(data?.accountRole, user.email);
-        if (profileSnapshot.exists() && data && typeof data.name === "string" && typeof data.position === "string" && isReportUnit(assignment)) {
-          setProfile({ name: data.name, position: data.position, unit: assignment, immediateSupervisor: defaultImmediateSupervisor(office, division, assignment, accountRole), fullSignatureURL: typeof data.fullSignatureURL === "string" ? data.fullSignatureURL : "" });
+        const loadedProfile: Profile | null = profileSnapshot.exists() && data && typeof data.name === "string" && typeof data.position === "string" && isReportUnit(assignment)
+          ? { name: data.name, position: data.position, unit: assignment, office, division, designation: typeof data.designation === "string" ? data.designation : "", accountRole, immediateSupervisor: defaultImmediateSupervisor(office, division, assignment, accountRole), fullSignatureURL: typeof data.fullSignatureURL === "string" ? data.fullSignatureURL : "", initialSignatureURL: typeof data.initialSignatureURL === "string" ? data.initialSignatureURL : "" }
+          : null;
+        if (!current) return;
+        setProfile(loadedProfile);
+        if (mode === "approval") {
+          if (!loadedProfile || !isFodMyARApprovalAccount(loadedProfile)) {
+            setReports([]);
+            return;
+          }
+          const signerSnapshot = loadedProfile.designation === "AGRISTAT/DRRM/AMIA Project Leader"
+            ? await getDocs(query(collection(db, "accomplishmentReports"), where("initialSignerId", "==", user.uid)))
+            : await getDocs(query(collection(db, "accomplishmentReports"), where("chiefSignerId", "==", user.uid)));
+          const unique = new Map<string, Report>();
+          signerSnapshot.docs.forEach((snapshot) => {
+            const report = { id: snapshot.id, ...snapshot.data() } as Report;
+            const currentStage = loadedProfile.designation === "AGRISTAT/DRRM/AMIA Project Leader"
+              ? report.approvalStage === "project-leader" && report.initialSignerId === user.uid
+              : report.approvalStage === "chief" && report.chiefSignerId === user.uid;
+            if (report.approvalWorkflow === "fod-myar" && currentStage) unique.set(report.id, report);
+          });
+          const approvalReports = [...unique.values()];
+          approvalReports.sort((left, right) => right.month.localeCompare(left.month) || right.cycle - left.cycle || createdTime(right.createdAt) - createdTime(left.createdAt));
+          if (current) setReports(approvalReports);
         } else {
-          setProfile(null);
+          const reportSnapshot = await getDocs(query(collection(db, "accomplishmentReports"), where("ownerId", "==", user.uid)));
+          const ownReports = reportSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Report));
+          ownReports.sort((left, right) => right.month.localeCompare(left.month) || right.cycle - left.cycle || createdTime(right.createdAt) - createdTime(left.createdAt));
+          if (current) setReports(ownReports);
         }
-        profileLoaded = true;
-        updateLoading();
-      }, (cause) => {
+      } catch (cause) {
         if (!current) return;
         setProfile(null);
-        profileLoaded = true;
-        setMessage({ kind: "error", text: cause instanceof Error ? `Could not load your profile. ${cause.message}` : "Could not load your profile. Try again." });
-        updateLoading();
-      });
-
-      getDocs(query(collection(db, "accomplishmentReports"), where("ownerId", "==", user.uid))).then((reportSnapshot) => {
-        if (!current) return;
-        const ownReports = reportSnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() } as Report));
-        ownReports.sort((left, right) => right.month.localeCompare(left.month) || right.cycle - left.cycle || createdTime(right.createdAt) - createdTime(left.createdAt));
-        setReports(ownReports);
-        reportsLoaded = true;
-        updateLoading();
-      }).catch((cause) => {
-        if (!current) return;
-        setMessage({ kind: "error", text: cause instanceof Error ? `Could not load your reports. ${cause.message}` : "Could not load your reports. Try again." });
-        reportsLoaded = true;
-        updateLoading();
-      });
-
-      return () => unsubscribeProfile();
+        setReports([]);
+        setMessage({ kind: "error", text: cause instanceof Error ? `Could not load ${mode === "approval" ? "myAR approval tasks" : "your reports"}. ${cause.message}` : `Could not load ${mode === "approval" ? "myAR approval tasks" : "your reports"}. Try again.` });
+      } finally {
+        if (current) setLoading(false);
+      }
     }
-    const unsubscribe = load();
+    void load();
     return () => {
       current = false;
-      unsubscribe?.();
     };
-  }, [user.uid]);
+  }, [mode, user.email, user.uid]);
 
   useEffect(() => {
     if (!focusMonth || !focusCycle) { handledFocusPeriodRef.current = null; return; }
@@ -443,6 +488,41 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
     }
     onFocusHandled?.();
   }, [focusCycle, focusMonth, loading, onFocusHandled, profile, reports]);
+
+  useEffect(() => {
+    if (!focusReportId || loading) return;
+    const report = reports.find((item) => item.id === focusReportId);
+    if (report) {
+      setSelectedReport(report);
+      onFocusHandled?.();
+      return;
+    }
+    if (mode !== "approval" || !db || !profile) return;
+    let current = true;
+    void getDoc(doc(db, "accomplishmentReports", focusReportId)).then((snapshot) => {
+      if (!current) return;
+      if (!snapshot.exists()) {
+        setMessage({ kind: "error", text: "This myAR approval is no longer available." });
+        onFocusHandled?.();
+        return;
+      }
+      const focusedReport = { id: snapshot.id, ...snapshot.data() } as Report;
+      const isAssignedTask = profile.designation === "AGRISTAT/DRRM/AMIA Project Leader"
+        ? focusedReport.initialSignerId === user.uid && focusedReport.approvalStage === "project-leader"
+        : profile.designation === "Chief" && focusedReport.chiefSignerId === user.uid && focusedReport.approvalStage === "chief";
+      if (!isAssignedTask || focusedReport.approvalWorkflow !== "fod-myar") {
+        setMessage({ kind: "error", text: "This myAR is no longer awaiting your signature." });
+        onFocusHandled?.();
+        return;
+      }
+      setReports((currentReports) => [focusedReport, ...currentReports.filter((item) => item.id !== focusedReport.id)]);
+      setSelectedReport(focusedReport);
+      onFocusHandled?.();
+    }).catch((cause) => {
+      if (current) setMessage({ kind: "error", text: cause instanceof Error ? `Could not open this myAR approval. ${cause.message}` : "Could not open this myAR approval. Try again." });
+    });
+    return () => { current = false; };
+  }, [focusReportId, loading, mode, onFocusHandled, profile, reports, user.uid]);
 
   async function saveReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -490,6 +570,21 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         setMessage({ kind: "error", text: "Select an immediate supervisor." });
         return;
       }
+      const fodWorkflow = isFodMyAROwner(preparedProfile);
+      let workflowFields: Pick<Report, "approvalWorkflow" | "approvalStage" | "initialSignerId" | "chiefSignerId" | "affixInitialSignature" | "affixChiefSignature"> | Record<string, never> = {};
+      if (fodWorkflow) {
+        const accountSnapshot = await getDocs(collection(db, "users"));
+        const admins = accountSnapshot.docs
+          .filter((account) => isFodMyARAdmin(account.data(), "AGRISTAT/DRRM/AMIA Project Leader") || isFodMyARAdmin(account.data(), "Chief"))
+          .sort((first, second) => String(first.data().name ?? "").localeCompare(String(second.data().name ?? ""), "en", { sensitivity: "base" }));
+        const projectLeader = admins.find((account) => isFodMyARAdmin(account.data(), "AGRISTAT/DRRM/AMIA Project Leader"));
+        const chief = admins.find((account) => isFodMyARAdmin(account.data(), "Chief"));
+        if (!projectLeader || !chief || projectLeader.id === chief.id) {
+          setMessage({ kind: "error", text: "The Field Operations Division Project Leader and Chief accounts are not both configured. Contact an administrator before submitting this report." });
+          return;
+        }
+        workflowFields = { approvalWorkflow: "fod-myar", approvalStage: "owner-full", initialSignerId: projectLeader.id, chiefSignerId: chief.id, affixInitialSignature: "No", affixChiefSignature: "No" };
+      }
       const data = {
         ownerId: user.uid,
         month,
@@ -504,11 +599,14 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         signatoryPosition: selectedSignatory.position,
         signatoryDivision: selectedSignatory.division,
         affixSignature: "No" as const,
+        ...workflowFields,
         createdAt: serverTimestamp(),
       };
       const reportId = `${user.uid}_${month}_${cycle === 1 ? "first" : "second"}`;
       const reportReference = doc(db, "accomplishmentReports", reportId);
-      await setDoc(reportReference, data);
+      const reportBatch = writeBatch(db);
+      reportBatch.set(reportReference, data);
+      await reportBatch.commit();
       const saved = { ...data, id: reportId, createdAt: undefined } as Report;
       setReports((current) => [saved, ...current].sort((left, right) => right.month.localeCompare(left.month) || right.cycle - left.cycle));
       setActivities([""]);
@@ -530,27 +628,50 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       setMessage({ kind: "error", text: "Upload your Full Signature in Profile before affixing it to a report." });
       return;
     }
+    if (report.approvalWorkflow === "fod-myar" && report.approvalStage !== "owner-full") {
+      setMessage({ kind: "error", text: "Your Full Signature is complete. This report is now with its next signer." });
+      return;
+    }
 
     setUpdatingAffixSignatureId(report.id);
     setMessage(null);
-    const signatureFields = value === "Yes"
+    const signatureFields: Record<string, unknown> = value === "Yes"
       ? {
           affixSignature: "Yes" as const,
           affixSignatureURL: profile!.fullSignatureURL.trim(),
           affixSignatureName: profile!.name.trim(),
           affixSignatureAt: serverTimestamp(),
+          ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "project-leader" as const } : {}),
         }
       : {
           affixSignature: "No" as const,
           affixSignatureURL: deleteField(),
           affixSignatureName: deleteField(),
           affixSignatureAt: deleteField(),
+          ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "owner-full" as const } : {}),
         };
     try {
-      await updateDoc(doc(db, "accomplishmentReports", report.id), signatureFields);
+      if (report.approvalWorkflow === "fod-myar" && value === "Yes" && report.initialSignerId) {
+        const batch = writeBatch(db);
+        batch.update(doc(db, "accomplishmentReports", report.id), signatureFields);
+        batch.set(doc(collection(db, accomplishmentReportNotificationsCollection)), {
+          recipientId: report.initialSignerId,
+          ownerId: report.ownerId,
+          reportId: report.id,
+          unit: report.unit,
+          month: report.month,
+          cycle: report.cycle,
+          event: "project-leader-signature" satisfies AccomplishmentReportWorkflowEvent,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, "accomplishmentReports", report.id), signatureFields);
+      }
       let updatedReport: Report = value === "Yes"
-        ? { ...report, affixSignature: "Yes", affixSignatureURL: profile!.fullSignatureURL.trim(), affixSignatureName: profile!.name.trim(), affixSignatureAt: new Date() }
-        : { ...report, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
+        ? { ...report, affixSignature: "Yes", affixSignatureURL: profile!.fullSignatureURL.trim(), affixSignatureName: profile!.name.trim(), affixSignatureAt: new Date(), ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "project-leader" as const } : {}) }
+        : { ...report, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined, ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "owner-full" as const } : {}) };
       try {
         const savedReport = await getDoc(doc(db, "accomplishmentReports", report.id));
         if (savedReport.exists()) updatedReport = { id: report.id, ...savedReport.data() } as Report;
@@ -559,9 +680,140 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       }
       setReports((current) => current.map((item) => item.id === report.id ? updatedReport : item));
       setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
-      setMessage({ kind: "success", text: value === "Yes" ? "Signature affixed to this report." : "Signature removed from this report." });
+      if (value === "Yes" && report.approvalWorkflow !== "fod-myar" && profile && isFodMyAROwner(profile)) {
+        await sendLegacyReportForApproval(updatedReport);
+        return;
+      }
+      setMessage({ kind: "success", text: value === "Yes" ? report.approvalWorkflow === "fod-myar" ? "Signature affixed to this report. The Project Leader was notified." : "Signature affixed to this report." : "Signature removed from this report." });
     } catch (cause) {
       setMessage({ kind: "error", text: cause instanceof Error ? `Could not update the report signature. ${cause.message}` : "Could not update the report signature. Try again." });
+    } finally {
+      setUpdatingAffixSignatureId(null);
+    }
+  }
+
+  async function sendLegacyReportForApproval(report: Report) {
+    if (!db || !profile || !isFodMyAROwner(profile) || report.ownerId !== user.uid) return;
+    const existingWorkflow = report.approvalWorkflow === "fod-myar";
+    if (existingWorkflow && report.approvalStage !== "owner-full") return;
+    if (report.affixSignature !== "Yes") {
+      setMessage({ kind: "error", text: "Affix your Full Signature before sending this report for approval." });
+      return;
+    }
+    if (existingWorkflow && (!profile.fullSignatureURL.trim() || !profile.name.trim())) {
+      setMessage({ kind: "error", text: "Upload your Full Signature in Profile before sending this report for approval." });
+      return;
+    }
+    setUpdatingAffixSignatureId(report.id);
+    setMessage(null);
+    try {
+      const accountSnapshot = await getDocs(collection(db, "users"));
+      const projectLeader = accountSnapshot.docs.find((account) => isFodMyARAdmin(account.data(), "AGRISTAT/DRRM/AMIA Project Leader"));
+      const chief = accountSnapshot.docs.find((account) => isFodMyARAdmin(account.data(), "Chief"));
+      if (!projectLeader || !chief || projectLeader.id === chief.id) {
+        setMessage({ kind: "error", text: "The Field Operations Division Project Leader and Chief accounts are not both configured. Contact an administrator before sending this report." });
+        return;
+      }
+      if (existingWorkflow && (report.initialSignerId !== projectLeader.id || report.chiefSignerId !== chief.id)) {
+        setMessage({ kind: "error", text: "This report has an outdated approval route. Contact an administrator to correct its assigned signers." });
+        return;
+      }
+      const workflowFields: Record<string, unknown> = existingWorkflow ? {
+        approvalStage: "project-leader",
+        affixSignature: "Yes",
+        affixSignatureURL: profile.fullSignatureURL.trim(),
+        affixSignatureName: profile.name.trim(),
+        affixSignatureAt: serverTimestamp(),
+      } : {
+        approvalWorkflow: "fod-myar",
+        approvalStage: "project-leader",
+        initialSignerId: projectLeader.id,
+        chiefSignerId: chief.id,
+        affixInitialSignature: "No",
+        affixChiefSignature: "No",
+      };
+      const batch = writeBatch(db);
+      batch.update(doc(db, "accomplishmentReports", report.id), workflowFields);
+      batch.set(doc(collection(db, accomplishmentReportNotificationsCollection)), {
+        recipientId: projectLeader.id,
+        ownerId: report.ownerId,
+        reportId: report.id,
+        unit: report.unit,
+        month: report.month,
+        cycle: report.cycle,
+        event: "project-leader-signature" satisfies AccomplishmentReportWorkflowEvent,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      await batch.commit();
+      const updatedReport = { ...report, ...workflowFields, ...(existingWorkflow ? { affixSignatureAt: new Date() } : {}) } as Report;
+      setReports((current) => current.map((item) => item.id === report.id ? updatedReport : item));
+      setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
+      setMessage({ kind: "success", text: "This report was sent to the Project Leader for an Initial Signature." });
+    } catch (cause) {
+      setMessage({ kind: "error", text: cause instanceof Error ? `Could not send this report for approval. ${cause.message}` : "Could not send this report for approval. Try again." });
+    } finally {
+      setUpdatingAffixSignatureId(null);
+    }
+  }
+
+  async function updateApprovalSignature(report: Report, value: "Yes" | "No") {
+    if (!db || !profile || report.approvalWorkflow !== "fod-myar") return;
+    const isProjectLeader = profile.designation === "AGRISTAT/DRRM/AMIA Project Leader" && report.approvalStage === "project-leader" && report.initialSignerId === user.uid;
+    const isChief = profile.designation === "Chief" && report.approvalStage === "chief" && report.chiefSignerId === user.uid;
+    if (!isProjectLeader && !isChief) {
+      setMessage({ kind: "error", text: "This report is not awaiting your signature." });
+      return;
+    }
+    const signatureURL = isProjectLeader ? profile.initialSignatureURL.trim() : profile.fullSignatureURL.trim();
+    if (value === "Yes" && (!signatureURL || !profile.name.trim())) {
+      setMessage({ kind: "error", text: `Upload your ${isProjectLeader ? "Initial" : "Full"} Signature in Profile before affixing it to a report.` });
+      return;
+    }
+    setUpdatingAffixSignatureId(report.id);
+    setMessage(null);
+    const signatureFields: Record<string, unknown> = isProjectLeader
+      ? value === "Yes"
+        ? { affixInitialSignature: "Yes", affixInitialSignatureURL: signatureURL, affixInitialSignatureName: profile.name.trim(), affixInitialSignatureAt: serverTimestamp(), approvalStage: "chief" }
+        : { affixInitialSignature: "No", affixInitialSignatureURL: deleteField(), affixInitialSignatureName: deleteField(), affixInitialSignatureAt: deleteField() }
+      : value === "Yes"
+        ? { affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profile.name.trim(), affixChiefSignatureAt: serverTimestamp(), approvalStage: "returned" }
+        : { affixChiefSignature: "No", affixChiefSignatureURL: deleteField(), affixChiefSignatureName: deleteField(), affixChiefSignatureAt: deleteField() };
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "accomplishmentReports", report.id), signatureFields);
+      const addNotification = (recipientId: string, event: AccomplishmentReportWorkflowEvent) => batch.set(doc(collection(db, accomplishmentReportNotificationsCollection)), {
+        recipientId,
+        ownerId: report.ownerId,
+        reportId: report.id,
+        unit: report.unit,
+        month: report.month,
+        cycle: report.cycle,
+        event,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      if (value === "Yes") {
+        if (isProjectLeader && report.chiefSignerId) {
+          addNotification(report.chiefSignerId, "chief-signature");
+          addNotification(report.ownerId, "project-leader-completed");
+        } else if (isChief) {
+          addNotification(report.ownerId, "creator-review");
+        }
+      }
+      await batch.commit();
+      const updatedReport: Report = isProjectLeader
+        ? value === "Yes"
+          ? { ...report, affixInitialSignature: "Yes", affixInitialSignatureURL: signatureURL, affixInitialSignatureName: profile.name.trim(), affixInitialSignatureAt: new Date(), approvalStage: "chief" }
+          : { ...report, affixInitialSignature: "No", affixInitialSignatureURL: undefined, affixInitialSignatureName: undefined, affixInitialSignatureAt: undefined }
+        : value === "Yes"
+          ? { ...report, affixChiefSignature: "Yes", affixChiefSignatureURL: signatureURL, affixChiefSignatureName: profile.name.trim(), affixChiefSignatureAt: new Date(), approvalStage: "returned" }
+          : { ...report, affixChiefSignature: "No", affixChiefSignatureURL: undefined, affixChiefSignatureName: undefined, affixChiefSignatureAt: undefined };
+      setReports((current) => current.filter((item) => item.id !== report.id));
+      setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
+      setMessage({ kind: "success", text: value === "Yes" ? `${isProjectLeader ? "Initial" : "Full"} signature saved and the next accounts were notified.` : "Signature removed from this report." });
+    } catch (cause) {
+      setMessage({ kind: "error", text: cause instanceof Error ? `Could not update the myAR signature. ${cause.message}` : "Could not update the myAR signature. Try again." });
     } finally {
       setUpdatingAffixSignatureId(null);
     }
@@ -586,9 +838,25 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
     </section>}
 
     {!showForm && <section className="content-section ar-records-section">
-      <div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Saved Reports</h2><p className="muted">{reports.length} {reports.length === 1 ? "report" : "reports"} saved to your account.</p></div><button type="button" className="primary-button ar-add-report-button document-create-action" onClick={startNewReport}>Add</button></div>
+      <div className="section-heading"><div><p className="eyebrow">{mode === "approval" ? "Admin Panel" : "Your records"}</p><h2>{mode === "approval" ? "myAR Approval" : "Saved Reports"}</h2><p className="muted">{mode === "approval" ? `${reports.length} report${reports.length === 1 ? "" : "s"} awaiting your signature.` : `${reports.length} ${reports.length === 1 ? "report" : "reports"} saved to your account.`}</p></div>{mode === "owner" && <button type="button" className="primary-button ar-add-report-button document-create-action" onClick={startNewReport}>Add</button>}</div>
       {message && <p className={`auth-message auth-message-${message.kind}`} role={message.kind === "error" ? "alert" : "status"}>{message.text}</p>}
-      {loading ? <p className="muted">Loading reports...</p> : reports.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No accomplishment reports yet</h3><p>Saved reports will appear here.</p></div> : <div className="permit-table ar-saved-table"><RecordPagination totalRecords={reports.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Saved Report" /><div className="table-head"><span>Month</span><span>Half-month Cycle</span><span>Affix Signature</span><span aria-hidden="true" /></div>{visibleRecords.map((report) => <div className="table-row" key={report.id}><strong>{reportMonth(report.month)}</strong><span>{report.startDay}-{report.endDay}</span><label className="ar-record-affix"><select className="affix-signature-select" aria-label={`Affix signature for ${reportMonth(report.month)} ${report.startDay}-${report.endDay}`} value={report.affixSignature === "Yes" ? "Yes" : "No"} disabled={updatingAffixSignatureId === report.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void updateAffixSignature(report, event.target.value); }}><option value="Yes" disabled={!profile?.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label><div className="ar-record-actions">{isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div></div>)}</div>}
+      {loading ? <p className="muted">Loading {mode === "approval" ? "approval tasks" : "reports"}...</p> : reports.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>{mode === "approval" ? "No myAR signatures awaiting you" : "No accomplishment reports yet"}</h3><p>{mode === "approval" ? "Reports will appear here when they reach your signature step." : "Saved reports will appear here."}</p></div> : <div className="permit-table ar-saved-table">
+        <RecordPagination totalRecords={reports.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label={mode === "approval" ? "myAR Approval" : "Saved Report"} />
+        <div className="table-head">{mode === "approval" ? <><span>Month</span><span>Prepared By</span><span>Affix Signature</span><span aria-hidden="true" /></> : <><span>Month</span><span>Half-month Cycle</span><span>Affix Full Signature</span><span aria-hidden="true" /></>}</div>
+        {visibleRecords.map((report) => {
+          const approvalIsProjectLeader = profile?.designation === "AGRISTAT/DRRM/AMIA Project Leader";
+          const approvalSignatureValue = approvalIsProjectLeader ? report.affixInitialSignature : report.affixChiefSignature;
+          const approvalSignatureAvailable = approvalIsProjectLeader ? profile?.initialSignatureURL.trim() : profile?.fullSignatureURL.trim();
+          const approvalSignatureLabel = approvalIsProjectLeader ? "Affix Initial Signature" : "Affix Full Signature";
+          const ownerCanSign = report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full";
+          return <div className="table-row" key={report.id}>
+            <strong>{reportMonth(report.month)}{mode === "approval" && <small className="ar-approval-owner">{report.startDay}-{report.endDay}</small>}</strong>
+            {mode === "approval" ? <span>{report.preparedName}</span> : <span>{report.startDay}-{report.endDay}</span>}
+            <label className="ar-record-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? approvalSignatureLabel : "Affix Full Signature"} for ${reportMonth(report.month)} ${report.startDay}-${report.endDay}`} value={mode === "approval" ? approvalSignatureValue === "Yes" ? "Yes" : "No" : report.affixSignature === "Yes" ? "Yes" : "No"} disabled={updatingAffixSignatureId === report.id || (mode === "owner" && !ownerCanSign)} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? updateApprovalSignature(report, event.target.value) : updateAffixSignature(report, event.target.value)); }}><option value="Yes" disabled={!approvalSignatureAvailable || (mode === "owner" && !profile?.fullSignatureURL.trim())}>Yes</option><option value="No">No</option></select></label>
+            <div className="ar-record-actions">{mode === "owner" && (isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>)}{mode === "owner" && profile && isFodMyAROwner(profile) && report.affixSignature === "Yes" && (report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full") && <button type="button" className="row-action" disabled={updatingAffixSignatureId === report.id} onClick={() => void sendLegacyReportForApproval(report)}>{updatingAffixSignatureId === report.id ? "Sending..." : "Send for Approval"}</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div>
+          </div>;
+        })}
+      </div>}
     </section>}
 
     {previewReport && <AccomplishmentReportPreview report={previewReport} onClose={() => { setSelectedReport(null); onPreviewClose?.(); }} />}

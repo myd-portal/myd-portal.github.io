@@ -10,7 +10,7 @@ export type DocumentNotification = {
   ownerId: string;
   documentId: string;
   documentType: DocumentNotificationType;
-  approvalStep?: "initial" | "chief";
+  approvalStep?: "initial" | "chief" | "project-leader-completed" | "returned";
   activityTitle?: string;
   certificateType?: string;
   certificateCollection?: CertificateCollectionName;

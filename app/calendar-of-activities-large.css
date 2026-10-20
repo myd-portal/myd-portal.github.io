@@ -6,16 +6,19 @@
 .calendar-of-activities-list-status{min-width:0}
 .calendar-of-activities-list-status select{background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font-size:12px;font-weight:700;padding:7px 8px;width:100%}
 .calendar-of-activities-list-affix{min-width:0}
+.calendar-of-activities-workflow-status{color:var(--muted);display:block;font-size:11px;line-height:1.35;min-width:0;overflow-wrap:anywhere}
 .calendar-of-activities-list-status select:focus{border-color:var(--accent-dark);outline:2px solid #df603c33}
 .calendar-of-activities-list-status.travel-order-status-pending select{background:#fff5e8;color:#8e5712}
 .calendar-of-activities-list-status.travel-order-status-disapproved select{background:#fff0ed;color:#a23d2d}
 .calendar-of-activities-list-status.travel-order-status-approved select,.calendar-of-activities-status-badge.is-approved{background:#eaf5ed;color:#21603a}
+.calendar-of-activities-status-badge.is-pending{background:#fff5e8;color:#8e5712}
 .calendar-of-activities-status-badge{border:1px solid var(--line);border-radius:0;display:block;font-size:12px;padding:8px;text-align:left;width:100%}
 .calendar-of-activities-form{align-items:start;display:grid;gap:22px;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
 .calendar-of-activities-signatories{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
 .calendar-of-activities-signatories label{color:var(--ink);display:grid;font-size:12px;font-weight:700;gap:7px;min-width:0}
 .calendar-of-activities-signatories select{background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font:inherit;font-size:13px;font-weight:400;min-height:42px;min-width:0;padding:9px 11px;width:100%}
 .calendar-of-activities-signatories select:focus{border-color:var(--accent-dark);outline:2px solid #df603c33}
+.calendar-of-activities-routed-signatory{align-items:center;background:#fff;border:1px solid var(--line);color:var(--ink);display:flex;font-size:13px;font-weight:400;min-height:42px;min-width:0;overflow-wrap:anywhere;padding:9px 11px}
 .calendar-of-activities-meta{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
 .calendar-of-activities-meta label,.calendar-of-activities-row label{color:var(--ink);display:grid;font-size:12px;font-weight:700;gap:7px;min-width:0}
 .calendar-of-activities-meta input,.calendar-of-activities-row input,.calendar-of-activities-row select,.calendar-of-activities-row textarea{background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font:inherit;font-size:13px;font-weight:400;min-height:42px;min-width:0;padding:9px 11px;width:100%}

@@ -34,6 +34,7 @@
 .special-order-closing-tight .special-order-signatory,.special-order-closing-tight.special-order-closing-pulled .special-order-signatory{margin-top:6.9cqi}
 .special-order-closing-with-affixes .special-order-done{margin-top:2.9cqi}
 .special-order-closing-with-affixes .special-order-signatory,.special-order-closing-tight.special-order-closing-with-affixes .special-order-signatory,.special-order-closing-with-affixes.special-order-closing-pulled .special-order-signatory{margin-top:11.5cqi}
+.special-order-closing-with-affixes .special-order-signatory{padding-top:3.5cqi}
 @media(max-width:720px){
   .special-order-list-head{display:none}
   .special-order-list-row{gap:12px;grid-template-columns:minmax(0,1fr);padding:17px 0}
