@@ -294,17 +294,19 @@
 .profile-details dd{font-size:13px;font-weight:600;margin:0;overflow-wrap:anywhere}
 .profile-form{display:grid;gap:14px;grid-template-columns:repeat(6,minmax(0,1fr))}
 .profile-form>label{grid-column:span 2;min-width:0}
-.profile-form>.profile-contact-row,.profile-form>.profile-security-fields,.profile-form>.profile-password-actions,.profile-form>.auth-message{grid-column:1/-1}
+.profile-form>.profile-contact-row,.profile-form>.profile-security-fields,.profile-form>.profile-superadmin-fields,.profile-form>.profile-password-actions,.profile-form>.auth-message{grid-column:1/-1}
 .profile-form .auth-message{margin:0}
 .profile-contact-row{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
 .profile-contact-row>label{min-width:0}
 .profile-security-fields{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
 .profile-security-fields>label{min-width:0}
+.profile-superadmin-fields{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.profile-superadmin-fields>label{min-width:0}
 .profile-password-actions{display:flex;gap:10px;justify-content:flex-end}
 .auth-footer-actions{align-items:center;display:flex;gap:12px;justify-content:center;margin-top:24px}.auth-footer-actions .text-button{margin:0;white-space:nowrap;transition:none}.auth-footer-actions .text-button:hover,.auth-footer-actions .text-button:focus-visible{box-shadow:none;color:inherit;outline:none!important;text-decoration:none}.auth-forgot-password{color:var(--ink)}
 .auth-reset-form .text-button{justify-self:start;margin:0;transition:none}
 @media(max-width:720px){.profile-trigger.user-greeting{display:inline-flex;max-width:45vw}.profile-backdrop{align-items:flex-start;overflow-y:auto;overscroll-behavior:contain;padding:calc(env(safe-area-inset-top,0px) + 12px) 12px calc(env(safe-area-inset-bottom,0px) + 12px)}.profile-dialog{max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 24px);padding:18px 16px;width:100%}.profile-details>div{grid-template-columns:80px minmax(0,1fr)}}
-@media(max-width:560px){.profile-form{grid-template-columns:1fr}.profile-form>label,.profile-form>.profile-contact-row,.profile-form>.profile-security-fields,.profile-form>.profile-password-actions,.profile-form>.auth-message{grid-column:1/-1}.profile-contact-row,.profile-security-fields{grid-template-columns:1fr}}
+@media(max-width:560px){.profile-form{grid-template-columns:1fr}.profile-form>label,.profile-form>.profile-contact-row,.profile-form>.profile-security-fields,.profile-form>.profile-superadmin-fields,.profile-form>.profile-password-actions,.profile-form>.auth-message{grid-column:1/-1}.profile-contact-row,.profile-security-fields,.profile-superadmin-fields{grid-template-columns:1fr}}
 .permit-form{grid-template-columns:repeat(2,minmax(0,1fr))}
 .permit-form>label,.permit-form>.date-range-field{min-width:0}
 .permit-date-input{font-size:12px;max-width:100%;min-width:0;width:100%}
