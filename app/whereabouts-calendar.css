@@ -30,7 +30,7 @@
 .whereabouts-day-mixed-status,.whereabouts-legend-mixed{background:linear-gradient(90deg,#9dccaa 0 50%,#ffe477 50% 100%)}
 .whereabouts-day-mixed-status{border-color:#c7ba72;color:var(--ink)}
 .whereabouts-day-selected{box-shadow:inset 0 0 0 2px var(--accent-dark);border-color:var(--accent-dark)}
-.whereabouts-day-holiday-label{align-self:stretch;border-radius:2px;display:-webkit-box;font-size:8px;font-weight:700;line-height:1.2;max-height:2.4em;overflow:hidden;overflow-wrap:anywhere;padding:3px 4px;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.whereabouts-day-holiday-label{align-self:stretch;border-radius:2px;display:block;font-size:8px;font-weight:700;line-height:1.2;overflow:visible;overflow-wrap:anywhere;padding:3px 4px;white-space:normal}
 .whereabouts-day-holiday-regular{background:#fbe2dd;color:#8a2d1d}
 .whereabouts-day-holiday-special-non-working{background:#e7f0ff;color:#234a79}
 .whereabouts-day-holiday-special-working{background:#f1e6fa;color:#643283}
