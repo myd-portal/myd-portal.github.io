@@ -421,9 +421,9 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
     page.drawImage(image, { x, y, width: fitted.width, height: fitted.height });
   }
 
-  const secondPageResponse = await fetch(asset("/2nd-page-leave-application.jpg"), { cache: "force-cache" });
+  const secondPageResponse = await fetch(asset("/2nd-page-leave-application.png"), { cache: "force-cache" });
   if (!secondPageResponse.ok) throw new Error("The second Leave Application page could not be loaded.");
-  const instructionsImage = await pdf.embedJpg(await secondPageResponse.arrayBuffer());
+  const instructionsImage = await pdf.embedPng(await secondPageResponse.arrayBuffer());
   const { width, height } = page.getSize();
   const secondPage = pdf.addPage([width, height]);
   secondPage.drawImage(instructionsImage, { x: 0, y: 0, width, height });
@@ -1163,7 +1163,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
           <canvas ref={previewCanvasRef} className="leave-application-preview-canvas" aria-label={`Leave Application form for ${fullName(previewRecord)}`} />
         </div>
         <div className="leave-application-paper leave-application-paper-second-page">
-          <img src={asset("/2nd-page-leave-application.jpg")} alt="Leave Application instructions and requirements" />
+          <img src={asset("/2nd-page-leave-application.png")} alt="Leave Application instructions and requirements" />
         </div>
       </div>
     </div>}
