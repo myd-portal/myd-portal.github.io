@@ -385,7 +385,7 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
         <header className="cleaning-calendar-header">
           <button type="button" className="cleaning-calendar-nav is-previous" aria-label="Previous month" onClick={() => setMonth((value) => shiftCleaningMonth(value, -1))}>‹</button>
           <h3>{new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: "Asia/Manila" }).format(new Date(`${month}-15T12:00:00+08:00`))}</h3>
-          <div className="cleaning-calendar-controls"><button type="button" className="cleaning-calendar-nav" aria-label="Next month" onClick={() => setMonth((value) => shiftCleaningMonth(value, 1))}>›</button><button type="button" className="cleaning-calendar-today" onClick={() => setMonth(manilaDateKey().slice(0, 7))}>Today</button></div>
+          <div className="cleaning-calendar-controls"><button type="button" className="cleaning-calendar-nav" aria-label="Next month" onClick={() => setMonth((value) => shiftCleaningMonth(value, 1))}>›</button></div>
         </header>
         <div className="cleaning-calendar-grid cleaning-calendar-weekdays" aria-hidden="true">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div>
         <div className="cleaning-calendar-month">

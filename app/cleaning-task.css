@@ -258,8 +258,7 @@
   text-align: center;
 }
 
-.cleaning-calendar-nav,
-.cleaning-calendar-today {
+.cleaning-calendar-nav {
   display: inline-flex;
   min-width: 54px;
   min-height: 54px;
@@ -287,12 +286,6 @@
   grid-row: 1;
   align-items: center;
   gap: .45rem;
-}
-
-.cleaning-calendar-today {
-  min-width: 84px;
-  font-size: .82rem;
-  font-weight: 700;
 }
 
 .cleaning-month-picker {
@@ -712,8 +705,7 @@
     gap: .25rem;
   }
 
-  .cleaning-calendar-nav,
-  .cleaning-calendar-today {
+  .cleaning-calendar-nav {
     min-width: 34px;
     min-height: 37px;
     padding: .25rem .4rem;
@@ -723,11 +715,6 @@
 
   .cleaning-calendar-controls {
     gap: .2rem;
-  }
-
-  .cleaning-calendar-today {
-    min-width: 50px;
-    font-size: .68rem;
   }
 
   .cleaning-task-calendar > header h3 {
