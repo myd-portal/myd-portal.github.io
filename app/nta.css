@@ -117,7 +117,7 @@
 .nta-document-content.nta-group-notice .nta-fixed-copy .nta-issued-date{margin-top:4.4cqi}
 .nta-document-content.nta-group-notice .nta-signatory{margin-top:6.4cqi}
 
-.nta-list-head,.nta-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) 150px}
+.nta-list-head,.nta-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) minmax(110px,.75fr) minmax(0,1fr) 150px}
 .nta-list-row>span:first-child{font-weight:400}
 @media(max-width:720px){.nta-list-row{grid-template-columns:1fr}.nta-list-row>span:not(.nta-list-actions){grid-column:1}.nta-list-row>.nta-list-actions{grid-column:1}}
 

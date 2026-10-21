@@ -1,4 +1,4 @@
-.special-order-list-head,.special-order-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1fr) 170px}
+.special-order-list-head,.special-order-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(110px,.75fr) minmax(0,1fr) 150px}
 .special-order-edit-section{max-width:none;width:100%}
 .special-order-edit-section .permit-form{gap:24px 28px}
 .special-order-edit-section .permit-form>label>input,

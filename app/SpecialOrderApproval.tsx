@@ -197,7 +197,7 @@ export default function SpecialOrderApproval({ user, stage, focusRecordId, onVie
         <strong data-label="Subject">{record.subject}</strong>
         <span data-label="Activity">{record.activityTitle}</span>
         <span data-label="Schedule">{scheduleLabel(record.dateFrom, record.dateTo)}</span>
-        <span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span>
+        <span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" style={{ textDecoration: "none" }} href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span>
         <label className="so-approval-affix" data-label="Affix Initial Signature"><select className="affix-signature-select" aria-label={`Affix Initial Signature for ${record.subject}`} value={record.approvalActionStage === "initial" ? record.affixInitialSignature ?? "No" : record.affixChiefInitialSignature ?? "No"} disabled={busyId === record.id} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void changeAffixSignature(record, event.target.value); }}>
           <option value="Yes" disabled={!initialSignature.trim()}>Yes</option><option value="No">No</option>
         </select></label>
