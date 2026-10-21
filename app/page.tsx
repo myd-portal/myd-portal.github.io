@@ -562,14 +562,15 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
 }
 
 function DesignationPicker({ value, onChange, disabled, id = "profile-designation-toggle", required = false }: { value: string; onChange: (value: string) => void; disabled?: boolean; id?: string; required?: boolean }) {
-  const designation = accountDesignation(value);
+  const normalizedDesignation = accountDesignation(value);
   const sortedDesignationOptions = [...accountDesignationOptions].sort((first, second) => first.localeCompare(second, "en", { sensitivity: "base" }));
-  const isListedDesignation = accountDesignationOptions.some((option) => option === designation);
-  const [customDesignation, setCustomDesignation] = useState(Boolean(designation && !isListedDesignation));
+  const isListedDesignation = accountDesignationOptions.some((option) => option === normalizedDesignation);
+  const [customDesignation, setCustomDesignation] = useState(Boolean(normalizedDesignation && !isListedDesignation));
+  const designation = customDesignation ? value : normalizedDesignation;
 
   useEffect(() => {
-    if (designation) setCustomDesignation(!isListedDesignation);
-  }, [designation, isListedDesignation]);
+    if (normalizedDesignation) setCustomDesignation(!isListedDesignation);
+  }, [normalizedDesignation, isListedDesignation]);
 
   return customDesignation
     ? <div className="password-field"><input id={id} type="text" maxLength={120} value={designation} placeholder="Enter your Designation" aria-label="Designation" disabled={disabled} required={required} onChange={(event) => onChange(event.target.value)} /><button type="button" className="password-toggle plain-action position-list-toggle" aria-label="Choose a Designation from the list" disabled={disabled} onClick={() => { onChange(""); setCustomDesignation(false); }}>List</button></div>
