@@ -6,6 +6,7 @@ import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import type { AccountRole } from "@/lib/user-roles";
 import { calendarOfActivitiesCollection } from "@/lib/calendar-of-activities-storage";
+import { PHILIPPINE_HOLIDAYS_2026, type PhilippineHolidayCategory } from "@/lib/philippine-holidays-2026";
 import { isPermitAdmin } from "./PermitSlipAdmin";
 import { LEGACY_PENDING_STATUS, normalizeWorkflowStatus } from "./workflow-status";
 import { assignApprovedPermitNumbers, displayPermitNumber } from "./permit-number";
@@ -89,6 +90,13 @@ type SelectedCalendarEntry = {
 };
 
 type CalendarFilterOption = { value: string; label: string };
+
+const holidayCategoryClass: Record<PhilippineHolidayCategory, string> = {
+  "Regular Holiday": "regular",
+  "Special (Non-Working) Day": "special-non-working",
+  "Special (Working) Day": "special-working",
+  "Additional Special (Non-Working) Day": "additional-special-non-working",
+};
 
 function CalendarFilterDropdown({ label, value, options, onChange }: {
   label: string;
@@ -592,6 +600,10 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       || calendarLeaveApplications.some((leave) => leave.status === "Approved" && leave.inclusiveDateFrom <= key && leave.inclusiveDateTo >= key);
   }
 
+  function holidaysOnDate(key: string) {
+    return PHILIPPINE_HOLIDAYS_2026.filter((holiday) => holiday.date === key);
+  }
+
   function changeMonth(offset: number) {
     const next = new Date(year, monthIndex + offset, 1);
     setMonth(next);
@@ -603,6 +615,7 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   }
 
   const selectedOrders = ordersOnDate(selectedDate);
+  const selectedDateHolidays = holidaysOnDate(selectedDate);
   const selectedPermitSlips = calendarPermitSlips.filter((permit) => permit.date === selectedDate);
   const selectedPeopleEntries = [
     ...selectedOrders.flatMap((order) => {
@@ -685,16 +698,20 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   const rawPersonnelNotInOfficeCount = new Set(selectedPeopleEntries.map((person) => person.personKey).filter(Boolean)).size;
   const [selectedYear, selectedMonth, selectedDay] = selectedDate.split("-").map(Number);
   const selectedDateWeekday = new Date(selectedYear, selectedMonth - 1, selectedDay).getDay();
-  const zeroPersonnelMessage = selectedDateWeekday === 6
-    ? "Personnel are off duty on Saturday."
-    : selectedDateWeekday === 0
-      ? "Personnel are off duty on Sunday."
-      : "All personnel are present in the office.";
+  const selectedNonWorkingHoliday = selectedDateHolidays.find((holiday) => holiday.category !== "Special (Working) Day");
+  const zeroPersonnelMessage = selectedNonWorkingHoliday
+    ? `Office is closed for ${selectedNonWorkingHoliday.name}.`
+    : selectedDateWeekday === 6
+      ? "Personnel are off duty on Saturday."
+      : selectedDateWeekday === 0
+        ? "Personnel are off duty on Sunday."
+        : "All personnel are present in the office.";
   const selectedPeoplePageSize = 3;
   const selectedPeoplePageCount = Math.max(1, Math.ceil(selectedPeople.length / selectedPeoplePageSize));
   const currentSelectedPeoplePage = Math.min(selectedPeoplePage, selectedPeoplePageCount - 1);
   const visibleSelectedPeople = selectedPeople.slice(currentSelectedPeoplePage * selectedPeoplePageSize, currentSelectedPeoplePage * selectedPeoplePageSize + selectedPeoplePageSize);
   const summaryYear = String(year);
+  const annualHolidays = PHILIPPINE_HOLIDAYS_2026.filter((holiday) => holiday.date.startsWith(`${summaryYear}-`));
   const yearStart = `${summaryYear}-01-01`;
   const yearEnd = `${summaryYear}-12-31`;
   const normalizedSearch = nameSearch.trim().toLocaleLowerCase();
@@ -750,13 +767,13 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     ? rawPersonnelNotInOfficeCount
     : Math.min(rawPersonnelNotInOfficeCount, selectedPersonnelTotal);
   return <section className="content-section whereabouts-calendar-section">
-    <div className="section-heading whereabouts-heading"><div><p className="eyebrow">Travel, Leave, and Permit Records</p><h2>Whereabouts Calendar</h2><p className="muted">Select a shaded date to view pending or approved Travel Orders and Leave Applications, plus approved Permit Slips.</p></div></div>
+    <div className="section-heading whereabouts-heading"><div><p className="eyebrow">Travel, Leave, and Permit Records</p><h2>Whereabouts Calendar</h2><p className="muted">Select a date to view pending or approved Travel Orders and Leave Applications, approved Permit Slips, and 2026 Philippine holidays and special days.</p></div></div>
     <div className="whereabouts-calendar-filters" aria-label="Filter whereabouts calendar">
       <CalendarFilterDropdown label="Division" value={divisionFilter} options={[{ value: "All", label: "All Divisions" }, ...availableSummaryDivisions.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setDivisionFilter(value); setUnitFilter("All"); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} />
       <CalendarFilterDropdown label="Unit / Program / Project" value={unitFilter} options={[{ value: "All", label: "All Units / Programs / Projects" }, ...availableSummaryUnits.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setUnitFilter(value as PermitUnitFilter); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} />
     </div>
     {error && <div className="error-message whereabouts-error">{error}</div>}
-    <section className="whereabouts-calendar" aria-label="Travel Order, Leave Application, and Permit Slip calendar">
+    <section className="whereabouts-calendar" aria-label="Whereabouts and Philippine holiday calendar">
       <header className="whereabouts-calendar-toolbar"><button type="button" className="whereabouts-month-arrow" aria-label="Previous month" onClick={() => changeMonth(-1)}>‹</button><h3>{monthName}</h3><button type="button" className="whereabouts-month-arrow" aria-label="Next month" onClick={() => changeMonth(1)}>›</button><button type="button" className="whereabouts-today-button" onClick={() => { setMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(todayKey); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); }}>Today</button></header>
       <div className="whereabouts-weekdays" aria-hidden="true">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((name, index) => <span className={index === 0 ? "whereabouts-weekday-sunday" : index === 6 ? "whereabouts-weekday-saturday" : undefined} key={name}>{name}</span>)}</div>
       <div className="whereabouts-days">
@@ -764,21 +781,27 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
           if (day === null) return <span className="whereabouts-day whereabouts-day-empty" aria-hidden="true" key={`blank-${index}`} />;
           const key = dateKey(year, monthIndex, day);
           const peopleCount = peopleOnDate(key);
+          const dayHolidays = holidaysOnDate(key);
           const selected = selectedDate === key;
           const hasPending = hasPendingItemOnDate(key);
           const hasApproved = hasApprovedItemOnDate(key);
           const statusClass = hasPending ? (hasApproved ? "whereabouts-day-mixed-status" : "whereabouts-day-pending") : hasApproved ? "whereabouts-day-approved" : "";
-          const classes = ["whereabouts-day", statusClass, selected ? "whereabouts-day-selected" : ""].filter(Boolean).join(" ");
+          const classes = ["whereabouts-day", statusClass, dayHolidays.length ? "whereabouts-day-holiday" : "", selected ? "whereabouts-day-selected" : ""].filter(Boolean).join(" ");
           const weekendNumberClass = index % 7 === 0 ? "whereabouts-day-number-sunday" : index % 7 === 6 ? "whereabouts-day-number-saturday" : "";
-          const label = `${formatCalendarDate(key, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}${peopleCount ? `, ${peopleCount} ${peopleCount === 1 ? "person" : "people"} out of office` : ", no personnel out of office"}${hasPending ? ", includes a Pending Travel Order or Leave Application" : ""}`;
-          return <button type="button" className={classes} aria-label={label} aria-pressed={selected} key={key} onClick={() => { setSelectedDate(key); setSelectedPeoplePage(0); }}><span className={`whereabouts-day-number ${weekendNumberClass}`}>{day}</span>{peopleCount > 0 && <span className="whereabouts-day-count">{peopleCount}</span>}</button>;
+          const holidayLabel = dayHolidays.map((holiday) => `${holiday.name} (${holiday.category})`).join(", ");
+          const label = `${formatCalendarDate(key, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}${peopleCount ? `, ${peopleCount} ${peopleCount === 1 ? "person" : "people"} out of office` : ", no personnel out of office"}${hasPending ? ", includes a Pending Travel Order or Leave Application" : ""}${holidayLabel ? `, ${holidayLabel}` : ""}`;
+          return <button type="button" className={classes} aria-label={label} aria-pressed={selected} key={key} onClick={() => { setSelectedDate(key); setSelectedPeoplePage(0); }}><span className={`whereabouts-day-number ${weekendNumberClass}`}>{day}</span>{dayHolidays.map((holiday) => <span key={holiday.name} className={`whereabouts-day-holiday-label whereabouts-day-holiday-${holidayCategoryClass[holiday.category]}`}>{holiday.name}</span>)}{peopleCount > 0 && <span className="whereabouts-day-count">{peopleCount}</span>}</button>;
         })}
       </div>
-      <div className="whereabouts-legend"><span><i className="whereabouts-legend-approved" />Approved</span><span><i className="whereabouts-legend-pending" />Pending</span><span><i className="whereabouts-legend-mixed" />Approved and Pending</span></div>
+      <div className="whereabouts-legend"><span><i className="whereabouts-legend-approved" />Approved</span><span><i className="whereabouts-legend-pending" />Pending</span><span><i className="whereabouts-legend-mixed" />Approved and Pending</span><span><i className="whereabouts-legend-holiday" />Holiday / Special Day</span></div>
     </section>
     <section className="whereabouts-date-details" aria-live="polite">
       <div className="whereabouts-details-heading"><div><p className="eyebrow">Selected date</p><h3>{formatCalendarDate(selectedDate)}</h3></div><span className="whereabouts-detail-count">{loading ? "Loading..." : `${selectedPeople.length} ${selectedPeople.length === 1 ? "entry" : "entries"}`}</span></div>
       {loading ? <p className="whereabouts-personnel-count"><span>No. of Personnel Out of Office</span><strong>Loading...</strong><span>of</span><strong>Loading...</strong></p> : personnelNotInOfficeCount === 0 ? <p className="whereabouts-personnel-count">{zeroPersonnelMessage}</p> : <p className="whereabouts-personnel-count"><span>No. of Personnel Out of Office</span><strong>{personnelNotInOfficeCount}</strong><span>of</span><strong>{totalPersonnelLoading ? "Loading..." : selectedPersonnelTotal ?? "Unavailable"}</strong></p>}
+      {selectedDateHolidays.length > 0 && <div className="whereabouts-holiday-details" aria-label="Philippine holiday and special day">
+        <strong>Philippine Holiday / Special Day</strong>
+        {selectedDateHolidays.map((holiday) => <p key={holiday.name}><span>{holiday.name}</span><small>{holiday.category}</small></p>)}
+      </div>}
       {loading ? <p className="muted">Loading Travel Orders, Permit Slips, and Leave Applications...</p> : personnelNotInOfficeCount === 0 ? null : selectedPeople.length === 0 ? <p className="whereabouts-empty-date">No Travel Orders, Permit Slips, or Leave Applications on this date.</p> : <>
         {selectedPeoplePageCount > 1 && <nav className="whereabouts-pagination whereabouts-date-pagination" aria-label="Selected date people pages"><button type="button" onClick={() => setSelectedPeoplePage((page) => Math.max(0, page - 1))} disabled={currentSelectedPeoplePage === 0}>Previous</button><span aria-live="polite">Page {currentSelectedPeoplePage + 1} of {selectedPeoplePageCount}</span><button type="button" onClick={() => setSelectedPeoplePage((page) => Math.min(selectedPeoplePageCount - 1, page + 1))} disabled={currentSelectedPeoplePage >= selectedPeoplePageCount - 1}>Next</button></nav>}
         <div className="whereabouts-date-table-wrap"><table className="whereabouts-date-table"><thead><tr><th>Person</th><th>Date</th><th>Purpose / Destination</th></tr></thead><tbody>
@@ -792,6 +815,12 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         <label>Approved Document<select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value as "permit" | "travel" | "leave" | "calendar-of-activities")}><option value="permit">Permit Slips</option><option value="travel">Travel Orders</option><option value="leave">Leave Applications</option><option value="calendar-of-activities">Calendar of Activities</option></select></label>
         <label>Name Search<input type="search" value={nameSearch} onChange={(event) => { setNameSearch(event.target.value); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} placeholder="Search by Name" /></label>
       </div>
+      {annualHolidays.length > 0 && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-holidays-summary-title">
+        <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-holidays-summary-title">Philippine Holidays and Special Days</h3><span>{annualHolidays.length} dates</span></div>
+        <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table"><thead><tr><th>Date</th><th>Holiday / Special Day</th><th>Classification</th></tr></thead><tbody>
+          {annualHolidays.map((holiday) => <tr key={`holiday-${holiday.date}`}><td>{formatCalendarDate(holiday.date, { weekday: "short", month: "short", day: "numeric" })}</td><td>{holiday.name}</td><td>{holiday.category}</td></tr>)}
+        </tbody></table></div>
+      </section>}
       {documentFilter === "permit" && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-permit-summary-title">
         <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-permit-summary-title">Approved Permit Slips</h3><span>{annualPermits.length === 0 ? "0 records" : `${currentPermitPage * 10 + 1}–${Math.min(currentPermitPage * 10 + visibleAnnualPermits.length, annualPermits.length)} of ${annualPermits.length}`}</span></div>
         <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table"><thead><tr><th>Date</th><th>Name</th><th>Office</th><th>Purpose</th></tr></thead><tbody>
