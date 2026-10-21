@@ -217,6 +217,15 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
 
   const currentWeekStart = currentCleaningWeekStart(now);
   const currentAssignment = assignments.find((assignment) => assignment.weekStart === currentWeekStart) ?? null;
+  const assignmentMatchesProfileUnit = role !== "regular" || currentAssignment?.unit === unit;
+  const canUploadCurrentAssignment = Boolean(canUpload && currentAssignment && assignmentMatchesProfileUnit && isOngoing(currentAssignment, now));
+  const uploadDisabledMessage = !currentAssignment
+    ? "There is no active Cleaning Task assignment for the current work week."
+    : !isOngoing(currentAssignment, now)
+      ? "Uploads are available only during the active Cleaning Task assignment."
+      : !assignmentMatchesProfileUnit
+        ? `The Superadmin assigned ${currentAssignment.unit} this week; only that unit can upload.`
+        : "";
   const currentImage = images.find((image) => image.id === currentCleaningTaskImageId) ?? null;
   const visibleImages = currentImage ? [currentImage] : images.slice(0, 1);
   const selectedWeeks = useMemo(() => cleaningTaskCalendarWeeks(month), [month]);
@@ -224,11 +233,14 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
   async function uploadCleaningPhotos(files: File[], location: string) {
     setBusy(true);
     try {
-      const collageFile = await mergeCleaningPhotos(files);
       const assignmentUnit = currentAssignment?.unit;
       if (!currentAssignment || !isCleaningTaskUnit(assignmentUnit) || !isOngoing(currentAssignment, new Date())) {
         throw new Error("There is no active Cleaning Task assignment for the current work week.");
       }
+      if (role === "regular" && assignmentUnit !== unit) {
+        throw new Error(`The Superadmin assigned ${assignmentUnit} this week; only that unit can upload.`);
+      }
+      const collageFile = await mergeCleaningPhotos(files);
       const existing = currentImage;
       if (existing?.previousFileKey) {
         const cleanedPendingFile = await fetch(uploadThingUrl.replace(/\/api\/uploadthing\/?$/, "/api/delete-cleaning-task-image"), {
@@ -310,6 +322,10 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
       setError("There is no active Cleaning Task assignment for the current work week.");
       return;
     }
+    if (role === "regular" && currentAssignment.unit !== unit) {
+      setError(`The Superadmin assigned ${currentAssignment.unit} this week; only that unit can upload.`);
+      return;
+    }
     if (files.length !== 4) {
       setError("Select exactly 4 images to create the Cleaning Task collage.");
       return;
@@ -339,9 +355,10 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
         <p className="eyebrow">Weekly office upkeep</p>
         <div className="cleaning-task-title-row">
           <h2>{mode === "workspace" ? "Cleaning Task" : "Cleaning Task Updates"}</h2>
-          {mode === "workspace" && canUpload && <label className={`cleaning-task-upload-button${busy ? " is-busy" : ""}`}><span>{visibleImages.length > 0 ? "Replace photos" : "Upload"}</span><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose exactly 4 photos to upload as one collage" multiple onChange={(event) => void handleImageSelection(event)} disabled={busy || !currentAssignment || !isOngoing(currentAssignment, now)} /></label>}
+          {mode === "workspace" && canUpload && <label className={`cleaning-task-upload-button${busy ? " is-busy" : ""}${!canUploadCurrentAssignment ? " is-disabled" : ""}`} title={uploadDisabledMessage || undefined}><span>{visibleImages.length > 0 ? "Replace photos" : "Upload"}</span><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose exactly 4 photos to upload as one collage" multiple onChange={(event) => void handleImageSelection(event)} disabled={busy || !canUploadCurrentAssignment} /></label>}
         </div>
         <p className="muted">{mode === "workspace" ? "Post or replace the shared verification during the active weekly assignment." : "Latest photo verification and the AGRISTAT, AMIA, and DRRM weekly cleaning schedule."}</p>
+        {mode === "workspace" && canUpload && !loading && !canUploadCurrentAssignment && <p className="cleaning-task-upload-disabled-note" role="status">{uploadDisabledMessage}</p>}
       </div>
     </header>
     {error && <p className="cleaning-task-message is-error" role="alert">{error}</p>}

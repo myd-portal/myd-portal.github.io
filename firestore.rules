@@ -280,8 +280,11 @@ service cloud.firestore {
         && (isCleaningTaskRegularProfile(get(userPath).data)
           || isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader"));
     }
-    function canUploadCleaningTask() {
-      return canReadCleaningTasks();
+    function canUploadCleaningTask(unit) {
+      let userPath = currentUserPath();
+      return canReadCleaningTasks()
+        && (isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader")
+          || (isCleaningTaskRegularProfile(get(userPath).data) && get(userPath).data.get("unit", "") == unit));
     }
     function validCleaningTaskAssignment(data, weekStart) {
       return data.keys().hasAll(["weekStart", "month", "weekNumber", "unit", "startAt", "endAt", "assignedBy", "assignedAt"])
@@ -1102,14 +1105,14 @@ service cloud.firestore {
     match /cleaningTaskImages/{imageId} {
       allow read: if canReadCleaningTasks();
       allow create: if imageId == "current"
-        && canUploadCleaningTask()
+        && canUploadCleaningTask(request.resource.data.unit)
         && validCleaningTaskImage(request.resource.data, imageId)
         && request.resource.data.uploaderId == request.auth.uid
         && request.resource.data.previousFileKey == ""
         && request.resource.data.previousFileOwnerId == ""
         && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, request.resource.data.unit);
       allow update: if (imageId == "current"
-          && canUploadCleaningTask()
+          && canUploadCleaningTask(request.resource.data.unit)
           && resource.data.unit in ["AGRISTAT", "AMIA", "DRRM"]
           && validCleaningTaskImage(request.resource.data, imageId)
           && request.resource.data.uploaderId == request.auth.uid
@@ -1117,7 +1120,7 @@ service cloud.firestore {
           && request.resource.data.previousFileOwnerId == resource.data.uploaderId
           && isCurrentCleaningTaskAssignment(request.resource.data.submittedWeekStart, request.resource.data.unit))
         || (imageId == "current"
-          && canUploadCleaningTask()
+          && canReadCleaningTasks()
           && resource.data.unit in ["AGRISTAT", "AMIA", "DRRM"]
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["previousFileKey", "previousFileOwnerId"])
           && request.resource.data.previousFileKey == ""

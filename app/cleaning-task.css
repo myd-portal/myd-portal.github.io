@@ -214,6 +214,12 @@
   cursor: wait;
 }
 
+.cleaning-task-upload-button.is-disabled {
+  color: #607067;
+  background: #e8ece9;
+  cursor: not-allowed;
+}
+
 .cleaning-task-upload-button input {
   position: absolute;
   inset: 0;
@@ -468,6 +474,12 @@
   padding: .7rem .9rem;
   border-radius: 8px;
   font-size: .88rem;
+}
+
+.cleaning-task-upload-disabled-note {
+  margin: -.35rem 0 0;
+  color: #66766d;
+  font-size: .82rem;
 }
 
 .cleaning-task-message.is-error {

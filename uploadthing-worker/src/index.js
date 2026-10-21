@@ -152,6 +152,12 @@ function isEligibleCleaningTaskProfile(profile) {
   return isFieldOperationsDivision && (isAdminProjectLeader || isRegularUnitMember);
 }
 
+function canUploadCleaningTaskForUnit(profile, assignedUnit) {
+  const role = typeof profile?.accountRole === "string" ? profile.accountRole.toLowerCase() : "";
+  return isEligibleCleaningTaskProfile(profile)
+    && (!["regular", "user"].includes(role) || profile.unit === assignedUnit);
+}
+
 function canUploadInitialSignature(profile) {
   return profile?.accountRole === "admin"
     || profile?.accountRole === "superadmin"
@@ -234,6 +240,9 @@ function createUploadRouter(env) {
           || !(assignment.startAt instanceof Date) || !(assignment.endAt instanceof Date)
           || now < assignment.startAt.getTime() || now >= assignment.endAt.getTime()) {
           throw new UploadThingError("There is no active Cleaning Task assignment for the current work week.");
+        }
+        if (!canUploadCleaningTaskForUnit(profile, assignment.unit)) {
+          throw new UploadThingError(`The Superadmin assigned ${assignment.unit} this week; only that unit can upload.`);
         }
 
         return { userId: user.localId, unit: assignment.unit, weekStart };
