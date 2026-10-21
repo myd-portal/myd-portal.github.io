@@ -15,7 +15,7 @@ import "./permit-slip-admin.css";
 
 type PermitStatus = WorkflowStatus;
 type PermitUnitFilter = string;
-type PersonDecision = { status?: PermitStatus; decidedAt?: unknown; signerName?: string; decidedBy?: string; approvedPermitNo?: string };
+type PersonDecision = { status?: PermitStatus; decidedAt?: unknown; signerName?: string; signerSignatureURL?: string; decidedBy?: string; approvedPermitNo?: string };
 export type AdminPermit = {
   id: string;
   permitNo: string;
@@ -235,10 +235,11 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
 
       await runTransaction(firestore, async (transaction) => {
         const profileSnapshot = await transaction.get(doc(firestore, "users", user.uid));
-        const signerName = profileSnapshot.exists() && typeof profileSnapshot.data().name === "string"
-          ? profileSnapshot.data().name.trim()
-          : "";
+        const profileData = profileSnapshot.exists() ? profileSnapshot.data() : null;
+        const signerName = typeof profileData?.name === "string" ? profileData.name.trim() : "";
+        const signerSignatureURL = typeof profileData?.fullSignatureURL === "string" ? profileData.fullSignatureURL.trim() : "";
         if (!signerName) throw new Error("Your account name is missing. Update your profile before deciding this Permit Slip.");
+        if (status === "Approved" && !signerSignatureURL) throw new Error("Upload your Full Signature in Profile before approving this Permit Slip.");
         const permitSnapshot = await transaction.get(permitRef);
         if (!permitSnapshot.exists()) throw new Error("This Permit Slip no longer exists.");
         const data = permitSnapshot.data();
@@ -278,6 +279,7 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
           decidedBy: user.uid,
           signerName,
         };
+        if (status === "Approved") nextDecision.signerSignatureURL = signerSignatureURL;
         if (approvedPermitNo) nextDecision.approvedPermitNo = approvedPermitNo;
         transaction.update(permitRef, { [`personStatuses.${statusKey}`]: nextDecision, lastDecisionKey: statusKey });
 
@@ -303,7 +305,8 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
       });
     } catch (updateError) {
       const code = (updateError as { code?: string }).code;
-      setError(code ? `Could not update ${permitNo} (${code}).` : `Could not update ${permitNo}.`);
+      const message = updateError instanceof Error ? updateError.message : "";
+      setError(code ? `Could not update ${permitNo} (${code}).` : message || `Could not update ${permitNo}.`);
     } finally {
       setSavingKey("");
     }

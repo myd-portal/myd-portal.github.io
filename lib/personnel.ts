@@ -4,7 +4,7 @@ import { isSuperadminRole } from "@/lib/user-roles";
 import { accountDesignation, accountProfileSelection, fieldOperationsCombinedAssignment } from "@/lib/account-profile";
 
 export type PersonnelEntry = { userId: string; name: string; position: string; office: string; division: string; unit: string; accountRole?: string; accountStatus?: string };
-export type PermitAdminSignatory = { userId: string; name: string; position: string; office: string; division: string; unit: string; assignment: string; designation: string };
+export type PermitAdminSignatory = { userId: string; name: string; position: string; office: string; division: string; unit: string; assignment: string; designation: string; fullSignatureURL: string };
 
 export function isApprovedAdminAccount(accountRole: unknown, accountStatus: unknown) {
   return accountRole === "admin" && (accountStatus === undefined || accountStatus === null || accountStatus === "Approved");
@@ -80,6 +80,7 @@ export async function loadPermitAdminSignatories(): Promise<PermitAdminSignatory
         unit: profile.unit,
         assignment: hasCombinedFieldOperationsAssignment ? fieldOperationsCombinedAssignment : profile.assignment,
         designation: accountDesignation(data.designation),
+        fullSignatureURL: typeof data.fullSignatureURL === "string" ? data.fullSignatureURL.trim() : "",
       }];
     }).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" })
       || first.userId.localeCompare(second.userId));

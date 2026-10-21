@@ -96,7 +96,7 @@ function isPermitAdmin(email?: string | null, accountRole?: unknown) {
 
 type Unit = string;
 type AccountAssignment = string;
-type PermitDecision = { status?: "Pending" | "Approved" | "Disapproved"; decidedAt?: unknown; signerName?: string; decidedBy?: string; approvedPermitNo?: string };
+type PermitDecision = { status?: "Pending" | "Approved" | "Disapproved"; decidedAt?: unknown; signerName?: string; signerSignatureURL?: string; decidedBy?: string; approvedPermitNo?: string };
 type Permit = { id: string; permitNo: string; permitNos?: string[]; date: string; names: string[]; personIds?: string[]; recipientIds?: string[]; personUnits?: Unit[]; unit: Unit; purpose: string; ownerId?: string; ownerRole?: AccountRole; ownerOffice?: string; ownerDivision?: string; ownerUnit?: string; ownerDesignation?: string; ownerAssignment?: string; personStatuses?: Record<string, PermitDecision>; createdAt?: unknown };
 type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; attachmentLink?: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; ownerOffice?: string; ownerDivision?: string; createdAt?: unknown; approvalWorkflow?: "fod"; approvalStage?: "initial" | "chief" | "returned" | "approved"; externalSignatory?: boolean; initialSignerId?: string; chiefSignerId?: string; affixInitialSignature?: "Yes" | "No"; affixInitialSignatureURL?: string; affixInitialSignatureName?: string; affixInitialSignatureAt?: unknown; affixChiefInitialSignature?: "Yes" | "No"; affixChiefInitialSignatureURL?: string; affixChiefInitialSignatureName?: string; affixChiefInitialSignatureAt?: unknown; affixSignature?: "Yes" | "No"; affixSignatureURL?: string; affixSignatureName?: string; affixSignatureAt?: unknown };
 
@@ -1144,24 +1144,8 @@ function PermitCard({ permit, name, permitNo, decisionKey, approvedPermitNumbers
     (isFieldOperationsProgramOwner || isFieldOperationsProjectLeaderOwner) && isApproved ? decision?.signerName ?? "" : "",
   );
   const decisionSignerId = decision?.decidedBy?.trim() ?? "";
-  const signerNameMatches = Boolean(decision?.signerName?.trim())
-    && decision?.signerName?.trim().toLocaleUpperCase("en") === signatory?.name.trim().toLocaleUpperCase("en");
-  const wasApprovedByFieldOperationsChief = isApproved
-    && signatory?.designation === "Chief"
-    && (signatory.userId === decisionSignerId || (decisionSignerId.includes("@") && signerNameMatches));
-  const wasApprovedByFieldOperationsProjectLeader = isApproved
-    && signatory?.designation === "AGRISTAT/DRRM/AMIA Project Leader"
-    && (signatory.userId === decisionSignerId || (decisionSignerId.includes("@") && signerNameMatches));
-  const legacySignatureAsset = signatory?.designation === "AGRISTAT/DRRM/AMIA Project Leader"
-    ? "/agristat_and_drrm_focal_persons_amia_project_leader.png"
-    : signatory?.designation === "Chief" ? "/field_operations_division_chief_signature.png" : "";
-  const signatureAsset = isFieldOperationsProgramOwner && wasApprovedByFieldOperationsChief
-    ? "/field_operations_division_chief_signature.png"
-    : isFieldOperationsProjectLeaderOwner && wasApprovedByFieldOperationsProjectLeader
-      ? "/agristat_and_drrm_focal_persons_amia_project_leader.png"
-      : isFieldOperationsProgramOwner || isFieldOperationsProjectLeaderOwner
-        ? ""
-        : legacySignatureAsset;
+  const signerProfileSignatureURL = adminSignatories.find((profile) => profile.userId === decisionSignerId)?.fullSignatureURL ?? "";
+  const signerSignatureURL = decision?.signerSignatureURL?.trim() || signerProfileSignatureURL;
   const requiresConfiguredSignatory = approvalRoute !== null;
   return <article className="permit-document">
     <header className="permit-header">
@@ -1254,7 +1238,7 @@ function PermitCard({ permit, name, permitNo, decisionKey, approvedPermitNumbers
 
     <div className="permit-approval">
       <div className="permit-approved-label">Approved:</div>
-      {isApproved && <div className="permit-digital-signature">{signatureAsset && <img src={publicAsset(signatureAsset)} alt="Permit Slip approval signature" />}<div><span>Digitally Signed By</span><strong>{decision?.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision?.decidedAt)}</span><span>Time: {decisionTime}</span></div></div>}
+      {isApproved && <div className="permit-digital-signature">{signerSignatureURL && <img src={signerSignatureURL} alt="Permit Slip approver full signature" />}<div><span>Digitally Signed By</span><strong>{decision?.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision?.decidedAt)}</span><span>Time: {decisionTime}</span></div></div>}
       {decision?.status === "Disapproved" && <div className="permit-disapproved-stamp"><strong>Disapproved</strong><span>By {decision.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</span><span>Date: {signatureDate(decision.decidedAt)}</span><span>Time: {decisionTime}</span></div>}
       <div className="permit-approved-name">{signatory?.name.toLocaleUpperCase("en") || (requiresConfiguredSignatory ? "" : "GERLIE B. ANTIPASO")}</div>
       {signatory?.kind === "fod"

@@ -688,6 +688,7 @@ service cloud.firestore {
       let newStatuses = request.resource.data.get("personStatuses", {});
       let oldDecision = oldStatuses is map ? oldStatuses.get(safeDecisionKey, {}) : {};
       let newDecision = newStatuses is map ? newStatuses.get(safeDecisionKey, {}) : {};
+      let profile = get(currentUserPath()).data;
       return isPermitAdmin()
         && decisionKey is string
         && decisionKey.size() > 0
@@ -700,8 +701,15 @@ service cloud.firestore {
         && newStatuses.diff(oldStatuses).affectedKeys().hasAny([decisionKey])
         && oldDecision.get("status", "Pending") == "Pending"
         && newDecision.get("status", "") in ["Approved", "Disapproved"]
-        && newDecision.get("signerName", "") == get(currentUserPath()).data.get("name", "")
-        && newDecision.diff(oldDecision).affectedKeys().hasOnly(["status", "decidedAt", "decidedBy", "signerName", "approvedPermitNo"]);
+        && newDecision.get("signerName", "") == profile.get("name", "")
+        && (!newDecision.keys().hasAny(["signerSignatureURL"])
+          || (newDecision.signerSignatureURL is string
+            && newDecision.signerSignatureURL == profile.get("fullSignatureURL", "")))
+        && (newDecision.get("status", "") != "Approved"
+          || (newDecision.get("signerSignatureURL", "") is string
+            && newDecision.get("signerSignatureURL", "") != ""
+            && newDecision.get("signerSignatureURL", "") == profile.get("fullSignatureURL", "")))
+        && newDecision.diff(oldDecision).affectedKeys().hasOnly(["status", "decidedAt", "decidedBy", "signerName", "signerSignatureURL", "approvedPermitNo"]);
     }
     function validProfileOfficeDivisionUnit(office, division, unit) {
       return (office == "Division" && division == "Administrative Division"
