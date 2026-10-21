@@ -253,6 +253,11 @@ service cloud.firestore {
       let role = profile.get("accountRole", "");
       return role is string ? role.lower() : "";
     }
+    function canUploadInitialSignature(profile) {
+      let role = normalizedAccountRole(profile);
+      return role in ["admin", "superadmin"]
+        || (role in ["regular", "user"] && profile.get("designation", "") in ["Chief", "OIC"]);
+    }
     function sameTextIgnoreCase(value, expected) {
       return value is string && expected is string && value.lower() == expected.lower();
     }
@@ -981,7 +986,9 @@ service cloud.firestore {
             || (request.resource.data.fullSignatureURL is string && request.resource.data.fullSignatureURL.size() <= 2048))
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["initialSignatureURL"])
             || !request.resource.data.keys().hasAny(["initialSignatureURL"])
-            || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048)))
+            || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["initialSignatureURL"])
+            || canUploadInitialSignature(resource.data)))
         || (isEmailVerified()
           && request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "position", "office", "division", "unit", "assignment", "projectProgram", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
@@ -1029,6 +1036,8 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["photoURL"]) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 2048))
           && (!request.resource.data.keys().hasAny(["fullSignatureURL"]) || (request.resource.data.fullSignatureURL is string && request.resource.data.fullSignatureURL.size() <= 2048))
           && (!request.resource.data.keys().hasAny(["initialSignatureURL"]) || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["initialSignatureURL"])
+            || canUploadInitialSignature(resource.data))
           && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 200))
           && (!request.resource.data.keys().hasAny(["taxIdentificationNo"]) || (request.resource.data.taxIdentificationNo is string && request.resource.data.taxIdentificationNo.size() > 0 && request.resource.data.taxIdentificationNo.size() <= 30))
           && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))

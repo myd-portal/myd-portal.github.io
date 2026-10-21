@@ -148,6 +148,12 @@ function isEligibleCleaningTaskProfile(profile) {
     && profile.unit === "Field Operations Division";
 }
 
+function canUploadInitialSignature(profile) {
+  return profile?.accountRole === "admin"
+    || profile?.accountRole === "superadmin"
+    || (["regular", "user"].includes(profile?.accountRole) && ["Chief", "OIC"].includes(profile?.designation));
+}
+
 function manilaCurrentWeekStart(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Manila",
@@ -193,6 +199,9 @@ function createUploadRouter(env) {
         if (!profile || (profile.accountStatus ?? "Approved") !== "Approved"
           || !["regular", "user", "admin", "superadmin"].includes(role)) {
           throw new UploadThingError("Signature uploads are available to approved Regular and Admin accounts.");
+        }
+        if (req.headers.get("x-profile-signature-field") === "initialSignatureURL" && !canUploadInitialSignature(profile)) {
+          throw new UploadThingError("Initial Signatures are available to Admin accounts and Regular accounts designated Chief or OIC.");
         }
         return { userId: user.localId };
       })

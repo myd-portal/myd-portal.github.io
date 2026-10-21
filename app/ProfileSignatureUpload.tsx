@@ -29,7 +29,7 @@ export default function ProfileSignatureUpload({
 }) {
   const [error, setError] = useState("");
   const { startUpload, isUploading } = useUploadThing("profileSignature", {
-    headers: async () => ({ Authorization: `Bearer ${await user.getIdToken(true)}` }),
+    headers: async () => ({ Authorization: `Bearer ${await user.getIdToken(true)}`, "X-Profile-Signature-Field": fieldName }),
     onUploadError: (uploadError) => setError(uploadError.message || `Could not upload your ${label.toLowerCase()}. Try again.`),
   });
 

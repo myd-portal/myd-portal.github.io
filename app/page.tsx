@@ -3454,7 +3454,7 @@ export default function Home() {
   <div className="profile-media-row">
     <ProfilePhotoUpload user={user} photoURL={profilePhotoURL} disabled={profileLoading || profileSaving} onUploaded={setProfilePhotoURL} />
     <ProfileSignatureUpload user={user} label="Full Signature" fieldName="fullSignatureURL" signatureURL={profileFullSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileFullSignatureURL} />
-    <ProfileSignatureUpload user={user} label="Initial Signature" fieldName="initialSignatureURL" signatureURL={profileInitialSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileInitialSignatureURL} />
+    {(accountRole !== "regular" || ["Chief", "OIC"].includes(profileDesignation)) && <ProfileSignatureUpload user={user} label="Initial Signature" fieldName="initialSignatureURL" signatureURL={profileInitialSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileInitialSignatureURL} />}
   </div>
   <label>First Name<input autoComplete="given-name" maxLength={60} value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
   <label>Middle Name<input autoComplete="additional-name" maxLength={60} value={profileMiddleName} onChange={(event) => setProfileMiddleName(event.target.value)} disabled={profileLoading || profileSaving} /></label>
