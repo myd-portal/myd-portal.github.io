@@ -711,7 +711,6 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   const currentSelectedPeoplePage = Math.min(selectedPeoplePage, selectedPeoplePageCount - 1);
   const visibleSelectedPeople = selectedPeople.slice(currentSelectedPeoplePage * selectedPeoplePageSize, currentSelectedPeoplePage * selectedPeoplePageSize + selectedPeoplePageSize);
   const summaryYear = String(year);
-  const annualHolidays = PHILIPPINE_HOLIDAYS_2026.filter((holiday) => holiday.date.startsWith(`${summaryYear}-`));
   const yearStart = `${summaryYear}-01-01`;
   const yearEnd = `${summaryYear}-12-31`;
   const normalizedSearch = nameSearch.trim().toLocaleLowerCase();
@@ -815,12 +814,6 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         <label>Approved Document<select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value as "permit" | "travel" | "leave" | "calendar-of-activities")}><option value="permit">Permit Slips</option><option value="travel">Travel Orders</option><option value="leave">Leave Applications</option><option value="calendar-of-activities">Calendar of Activities</option></select></label>
         <label>Name Search<input type="search" value={nameSearch} onChange={(event) => { setNameSearch(event.target.value); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} placeholder="Search by Name" /></label>
       </div>
-      {annualHolidays.length > 0 && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-holidays-summary-title">
-        <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-holidays-summary-title">Philippine Holidays and Special Days</h3><span>{annualHolidays.length} dates</span></div>
-        <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table"><thead><tr><th>Date</th><th>Holiday / Special Day</th><th>Classification</th></tr></thead><tbody>
-          {annualHolidays.map((holiday) => <tr key={`holiday-${holiday.date}`}><td>{formatCalendarDate(holiday.date, { weekday: "short", month: "short", day: "numeric" })}</td><td>{holiday.name}</td><td>{holiday.category}</td></tr>)}
-        </tbody></table></div>
-      </section>}
       {documentFilter === "permit" && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-permit-summary-title">
         <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-permit-summary-title">Approved Permit Slips</h3><span>{annualPermits.length === 0 ? "0 records" : `${currentPermitPage * 10 + 1}–${Math.min(currentPermitPage * 10 + visibleAnnualPermits.length, annualPermits.length)} of ${annualPermits.length}`}</span></div>
         <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table"><thead><tr><th>Date</th><th>Name</th><th>Office</th><th>Purpose</th></tr></thead><tbody>
