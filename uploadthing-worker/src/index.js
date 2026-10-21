@@ -141,11 +141,15 @@ function firestoreValue(value) {
 
 function isEligibleCleaningTaskProfile(profile) {
   if (!profile || (profile.accountStatus ?? "Approved") !== "Approved") return false;
-  return profile.accountRole === "admin"
-    && profile.designation === "AGRISTAT/DRRM/AMIA Project Leader"
-    && profile.office === "Division"
-    && profile.division === "Field Operations Division"
-    && profile.unit === "Field Operations Division";
+  const role = typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : "";
+  const isFieldOperationsDivision = profile.office === "Division"
+    && profile.division === "Field Operations Division";
+  const isAdminProjectLeader = role === "admin"
+    && profile.unit === "Field Operations Division"
+    && profile.designation === "AGRISTAT/DRRM/AMIA Project Leader";
+  const isRegularUnitMember = ["regular", "user"].includes(role)
+    && cleaningTaskUnits.has(profile.unit);
+  return isFieldOperationsDivision && (isAdminProjectLeader || isRegularUnitMember);
 }
 
 function canUploadInitialSignature(profile) {
@@ -220,7 +224,7 @@ function createUploadRouter(env) {
 
         const profile = await getFirestoreDocument(env, idToken, "users", user.localId);
         if (!isEligibleCleaningTaskProfile(profile)) {
-          throw new UploadThingError("Cleaning Task uploads are available only to the Field Operations Project Leader account.");
+          throw new UploadThingError("Cleaning Task uploads require an eligible Field Operations Division account.");
         }
 
         const weekStart = manilaCurrentWeekStart();

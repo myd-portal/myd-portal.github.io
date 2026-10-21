@@ -148,12 +148,20 @@ function hasCleaningTaskAdminAccess(role: AccountRole, office: string, division:
     && designation === "AGRISTAT/DRRM/AMIA Project Leader";
 }
 
+function hasCleaningTaskRegularAccess(role: AccountRole, office: string, division: string, unit: string) {
+  return role === "regular"
+    && office === "Division"
+    && division === "Field Operations Division"
+    && ["AGRISTAT", "DRRM", "AMIA"].includes(unit);
+}
+
 export function canAccessCleaningTaskNavigation(role: AccountRole, office: string, division: string, unit: string, designation: string) {
-  return hasCleaningTaskAdminAccess(role, office, division, unit, designation);
+  return hasCleaningTaskRegularAccess(role, office, division, unit)
+    || hasCleaningTaskAdminAccess(role, office, division, unit, designation);
 }
 
 export function canViewCleaningTaskLanding(role: AccountRole, office: string, division: string, unit: string, designation: string) {
-  return hasCleaningTaskAdminAccess(role, office, division, unit, designation);
+  return canAccessCleaningTaskNavigation(role, office, division, unit, designation);
 }
 
 export function CleaningTaskBoard({ user, role, office, division, unit, designation, name, canUpload = false, mode = "landing" }: {

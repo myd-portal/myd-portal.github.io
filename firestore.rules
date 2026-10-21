@@ -267,11 +267,18 @@ service cloud.firestore {
     function isCleaningTaskUnit(unit) {
       return unit in ["AGRISTAT", "AMIA", "DRRM"];
     }
+    function isCleaningTaskRegularProfile(profile) {
+      return normalizedAccountRole(profile) in ["regular", "user"]
+        && profile.get("office", "") == "Division"
+        && profile.get("division", "") == "Field Operations Division"
+        && isCleaningTaskUnit(profile.get("unit", ""));
+    }
     function canReadCleaningTasks() {
       let userPath = currentUserPath();
       return isVerifiedUser() && exists(userPath)
         && get(userPath).data.get("accountStatus", "Approved") == "Approved"
-        && isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader");
+        && (isCleaningTaskRegularProfile(get(userPath).data)
+          || isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader"));
     }
     function canUploadCleaningTask() {
       return canReadCleaningTasks();
