@@ -266,7 +266,7 @@ service cloud.firestore {
       let userPath = currentUserPath();
       return isVerifiedUser() && exists(userPath)
         && get(userPath).data.get("accountStatus", "Approved") == "Approved"
-        && get(userPath).data.get("accountRole", "") in ["regular", "user", "admin", "superadmin"];
+        && isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader");
     }
     function canUploadCleaningTask() {
       return canReadCleaningTasks();
@@ -1070,7 +1070,7 @@ service cloud.firestore {
         && resource.data.get("isRootSuperAdmin", false) != true;
     }
     match /cleaningTaskAssignments/{weekStart} {
-      allow read: if canReadCleaningTasks();
+      allow read: if canReadCleaningTasks() || isSuperAdmin();
       allow create, update: if isSuperAdmin()
         && validCleaningTaskAssignment(request.resource.data, weekStart);
       allow delete: if isSuperAdmin();

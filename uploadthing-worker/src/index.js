@@ -141,7 +141,11 @@ function firestoreValue(value) {
 
 function isEligibleCleaningTaskProfile(profile) {
   if (!profile || (profile.accountStatus ?? "Approved") !== "Approved") return false;
-  return ["regular", "user", "admin", "superadmin"].includes(profile.accountRole);
+  return profile.accountRole === "admin"
+    && profile.designation === "AGRISTAT/DRRM/AMIA Project Leader"
+    && profile.office === "Division"
+    && profile.division === "Field Operations Division"
+    && profile.unit === "Field Operations Division";
 }
 
 function manilaCurrentWeekStart(now = new Date()) {
@@ -207,7 +211,7 @@ function createUploadRouter(env) {
 
         const profile = await getFirestoreDocument(env, idToken, "users", user.localId);
         if (!isEligibleCleaningTaskProfile(profile)) {
-          throw new UploadThingError("Cleaning Task uploads are available to verified, approved accounts.");
+          throw new UploadThingError("Cleaning Task uploads are available only to the Field Operations Project Leader account.");
         }
 
         const weekStart = manilaCurrentWeekStart();

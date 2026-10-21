@@ -140,18 +140,29 @@ function taskStatus(assignment: CleaningTaskAssignment, now: Date) {
   return "Completed";
 }
 
-export function canAccessCleaningTaskNavigation(role: AccountRole, _unit: string, _designation: string) {
-  return role === "regular" || role === "admin" || role === "superadmin";
+function hasCleaningTaskAdminAccess(role: AccountRole, office: string, division: string, unit: string, designation: string) {
+  return role === "admin"
+    && office === "Division"
+    && division === "Field Operations Division"
+    && unit === "Field Operations Division"
+    && designation === "AGRISTAT/DRRM/AMIA Project Leader";
 }
 
-export function canViewCleaningTaskLanding(role: AccountRole, _unit: string) {
-  return role === "regular" || role === "admin" || role === "superadmin";
+export function canAccessCleaningTaskNavigation(role: AccountRole, office: string, division: string, unit: string, designation: string) {
+  return hasCleaningTaskAdminAccess(role, office, division, unit, designation);
 }
 
-export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, mode = "landing" }: {
+export function canViewCleaningTaskLanding(role: AccountRole, office: string, division: string, unit: string, designation: string) {
+  return hasCleaningTaskAdminAccess(role, office, division, unit, designation);
+}
+
+export function CleaningTaskBoard({ user, role, office, division, unit, designation, name, canUpload = false, mode = "landing" }: {
   user: User;
   role: AccountRole;
+  office: string;
+  division: string;
   unit: string;
+  designation: string;
   name: string;
   canUpload?: boolean;
   mode?: "landing" | "workspace";
@@ -312,7 +323,7 @@ export function CleaningTaskBoard({ user, role, unit, name, canUpload = false, m
     setPendingPhotos(files);
   }
 
-  if (mode === "landing" && !canViewCleaningTaskLanding(role, unit)) return null;
+  if (!canAccessCleaningTaskNavigation(role, office, division, unit, designation)) return null;
 
   return <section className={`cleaning-task-board${mode === "workspace" ? " is-workspace" : " is-landing"}`}>
     <header className="cleaning-task-heading">
