@@ -38,7 +38,7 @@ import {
 import { auth, db, functions, isFirebaseConfigured } from "@/lib/firebase";
 import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
 import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
-import { accountRoleForEmail, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
+import { accountRoleForEmail, isSuperadminRole, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
 import { accountOffice, accountAssignment, accountDesignation, accountDesignationOptions, accountOfficeOptions, accountPositionOptions, accountProfileSelection, assignmentsForOffice, divisionsForOffice, unitsForOfficeDivision, fieldOperationsAssignments, fieldOperationsCombinedAssignment } from "@/lib/account-profile";
 import { isFieldOperationsAppearanceApprover } from "@/lib/certificate-signatory";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -597,7 +597,7 @@ function PermitForm({ user, office, assignment, division = "", unit = "", design
     let cancelled = false;
     async function loadPersonnel() {
       try {
-        const entries = await loadAccountPersonnel({ includeAllAccounts: true, deduplicateByName: false });
+        const entries = await loadAccountPersonnel({ deduplicateByName: false });
         if (!cancelled) {
           setPersonnel(entries);
           setPersonnelStatus("ready");
@@ -729,7 +729,8 @@ type SpecialOrderWorkflowAccount = { userId: string; name: string; designation: 
 function selectSpecialOrderWorkflowAccounts(snapshot: QuerySnapshot) {
   const approvedAdmins = snapshot.docs.flatMap((item) => {
     const data = item.data();
-    if (normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
+    if (isSuperadminRole(data.accountRole, data.email)
+      || normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
       || normalizeAccountStatus(data.accountStatus) !== "Approved") return [];
     // The approval route requires the stored profile Unit itself to be
     // Field Operations Division. Do not let profile normalization turn a

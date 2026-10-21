@@ -6,6 +6,7 @@ import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
+import { isSuperadminRole } from "@/lib/user-roles";
 import { accountAssignment, accountDivision, accountOffice } from "@/lib/account-profile";
 import { tevDivisions, type TevDivision } from "@/lib/mytev";
 import { makeDocumentNotification } from "@/lib/document-notifications";
@@ -199,7 +200,8 @@ function isFodLeaveOwner(profile: Record<string, unknown>) {
 function fodLeaveApproverDesignation(profile: Record<string, unknown>) {
   const role = typeof profile.accountRole === "string" ? profile.accountRole.toLowerCase() : "";
   const status = profile.accountStatus;
-  return role === "admin"
+  return !isSuperadminRole(profile.accountRole, profile.email)
+    && role === "admin"
     && (status === undefined || status === null || status === "Approved")
     && profile.office === "Division"
     && profile.division === "Field Operations Division"
@@ -210,7 +212,8 @@ function fodLeaveApproverDesignation(profile: Record<string, unknown>) {
 }
 
 function eligibleLeaveSignatory(profile: Record<string, unknown>, divisionName: string): profile is Record<string, unknown> & { name: string; designation: "Chief" | "OIC" } {
-  return String(profile.accountRole ?? "").toLowerCase() === "admin"
+  return !isSuperadminRole(profile.accountRole, profile.email)
+    && String(profile.accountRole ?? "").toLowerCase() === "admin"
     && (profile.accountStatus === undefined || profile.accountStatus === null || profile.accountStatus === "Approved")
     && profile.division === divisionName
     && (profile.designation === "Chief" || profile.designation === "OIC")

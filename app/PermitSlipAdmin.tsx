@@ -101,7 +101,7 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
 
   useEffect(() => {
     let cancelled = false;
-    void loadPersonnel({ includeAllAccounts: true, deduplicateByName: false }).then((accounts) => {
+    void loadPersonnel({ deduplicateByName: false }).then((accounts) => {
       if (cancelled) return;
       setPermitOwnerAccounts(Object.fromEntries(accounts.map((account) => [account.userId, account])));
     }).catch(() => {

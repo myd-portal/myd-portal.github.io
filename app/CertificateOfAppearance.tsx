@@ -9,7 +9,7 @@ import { accountOffice, accountOfficeOptions, accountProfileSelection, divisions
 import { certificateAppearanceSignatoryForOwner, isFieldOperationsAppearanceApprover } from "@/lib/certificate-signatory";
 import { makeDocumentNotification } from "@/lib/document-notifications";
 import { makeBlankCertificatePdf as createBlankCertificatePdf } from "@/lib/blank-certificate-pdf";
-import { normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
+import { isSuperadminRole, normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { divisionSignatory, tevDivisions, type TevDivision } from "@/lib/mytev";
 import { appearanceCertificateSignatory, CertificateApprovalSignature, CertificateDisapprovalStamp, CertificateStatusBadge, certificateWorkflowStatus, hasFieldOperationsAppearanceApprovalSignature, type CertificateWorkflowFields } from "./CertificateWorkflow";
@@ -112,6 +112,7 @@ async function findAppearanceApprovalAdmins(certificateOffice: string, certifica
       && data.designation === certificateRoute.designation;
     const isAssignedLegacyApprover = !certificateRoute
       && !isUnroutedFieldOperationsUnit
+      && !isSuperadminRole(data.accountRole, data.email)
       && profileSelection.office
       && profileSelection.division.toLocaleLowerCase("en") === targetDivision
       && data.accountRole === "admin"

@@ -6,8 +6,8 @@ import { accountDesignation, accountProfileSelection, fieldOperationsCombinedAss
 export type PersonnelEntry = { userId: string; name: string; position: string; office: string; division: string; unit: string; accountRole?: string; accountStatus?: string };
 export type PermitAdminSignatory = { userId: string; name: string; position: string; office: string; division: string; unit: string; assignment: string; designation: string; fullSignatureURL: string };
 
-export function isApprovedAdminAccount(accountRole: unknown, accountStatus: unknown) {
-  return accountRole === "admin" && (accountStatus === undefined || accountStatus === null || accountStatus === "Approved");
+export function isApprovedAdminAccount(accountRole: unknown, accountStatus: unknown, email?: unknown) {
+  return accountRole === "admin" && !isSuperadminRole(accountRole, email) && (accountStatus === undefined || accountStatus === null || accountStatus === "Approved");
 }
 
 export function personnelDisplayName(person: Pick<PersonnelEntry, "name">) {
@@ -65,7 +65,7 @@ export async function loadPermitAdminSignatories(): Promise<PermitAdminSignatory
   const request = getDocs(collection(firestore, "users")).then((snapshot) => {
     const entries = snapshot.docs.flatMap((item) => {
       const data = item.data();
-      if (data.accountRole !== "admin" || (data.accountStatus !== undefined && data.accountStatus !== "Approved")) return [];
+      if (isSuperadminRole(data.accountRole, data.email) || data.accountRole !== "admin" || (data.accountStatus !== undefined && data.accountStatus !== "Approved")) return [];
       const profile = accountProfileSelection(data);
       const hasCombinedFieldOperationsAssignment = [data.assignment, data.projectProgram, data.unit]
         .some((value) => typeof value === "string" && value.trim() === fieldOperationsCombinedAssignment);
@@ -94,18 +94,17 @@ export async function loadPermitAdminSignatories(): Promise<PermitAdminSignatory
 }
 
 // Personnel dropdowns are built from registered user accounts (users collection).
-export async function loadPersonnel(options: { includeAllAccounts?: boolean; deduplicateByName?: boolean } = {}): Promise<PersonnelEntry[]> {
+export async function loadPersonnel(options: { deduplicateByName?: boolean } = {}): Promise<PersonnelEntry[]> {
   if (!db) throw new Error("Firebase is not configured.");
-  const includeAllAccounts = options.includeAllAccounts ?? false;
   const deduplicateByName = options.deduplicateByName ?? true;
-  const cacheKey = `${includeAllAccounts}:${deduplicateByName}`;
+  const cacheKey = String(deduplicateByName);
   const cached = cachedPersonnel.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.entries;
   let personnelRequest = personnelRequests.get(cacheKey);
   if (!personnelRequest) {
     const firestore = db;
     personnelRequest = getDocs(collection(firestore, "users")).then((snapshot) => {
-      const entries = snapshot.docs.filter((item) => includeAllAccounts || !isSuperadminRole(item.data().accountRole)).map((item) => {
+      const entries = snapshot.docs.filter((item) => !isSuperadminRole(item.data().accountRole, item.data().email)).map((item) => {
         const data = item.data();
         const profile = accountProfileSelection(data);
         return {

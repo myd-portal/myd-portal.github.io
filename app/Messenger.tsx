@@ -158,7 +158,7 @@ export function MessengerButton({ user, active, onClick }: { user: User; active:
   useEffect(() => {
     if (!db) return;
     return onSnapshot(collection(db, "users"), (snapshot) => {
-      setSuperadminIds(new Set(snapshot.docs.filter((item) => isSuperadminRole(item.data().accountRole)).map((item) => item.id)));
+      setSuperadminIds(new Set(snapshot.docs.filter((item) => isSuperadminRole(item.data().accountRole, item.data().email)).map((item) => item.id)));
     }, () => setSuperadminIds(null));
   }, []);
   const unread = superadminIds ? chats.filter((chat) => {
@@ -215,7 +215,7 @@ export default function MessengerModule({ user, profileOffice, profileDivision, 
   useEffect(() => {
     if (!db) { setLoadingPeople(false); return; }
     return onSnapshot(collection(db, "users"), (snapshot) => {
-      setPeople(snapshot.docs.filter((item) => item.id !== user.uid && !isSuperadminRole(item.data().accountRole)).map((item) => {
+      setPeople(snapshot.docs.filter((item) => item.id !== user.uid && !isSuperadminRole(item.data().accountRole, item.data().email)).map((item) => {
         const data = item.data();
         const profile = accountProfileSelection(data);
         return { id: item.id, name: typeof data.name === "string" ? data.name : "", position: typeof data.position === "string" ? data.position : "", office: profile.office, division: profile.division, unit: profile.unit || profile.assignment, photoURL: typeof data.photoURL === "string" ? data.photoURL : "" };

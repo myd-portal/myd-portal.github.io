@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { accountDivision, accountOffice, accountOfficeOptions, accountUnit, divisionsForOffice, executiveOfficeDivisionOptions, fieldOperationsAssignments, unitsForOfficeDivision } from "@/lib/account-profile";
 import { divisionSignatory, tevDivisions } from "@/lib/mytev";
 import { loadPdfTools } from "@/lib/pdf-tools";
-import { normalizeAccountRole, type AccountRole } from "@/lib/user-roles";
+import { isSuperadminRole, normalizeAccountRole, type AccountRole } from "@/lib/user-roles";
 import { accomplishmentReportNotificationsCollection, type AccomplishmentReportWorkflowEvent } from "@/lib/accomplishment-report-workflow-storage";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./myar.css";
@@ -94,7 +94,8 @@ function isFodMyAROwner(profile: Pick<Profile, "accountRole" | "office" | "divis
 }
 
 function isFodMyARAdmin(data: Record<string, unknown>, designation: string) {
-  return data.accountRole === "admin"
+  return !isSuperadminRole(data.accountRole, data.email)
+    && data.accountRole === "admin"
     && (data.accountStatus === undefined || data.accountStatus === null || data.accountStatus === "Approved")
     && data.office === "Division"
     && data.division === "Field Operations Division"

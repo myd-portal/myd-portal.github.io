@@ -23,6 +23,8 @@ export function normalizeAccountStatus(status: unknown): AccountStatus {
   return "Pending";
 }
 
-export function isSuperadminRole(role: unknown): boolean {
-  return role === "superadmin";
+export function isSuperadminRole(role: unknown, email?: unknown): boolean {
+  const normalizedRole = typeof role === "string" ? role.trim().toLowerCase() : "";
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+  return normalizedRole === "superadmin" || normalizedEmail === SUPERADMIN_EMAIL;
 }

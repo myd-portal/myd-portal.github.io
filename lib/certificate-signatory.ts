@@ -1,3 +1,5 @@
+import { isSuperadminRole } from "@/lib/user-roles";
+
 export const fieldOperationsChiefAppearanceUnits = [
   "4K",
   "APCO - ADN",
@@ -47,12 +49,14 @@ export function certificateAppearanceSignatoryForOwner(office: string, division:
 
 export function isFieldOperationsAppearanceApprover(profile: {
   accountRole?: unknown;
+  email?: unknown;
   office?: unknown;
   division?: unknown;
   unit?: unknown;
   designation?: unknown;
 }) {
-  return profile.accountRole === "admin"
+  return !isSuperadminRole(profile.accountRole, profile.email)
+    && profile.accountRole === "admin"
     && profile.office === "Division"
     && profile.division === "Field Operations Division"
     && profile.unit === "Field Operations Division"

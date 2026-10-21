@@ -649,13 +649,13 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
             throw cause;
           });
         }));
-        const admins = allAccountsSnapshot.docs.filter((item) => isApprovedAdminAccount(item.data().accountRole, item.data().accountStatus)).map((item) => {
+        const admins = allAccountsSnapshot.docs.filter((item) => isApprovedAdminAccount(item.data().accountRole, item.data().accountStatus, item.data().email)).map((item) => {
           const data = item.data();
           const accountProfile = accountProfileSelection(data);
           return { id: item.id, name: String(data.name ?? "").trim(), adminAccount: true, designation: accountDesignation(data.designation), position: typeof data.position === "string" ? data.position.trim() : "", assignment: accountProfile.unit || accountProfile.division, office: accountProfile.office, division: accountProfile.division, unit: accountProfile.unit || accountProfile.division, storedName: String(data.name ?? ""), storedPosition: typeof data.position === "string" ? data.position : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedOffice: typeof data.office === "string" ? data.office : "", storedDivision: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "" };
         }).filter((account) => account.name).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
         const colleagues = allAccountsSnapshot.docs.filter((item) => {
-          if (item.id === user.uid || isSuperadminRole(item.data().accountRole)) return false;
+          if (item.id === user.uid || isSuperadminRole(item.data().accountRole, item.data().email)) return false;
           const person = item.data();
           const personProfile = accountProfileSelection(person);
           return personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
@@ -668,7 +668,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
         }).map((item) => {
           const data = item.data();
           const accountProfile = accountProfileSelection(data);
-          return { id: item.id, name: String(data.name ?? "").trim(), adminAccount: isApprovedAdminAccount(data.accountRole, data.accountStatus), designation: accountDesignation(data.designation), position: typeof data.position === "string" ? data.position.trim() : "", assignment: accountProfile.unit || accountProfile.division, office: accountProfile.office, division: accountProfile.division, unit: accountProfile.unit || accountProfile.division, storedName: String(data.name ?? ""), storedPosition: typeof data.position === "string" ? data.position : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedOffice: typeof data.office === "string" ? data.office : "", storedDivision: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "" };
+          return { id: item.id, name: String(data.name ?? "").trim(), adminAccount: isApprovedAdminAccount(data.accountRole, data.accountStatus, data.email), designation: accountDesignation(data.designation), position: typeof data.position === "string" ? data.position.trim() : "", assignment: accountProfile.unit || accountProfile.division, office: accountProfile.office, division: accountProfile.division, unit: accountProfile.unit || accountProfile.division, storedName: String(data.name ?? ""), storedPosition: typeof data.position === "string" ? data.position : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedOffice: typeof data.office === "string" ? data.office : "", storedDivision: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "" };
         }).filter((account) => account.name).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
         const rowsById = new Map<string, CalendarOfActivities>([...unitPlansSnapshot.docs, ...ownedPlansSnapshot.docs, ...(initialSignerPlansSnapshot?.docs ?? []), ...(chiefSignerPlansSnapshot?.docs ?? [])].map((item): [string, CalendarOfActivities] => [item.id, { id: item.id, ...item.data() } as CalendarOfActivities]));
         receivedPlans.forEach((item) => {

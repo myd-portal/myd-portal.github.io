@@ -129,7 +129,7 @@ function TravelOrderForm({ user, office, unit, initialOrder, onSaved, onCancel, 
     let cancelled = false;
     async function loadPersonnel() {
       try {
-        const entries = (await loadAccountPersonnel({ includeAllAccounts: true, deduplicateByName: false }))
+        const entries = (await loadAccountPersonnel({ deduplicateByName: false }))
           .filter((person) => !person.accountStatus || person.accountStatus === "Approved");
         if (!cancelled) {
           setPersonnel(entries);

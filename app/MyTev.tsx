@@ -715,8 +715,8 @@ export default function MyTevModule({ user, focusRecordId, onFocusHandled, onPre
       });
       const allDivisionPersonnel = accountsSnapshot.docs.flatMap((account) => {
         const accountData = account.data();
-        if (account.id === user.uid || isSuperadminRole(accountData.accountRole)) return [];
-        const adminAccount = isApprovedAdminAccount(accountData.accountRole, accountData.accountStatus);
+        if (account.id === user.uid || isSuperadminRole(accountData.accountRole, accountData.email)) return [];
+        const adminAccount = isApprovedAdminAccount(accountData.accountRole, accountData.accountStatus, accountData.email);
         const personnelProfile = accountProfileSelection(accountData);
         const accountProfile: TevProfile = {
           name: typeof accountData.name === "string" ? accountData.name.trim() : "",

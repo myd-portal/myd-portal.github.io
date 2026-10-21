@@ -12,7 +12,7 @@ import { loadPdfTools } from "@/lib/pdf-tools";
 import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
-import { normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
+import { isSuperadminRole, normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
 import { safeAttachmentHref } from "@/lib/attachment-link";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -116,7 +116,8 @@ function prependNtaRecord(records: NtaRecord[], record: NtaRecord) {
 }
 function resolveNtaWorkflowAccounts(profiles: Array<{ userId: string; data: Record<string, unknown> }>): NtaWorkflowAccounts {
   const approvedAdmins = profiles.flatMap(({ userId, data }) => {
-    if (normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
+    if (isSuperadminRole(data.accountRole, data.email)
+      || normalizeAccountRole(data.accountRole, typeof data.email === "string" ? data.email : null) !== "admin"
       || normalizeAccountStatus(data.accountStatus) !== "Approved") return [];
     const profile = accountProfileSelection(data);
     const name = typeof data.name === "string" ? data.name : "";
