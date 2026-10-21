@@ -407,7 +407,7 @@ function Login({ onError }: { onError: (message: string) => void }) {
   }
 
   return <main className="auth-shell">
-    <section className="auth-intro"><video className="auth-intro-image" src={publicAsset("/left.mp4")} aria-label="My Desk portal for managing documents" role="img" autoPlay loop muted playsInline controls={false} disablePictureInPicture disableRemotePlayback onContextMenu={(event) => event.preventDefault()} /></section>
+    <section className="auth-intro"><video className="auth-intro-image" src={publicAsset("/left.mp4")} aria-label="My Desk portal for managing documents" role="img" autoPlay loop muted playsInline controls={false} disablePictureInPicture disableRemotePlayback onPause={(event) => { void event.currentTarget.play().catch(() => undefined); }} onContextMenu={(event) => event.preventDefault()} /></section>
     <section className="auth-panel"><div className={`auth-form-wrap${registering ? " auth-register-wrap" : ""}`}><div className="mobile-brand"><img className="brand-mark brand-logo" src="/my%20desk%20logo.png" alt="My Desk logo" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><span>My Desk</span></div><p className="eyebrow">{forgotPasswordOpen ? "Password reset" : registering ? "New account" : "Welcome back"}</p><h2>{forgotPasswordOpen ? "Reset your password" : registering ? "Create your account" : <>Sign in to <img className="auth-title-logo" src="/my%20desk%20logo.png" alt="My Desk" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /></>}</h2>{(forgotPasswordOpen || registering) && <p className="muted">{forgotPasswordOpen ? "Enter your account email and we will send a password reset link." : "Create an account, verify your email, then complete your profile for Super Admin approval."}</p>}
       {authMessage && <div className={`auth-message auth-message-${authMessage.kind}`} role={authMessage.kind === "error" ? "alert" : "status"}>{authMessage.text}</div>}
       {forgotPasswordOpen ? <form className="auth-reset-form" onSubmit={sendLoginReset}>
@@ -531,7 +531,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
   }
 
   return <main className="auth-shell">
-    <section className="auth-intro"><video className="auth-intro-image" src={publicAsset("/left.mp4")} aria-label="My Desk portal for managing documents" role="img" autoPlay loop muted playsInline controls={false} disablePictureInPicture disableRemotePlayback onContextMenu={(event) => event.preventDefault()} /></section>
+    <section className="auth-intro"><video className="auth-intro-image" src={publicAsset("/left.mp4")} aria-label="My Desk portal for managing documents" role="img" autoPlay loop muted playsInline controls={false} disablePictureInPicture disableRemotePlayback onPause={(event) => { void event.currentTarget.play().catch(() => undefined); }} onContextMenu={(event) => event.preventDefault()} /></section>
     <section className="auth-panel"><div className="auth-form-wrap auth-register-wrap"><div className="mobile-brand"><img className="brand-mark brand-logo" src="/my%20desk%20logo.png" alt="My Desk logo" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><span>My Desk</span></div>
       <p className="eyebrow">Verified email</p><h2>Complete your account</h2>
       <p className="muted">Your email is verified. Add your work details and submit them for Super Admin approval.</p>
