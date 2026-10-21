@@ -3343,7 +3343,7 @@ export default function Home() {
   ) === "superadmin";
 
   useEffect(() => {
-    if (isSuperAdmin && section !== "user-master-list" && section !== "document-notifications" && section !== "pending-permit-slips" && section !== "users-profile" && section !== "users-nta" && section !== "users-so" && section !== "users-to" && section !== "users-appearances") {
+    if (isSuperAdmin && section !== "user-master-list" && section !== "document-notifications" && section !== "pending-permit-slips" && section !== "users-profile" && section !== "users-nta" && section !== "users-so" && section !== "users-to" && section !== "users-appearances" && section !== "cleaning-task-assignments") {
       setSection("user-master-list");
       setView("list");
     }
