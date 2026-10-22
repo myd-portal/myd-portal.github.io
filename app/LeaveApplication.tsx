@@ -241,6 +241,14 @@ function decimalSalary(value: string) {
   return Number.isFinite(amount) ? amount.toFixed(2) : value.trim();
 }
 
+function formatSalaryForDocument(value: string) {
+  if (!value.trim()) return "";
+  const amount = Number(value);
+  return Number.isFinite(amount)
+    ? new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+    : value.trim();
+}
+
 function inclusiveDates(record: Pick<LeaveApplicationRecord, "inclusiveDateFrom" | "inclusiveDateTo">) {
   const from = new Date(`${record.inclusiveDateFrom}T00:00:00Z`);
   const to = new Date(`${record.inclusiveDateTo}T00:00:00Z`);
@@ -307,7 +315,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   drawFitText(page, bold, applicant.middle, 579.13, 880.68, 103.72, 9.5);
   drawFitText(page, bold, fileDate(record.filedDate), 175.08, 852.47, 104, 9.5);
   drawFitText(page, bold, record.position, 365, 851.98, 161, 9.5);
-  drawFitText(page, bold, decimalSalary(record.salary), 611.04, 851.98, 78, 9.5);
+  drawFitText(page, bold, formatSalaryForDocument(record.salary), 611.04, 851.98, 78, 9.5);
 
   const leaveTypeRows: Record<Exclude<LeaveType, "Others">, number> = {
     "Vacation Leave": 778.86,
