@@ -11,7 +11,7 @@ import { makeDocumentNotification } from "@/lib/document-notifications";
 import { makeBlankCertificatePdf as createBlankCertificatePdf } from "@/lib/blank-certificate-pdf";
 import { isSuperadminRole, normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { loadPdfTools } from "@/lib/pdf-tools";
-import { divisionSignatory, tevDivisions, type TevDivision } from "@/lib/mytev";
+import { divisionSignatory, isTevDivision, tevDivisions, type TevDivision } from "@/lib/mytev";
 import { appearanceCertificateSignatory, CertificateApprovalSignature, CertificateDisapprovalStamp, CertificateStatusBadge, certificateWorkflowStatus, hasFieldOperationsAppearanceApprovalSignature, type CertificateWorkflowFields } from "./CertificateWorkflow";
 import DeleteConfirmation from "./DeleteConfirmation";
 import "./certificate-of-appearance.css";
@@ -322,7 +322,7 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
     const certificateOffice = String(form.get("certificate-office") ?? "").trim();
     const certificateDivision = String(form.get("certificate-division") ?? "").trim();
     const certificateUnit = String(form.get("certificate-unit") ?? "").trim();
-    if (!tevDivisions.includes(division)) { setError("Select a valid division."); return; }
+    if (!isTevDivision(division)) { setError("Select a valid division."); return; }
     if (!accountOfficeOptions.includes(certificateOffice as (typeof accountOfficeOptions)[number])
       || !divisionsForOffice(certificateOffice).includes(certificateDivision)
       || !unitsForOfficeDivision(certificateOffice, certificateDivision).includes(certificateUnit)) {
@@ -624,7 +624,7 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
     if (!accountOfficeOptions.includes(certificateOffice as (typeof accountOfficeOptions)[number])
       || !divisionsForOffice(certificateOffice).includes(certificateDivision)
       || !unitsForOfficeDivision(certificateOffice, certificateDivision).includes(certificateUnit)
-      || !tevDivisions.includes(pdfDivision)) {
+      || !isTevDivision(pdfDivision)) {
       setBlankError("Select a valid Certificate Office, Division, Unit / Program / Project, and template division.");
       return;
     }
@@ -731,7 +731,7 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
   }
 
   function viewSavedBlankCertificate(record: CertificateRecord) {
-    if (!tevDivisions.includes(record.division as TevDivision)) {
+    if (!isTevDivision(record.division)) {
       setError("The saved certificate has an invalid division.");
       return;
     }
@@ -806,13 +806,13 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
   const [certificateOffice, setCertificateOffice] = useState(initialOffice);
   const [certificateDivision, setCertificateDivision] = useState(initialDivision);
   const [certificateUnit, setCertificateUnit] = useState(initialUnit);
-  const [templateDivision, setTemplateDivision] = useState<TevDivision | "">(() => tevDivisions.includes(initialDivision as TevDivision) ? initialDivision as TevDivision : tevDivisions[0]);
+  const [templateDivision, setTemplateDivision] = useState<TevDivision | "">(() => isTevDivision(initialDivision) ? initialDivision : tevDivisions[0]);
   const [eventDateFrom, setEventDateFrom] = useState("");
   const [eventDateTo, setEventDateTo] = useState("");
   const certificateDivisionOptions = divisionsForOffice(certificateOffice);
   const certificateUnitOptions = unitsForOfficeDivision(certificateOffice, certificateDivision);
-  const selectedPdfDivision = tevDivisions.includes(certificateDivision as TevDivision)
-    ? certificateDivision as TevDivision
+  const selectedPdfDivision = isTevDivision(certificateDivision)
+    ? certificateDivision
     : templateDivision;
 
   function changeCertificateOffice(nextOffice: string) {
@@ -822,14 +822,14 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
     setCertificateOffice(nextOffice);
     setCertificateDivision(nextDivision);
     setCertificateUnit(nextUnits[0] ?? "");
-    if (tevDivisions.includes(nextDivision as TevDivision)) setTemplateDivision(nextDivision as TevDivision);
+    if (isTevDivision(nextDivision)) setTemplateDivision(nextDivision);
   }
 
   function changeCertificateDivision(nextDivision: string) {
     const nextUnits = unitsForOfficeDivision(certificateOffice, nextDivision);
     setCertificateDivision(nextDivision);
     setCertificateUnit(nextUnits[0] ?? "");
-    if (tevDivisions.includes(nextDivision as TevDivision)) setTemplateDivision(nextDivision as TevDivision);
+    if (isTevDivision(nextDivision)) setTemplateDivision(nextDivision);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -856,7 +856,7 @@ function BlankCertificateGenerator({ ownerOffice, ownerDivision, ownerUnit, onCa
         <label>Certificate Division<select value={certificateDivision} onChange={(event) => changeCertificateDivision(event.target.value)} required><option value="" disabled>Select a Division</option>{certificateDivisionOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         <label>Certificate Unit / Program / Project<select value={certificateUnit} onChange={(event) => setCertificateUnit(event.target.value)} required><option value="" disabled>Select a Unit / Program / Project</option>{certificateUnitOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       </div>
-      {!tevDivisions.includes(certificateDivision as TevDivision) && <label className="wide-field">Certificate Template Signatory Division<select value={templateDivision} onChange={(event) => setTemplateDivision(event.target.value as TevDivision | "")} required><option value="" disabled>Select a template division</option>{tevDivisions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
+      {!isTevDivision(certificateDivision) && <label className="wide-field">Certificate Template Signatory Division<select value={templateDivision} onChange={(event) => setTemplateDivision(event.target.value as TevDivision | "")} required><option value="" disabled>Select a template division</option>{tevDivisions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
       <label>Event&apos;s Title<input name="event-title" maxLength={240} required /></label>
       <label>Event&apos;s Destination<input name="destination" maxLength={180} required /></label>
       <div className="wide-field coa-date-range"><label>Event&apos;s Date (From)<input type="date" value={eventDateFrom} onChange={(event) => { setEventDateFrom(event.target.value); if (eventDateTo && event.target.value && eventDateTo < event.target.value) setEventDateTo(""); }} required /></label><span>to</span><label>Event&apos;s Date (To)<input type="date" min={eventDateFrom || undefined} value={eventDateTo} onChange={(event) => setEventDateTo(event.target.value)} required /></label></div>
@@ -873,15 +873,15 @@ function CertificateForm({ ownerOffice, ownerDivision, ownerUnit, onCancel, onSu
   const initialDivision = initialDivisionOptions.includes(ownerDivision) ? ownerDivision : initialDivisionOptions[0] ?? "";
   const initialUnitOptions = unitsForOfficeDivision(initialOffice, initialDivision);
   const initialUnit = initialUnitOptions.includes(ownerUnit) ? ownerUnit : initialUnitOptions[0] ?? "";
-  const initialTemplateDivision = tevDivisions.includes(ownerDivision as TevDivision) ? ownerDivision as TevDivision : tevDivisions[0];
+  const initialTemplateDivision = isTevDivision(ownerDivision) ? ownerDivision : tevDivisions[0];
   const [certificateOffice, setCertificateOffice] = useState(initialOffice);
   const [certificateDivision, setCertificateDivision] = useState(initialDivision);
   const [certificateUnit, setCertificateUnit] = useState(initialUnit);
   const [templateDivision, setTemplateDivision] = useState<TevDivision>(initialTemplateDivision);
   const certificateDivisionOptions = divisionsForOffice(certificateOffice);
   const certificateUnitOptions = unitsForOfficeDivision(certificateOffice, certificateDivision);
-  const selectedPdfDivision = tevDivisions.includes(certificateDivision as TevDivision)
-    ? certificateDivision as TevDivision
+  const selectedPdfDivision = isTevDivision(certificateDivision)
+    ? certificateDivision
     : templateDivision;
 
   function changeCertificateOffice(nextOffice: string) {
@@ -891,14 +891,14 @@ function CertificateForm({ ownerOffice, ownerDivision, ownerUnit, onCancel, onSu
     setCertificateOffice(nextOffice);
     setCertificateDivision(nextDivision);
     setCertificateUnit(nextUnits[0] ?? "");
-    if (tevDivisions.includes(nextDivision as TevDivision)) setTemplateDivision(nextDivision as TevDivision);
+    if (isTevDivision(nextDivision)) setTemplateDivision(nextDivision);
   }
 
   function changeCertificateDivision(nextDivision: string) {
     const nextUnits = unitsForOfficeDivision(certificateOffice, nextDivision);
     setCertificateDivision(nextDivision);
     setCertificateUnit(nextUnits[0] ?? "");
-    if (tevDivisions.includes(nextDivision as TevDivision)) setTemplateDivision(nextDivision as TevDivision);
+    if (isTevDivision(nextDivision)) setTemplateDivision(nextDivision);
   }
   return <section className="content-section form-section coa-form-section">
     <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Appearance</h2><p className="muted">Enter the event details and one or more attendees. Two certificates fit on each A4 page.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
@@ -913,7 +913,7 @@ function CertificateForm({ ownerOffice, ownerDivision, ownerUnit, onCancel, onSu
         <label>Certificate Unit / Program / Project<select name="certificate-unit" value={certificateUnit} onChange={(event) => setCertificateUnit(event.target.value)} required><option value="" disabled>Select a Unit / Program / Project</option>{certificateUnitOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
       </div>
       <input type="hidden" name="division-name" value={selectedPdfDivision} />
-      {!tevDivisions.includes(certificateDivision as TevDivision) && <label className="wide-field">Certificate Template Signatory Division<select value={templateDivision} onChange={(event) => setTemplateDivision(event.target.value as TevDivision)} required>{tevDivisions.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}
+      {!isTevDivision(certificateDivision) && <label className="wide-field">Certificate Template Signatory Division<select value={templateDivision} onChange={(event) => setTemplateDivision(event.target.value as TevDivision)} required>{tevDivisions.map((division) => <option key={division} value={division}>{division}</option>)}</select></label>}
       <fieldset className="wide-field coa-people-fieldset"><legend>Attendees</legend>{people.map((person, index) => <div className="coa-person-row" key={index}>
         <label>Name<input name="person-name" maxLength={160} value={person.name} onChange={(event) => setPeople((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} placeholder={`Person ${index + 1}`} required /></label>
         <label>Gender<select name="person-gender" value={person.gender} onChange={(event) => setPeople((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, gender: event.target.value as CertificateGender } : item))}><option value="" disabled>Select gender</option><option value="female">Female</option><option value="male">Male</option></select></label>

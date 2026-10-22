@@ -1,4 +1,4 @@
-import { tevDivisions, type TevDivision } from "@/lib/mytev";
+import { isTevDivision, tevDivisions, type TevDivision } from "@/lib/mytev";
 
 export type AccountProfileFields = {
   office?: unknown;
@@ -269,7 +269,7 @@ export function accountDivisionForApproval(office: string, assignment: string, d
 export function accountTevDivision(office: string, assignment: string, division = ""): TevDivision | null {
   const selectedDivision = canonicalAdministrativeDivision(division.trim() || accountProfileSelection({ office, assignment, profileFieldsVersion: 3 }).division);
   if (selectedDivision === "Field Operations Division") return "Field Operations Division";
-  return tevDivisions.includes(selectedDivision as TevDivision) ? selectedDivision as TevDivision : null;
+  return isTevDivision(selectedDivision) ? selectedDivision : null;
 }
 
 function stringValue(value: unknown) {

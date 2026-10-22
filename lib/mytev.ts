@@ -55,6 +55,9 @@ export const tevClaims = [
 
 export type TevOfficialStation = (typeof tevOfficialStations)[number];
 export type TevDivision = (typeof tevDivisions)[number] | "Administrative Division";
+export function isTevDivision(value: string): value is (typeof tevDivisions)[number] {
+  return tevDivisions.some((division) => division === value);
+}
 // Keep the former values in the type so existing Firestore records remain readable.
 export type TevTransportationMeans = (typeof tevTransportationMeans)[number] | "Plane" | "None" | "";
 export type TevClaimId = (typeof tevClaims)[number]["id"];

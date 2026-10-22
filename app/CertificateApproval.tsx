@@ -10,7 +10,7 @@ import { certificateAppearanceSignatoryForOwner, fieldOperationsAppearanceUnitsF
 import { normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { makeDocumentNotification } from "@/lib/document-notifications";
 import { makeBlankCertificatePdf } from "@/lib/blank-certificate-pdf";
-import { tevDivisions, type TevDivision } from "@/lib/mytev";
+import { isTevDivision } from "@/lib/mytev";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { appearanceCertificateSignatory, CertificateApprovalSignature, CertificateDisapprovalStamp, CertificateStatusBadge, certificateWorkflowStatus, fieldOperationsAppearanceApprovalSignatureAsset, hasFieldOperationsAppearanceApprovalSignature, type CertificateWorkflowFields, type CertificateWorkflowStatus } from "./CertificateWorkflow";
 import DeleteConfirmation from "./DeleteConfirmation";
@@ -592,7 +592,7 @@ export default function CertificateApproval({ user, role, office, division, unit
     setBlankPreviewUrl("");
     setBlankPreviewError("");
     setBlankPreviewLoading(true);
-    if (!tevDivisions.includes(divisionName as TevDivision)) {
+    if (!isTevDivision(divisionName)) {
       setBlankPreviewError("The saved certificate has an invalid division.");
       setBlankPreviewLoading(false);
       return;
