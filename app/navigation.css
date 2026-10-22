@@ -143,6 +143,7 @@
   padding-top:var(--preview-toolbar-offset);
   z-index:60;
 }
+.app-shell .calendar-of-activities-preview-backdrop{padding-top:var(--preview-toolbar-offset)}
 
 @media(max-width:920px){
   :root{--preview-toolbar-offset:24px}

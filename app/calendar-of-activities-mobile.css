@@ -16,7 +16,7 @@
   .calendar-of-activities-entry{grid-column:1}
   .calendar-of-activities-responsible-add{grid-template-columns:minmax(0,1fr)}
   .calendar-of-activities-responsible-add .ghost-button{justify-self:start}
-  .calendar-of-activities-preview-backdrop{gap:12px;padding:var(--preview-toolbar-offset,122px) 8px calc(16px + env(safe-area-inset-bottom,0px))}
+  .calendar-of-activities-preview-backdrop{gap:12px;padding:var(--preview-toolbar-offset,24px) 8px calc(16px + env(safe-area-inset-bottom,0px))}
   .calendar-of-activities-preview-toolbar{gap:7px;padding:9px}
   .calendar-of-activities-preview-toolbar>span{flex:1 0 100%}
   .calendar-of-activities-preview-toolbar .ghost-button,.calendar-of-activities-preview-toolbar .pdf-button{flex:1 1 auto;min-height:40px;padding-inline:8px}
