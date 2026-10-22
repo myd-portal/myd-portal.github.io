@@ -111,10 +111,10 @@
 .topbar .profile-dropdown button{line-height:1.25;padding:8px 12px}
 .topbar .nav-dropdown-menu{border-radius:12px;overflow:hidden}
 .topbar .mydocs-nav-menu{
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:minmax(0,1fr);
   max-height:none;
   overflow:visible;
-  width:min(520px,calc(100vw - 24px));
+  width:min(340px,calc(100vw - 24px));
 }
 .topbar .mydocs-nav-menu .nav-dropdown-item{
   align-items:center;
