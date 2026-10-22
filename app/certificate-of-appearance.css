@@ -49,9 +49,9 @@
 .coa-signatory em{font-style:italic}
 .coa-signatory span{font-style:normal}
 .coa-signatory-role{overflow-wrap:normal;white-space:nowrap}
-.coa-signatory-block>.certificate-approved-signature{bottom:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);justify-self:end;left:auto;position:relative;right:auto;top:auto;width:43.4%;font-size:1.2cqi}
-.coa-signatory-block.is-approved .certificate-approved-signature-meta{text-align:right}
-.coa-signatory-block.is-approved>.certificate-approved-signature img{transform:translateX(20%)}
+.coa-signatory-block>.certificate-approved-signature{bottom:auto;gap:.65cqi;grid-template-columns:minmax(0,1fr) minmax(0,1fr);justify-self:end;left:auto;position:relative;right:auto;top:auto;width:43.4%;font-size:1.2cqi}
+.coa-signatory-block.is-approved .certificate-approved-signature img{justify-self:end;object-position:right center}
+.coa-signatory-block.is-approved .certificate-approved-signature-meta{text-align:left}
 .coa-signatory-block>.certificate-approved-signature strong{font-size:1.25cqi}
 .coa-signatory-block>.certificate-approved-signature small{font-size:1cqi}
 @media(max-width:720px){.coa-record-head{display:none}.coa-record-row{align-items:start;gap:6px;grid-template-columns:1fr auto}.coa-record-row>span{grid-column:1}.coa-record-actions{align-content:start;display:grid;gap:8px;grid-column:2;grid-row:1/5}.coa-form{grid-template-columns:minmax(0,1fr)}.coa-form>*{min-width:0}.coa-form>label,.coa-form>.coa-date-range,.coa-form>.coa-people-fieldset,.coa-form>.form-actions{grid-column:1/-1}.coa-certificate-scope-row{grid-template-columns:minmax(0,1fr)}.coa-date-range{grid-template-columns:minmax(0,1fr);gap:8px}.coa-date-range>span{padding:0}.coa-person-row{grid-template-columns:minmax(0,1fr)}.coa-person-row .remove-participant{justify-self:start}.coa-preview-toolbar{justify-content:flex-start}.coa-preview-toolbar>span{flex-basis:100%}.coa-print-sheet{width:96vw}}
