@@ -111,26 +111,26 @@
 .topbar .profile-dropdown button{line-height:1.25;padding:8px 12px}
 .topbar .nav-dropdown-menu{border-radius:12px;overflow:hidden}
 .topbar .mydocs-nav-menu{
-  max-height:min(70vh,620px);
-  max-height:min(70dvh,620px);
-  overflow-x:hidden;
-  overflow-y:auto;
-  overscroll-behavior:contain;
-  width:min(340px,calc(100vw - 24px));
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  max-height:none;
+  overflow:visible;
+  width:min(520px,calc(100vw - 24px));
 }
 .topbar .mydocs-nav-menu .nav-dropdown-item{
   align-items:center;
   border-radius:8px;
   display:flex;
   line-height:1.35;
-  min-height:42px;
+  min-height:36px;
   overflow-wrap:anywhere;
+  padding:7px 10px;
   white-space:normal;
   width:100%;
 }
 .topbar .mydocs-nav-menu .mydocs-submenu-toggle{justify-content:space-between}
 .topbar .mydocs-nav-menu .mydocs-submenu-toggle .nav-dropdown-arrow{color:inherit}
-.topbar .mydocs-certificate-submenu{border-left:1px solid var(--line);display:grid;gap:2px;margin-left:8px;padding-left:7px}
+.topbar .mydocs-certificate-group{min-width:0}
+.topbar .mydocs-certificate-submenu{border-left:1px solid var(--line);box-sizing:border-box;display:grid;gap:2px;padding-left:8px;width:100%}
 .topbar .amia-document-nav-menu{overflow-y:auto}
 
 :root{--preview-toolbar-offset:32px}
