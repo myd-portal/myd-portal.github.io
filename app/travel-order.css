@@ -83,6 +83,7 @@
 .travel-order-approvals span{font-size:.95em;text-align:left}
 .travel-order-approvals strong{align-self:end;border-bottom:1.5px solid #111;font-size:.95em;line-height:1.15;overflow-wrap:anywhere;padding:0 .2cqi .15cqi}
 .travel-order-approvals em{font-size:.95em;margin-top:.3cqi}
+.travel-order-approvals .travel-order-position-division{font-size:inherit;font-style:normal}
 .travel-order-certification{border-collapse:collapse;table-layout:fixed;margin-top:2.4cqi;width:100%}
 .travel-order-certification th,.travel-order-certification td{border:1.5px solid #111;overflow-wrap:anywhere;padding:.35cqi .4cqi;text-align:center;vertical-align:top;white-space:normal}
 .travel-order-certification th{font-size:.95em;line-height:1.1}

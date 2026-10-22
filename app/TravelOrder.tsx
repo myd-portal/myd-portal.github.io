@@ -374,7 +374,7 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
         <TravelField label="Remarks or Special Instructions">{order.remarks}</TravelField>
       </div>
       <div className="travel-order-approvals">
-        <div><span>Recommending Approval:</span><strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong><em>{recommendingPosition}</em></div>
+        <div><span>Recommending Approval:</span><strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong><em>{recommendingSignatory.position === "OIC" ? <>OIC, <span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingPosition}</em></div>
         <div><span>Approved:</span><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></div>
       </div>
       <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr></tbody></table>
