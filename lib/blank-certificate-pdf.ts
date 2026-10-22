@@ -310,6 +310,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     const signatureImage = await pdf.embedPng(await signatureResponse.arrayBuffer());
     const signatureBoxX = 360.5;
     const signatureBoxWidth = 102;
+    const signatureOffsetX = 4;
     const signatureDimensions = signatureImage.scaleToFit(signatureBoxWidth, 51);
     const [regularFont, boldFont] = await Promise.all([pdf.embedFont("Helvetica"), pdf.embedFont("Helvetica-Bold")]);
     const approvedAt = approvalDate(record.decidedAt);
@@ -332,7 +333,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     };
     for (const y of [480, 66.5]) {
       page.drawImage(signatureImage, {
-        x: signatureBoxX + signatureBoxWidth - signatureDimensions.width,
+        x: signatureBoxX + signatureBoxWidth - signatureDimensions.width + signatureOffsetX,
         y: y + 38 + (51 - signatureDimensions.height) / 2,
         width: signatureDimensions.width,
         height: signatureDimensions.height,
