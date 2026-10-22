@@ -23,7 +23,7 @@ export const tevOfficialStations = [
 ] as const;
 
 export const tevDivisions = [
-  "Administrative Division",
+  "Administrative and Finance Division",
   "Agribusiness and Marketing Assistance Division",
   "Field Operations Division",
   "Finance Division",
@@ -54,7 +54,7 @@ export const tevClaims = [
 ] as const;
 
 export type TevOfficialStation = (typeof tevOfficialStations)[number];
-export type TevDivision = (typeof tevDivisions)[number];
+export type TevDivision = (typeof tevDivisions)[number] | "Administrative Division";
 // Keep the former values in the type so existing Firestore records remain readable.
 export type TevTransportationMeans = (typeof tevTransportationMeans)[number] | "Plane" | "None" | "";
 export type TevClaimId = (typeof tevClaims)[number]["id"];
@@ -128,6 +128,7 @@ const transportNeedsAmount = new Set<TevTransportationMeans>(["Boat", "MCH", "Pl
 const signatoryByDivision: Record<TevDivision, { name: string; position: "Chief" | "OIC" }> = {
   "Field Operations Division": { name: "Melody M. Guimary", position: "Chief" },
   "Planning, Monitoring and Evaluation Division": { name: "Gemma A. Asufre", position: "Chief" },
+  "Administrative and Finance Division": { name: "Claide Jane D. Calamba", position: "OIC" },
   "Administrative Division": { name: "Claide Jane D. Calamba", position: "OIC" },
   "Finance Division": { name: "Primitiva O. Arquion", position: "Chief" },
   "Agribusiness and Marketing Assistance Division": { name: "Lynn A. Pareñas", position: "Chief" },
@@ -193,6 +194,7 @@ export function divisionSignatory(division: TevDivision) {
 
 export function tevDivisionLabel(division: TevDivision) {
   switch (division) {
+    case "Administrative Division": return "Administrative and Finance Division";
     case "Planning, Monitoring and Evaluation Division": return "PMED";
     case "Agribusiness and Marketing Assistance Division": return "AMAD";
     case "Regional Agricultural Engineering Division": return "RAED";

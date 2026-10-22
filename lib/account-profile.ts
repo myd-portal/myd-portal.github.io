@@ -22,7 +22,7 @@ export const accountOfficeOptions = [
 ] as const;
 
 export const accountDivisionOptions = [
-  "Administrative Division",
+  "Administrative and Finance Division",
   "Agribusiness and Marketing Assistance Division",
   "Field Operations Division",
   "Finance Division",
@@ -69,7 +69,7 @@ const fieldOperationsUnitOptions = [
 ] as const;
 
 const unitsByDivision: Record<string, readonly string[]> = {
-  "Administrative Division": ["Administrative Division", "General Services Section", "Human Resource Section"],
+  "Administrative and Finance Division": ["Administrative and Finance Division", "General Services Section", "Human Resource Section"],
   "Agribusiness and Marketing Assistance Division": ["Agribusiness and Marketing Assistance Division"],
   "Field Operations Division": fieldOperationsUnitOptions,
   "Finance Division": ["Budget Section", "Accounting Section", "Finance Division"],
@@ -260,14 +260,14 @@ const divisionByLegacyAssignment: Record<string, string> = {
 };
 
 export function accountDivisionForApproval(office: string, assignment: string, division = "") {
-  if (division.trim()) return division.trim();
+  if (division.trim()) return canonicalAdministrativeDivision(division.trim());
   return accountProfileSelection({ office, assignment, profileFieldsVersion: 3 }).division
     || divisionByLegacyAssignment[assignment.trim().toUpperCase()]
     || "";
 }
 
 export function accountTevDivision(office: string, assignment: string, division = ""): TevDivision | null {
-  const selectedDivision = division.trim() || accountProfileSelection({ office, assignment, profileFieldsVersion: 3 }).division;
+  const selectedDivision = canonicalAdministrativeDivision(division.trim() || accountProfileSelection({ office, assignment, profileFieldsVersion: 3 }).division);
   if (selectedDivision === "Field Operations Division") return "Field Operations Division";
   return tevDivisions.includes(selectedDivision as TevDivision) ? selectedDivision as TevDivision : null;
 }
@@ -314,6 +314,10 @@ function canonicalFieldOperationsOffice(value: string) {
     : normalized;
 }
 
+function canonicalAdministrativeDivision(value: string) {
+  return value === "Administrative Division" ? "Administrative and Finance Division" : value;
+}
+
 function normalizeLegacyUnit(value: string) {
   const aliases: Record<string, string> = {
     GAD: "Gender and Development",
@@ -325,8 +329,8 @@ function normalizeLegacyUnit(value: string) {
 }
 
 function legacyProfileSelection(profile: AccountProfileFields): Pick<AccountProfileSelection, "office" | "division" | "unit"> {
-  const rawOffice = canonicalFieldOperationsOffice(rawAccountOffice(profile));
-  const assignment = legacyAccountAssignment(profile);
+  const rawOffice = canonicalAdministrativeDivision(canonicalFieldOperationsOffice(rawAccountOffice(profile)));
+  const assignment = canonicalAdministrativeDivision(legacyAccountAssignment(profile));
   if (rawOffice === "Field Operations Division") {
     const unit = normalizeLegacyUnit(assignment);
     return {
@@ -377,19 +381,19 @@ function legacyProfileSelection(profile: AccountProfileFields): Pick<AccountProf
 
 export function accountOffice(profile: AccountProfileFields) {
   return profileVersion(profile) >= 4
-    ? stringValue(profile.office) || null
+    ? canonicalAdministrativeDivision(stringValue(profile.office)) || null
     : legacyProfileSelection(profile).office || null;
 }
 
 export function accountDivision(profile: AccountProfileFields) {
   return profileVersion(profile) >= 4
-    ? stringValue(profile.division)
+    ? canonicalAdministrativeDivision(stringValue(profile.division))
     : legacyProfileSelection(profile).division;
 }
 
 export function accountUnit(profile: AccountProfileFields) {
   return profileVersion(profile) >= 4
-    ? stringValue(profile.unit)
+    ? canonicalAdministrativeDivision(stringValue(profile.unit))
     : legacyProfileSelection(profile).unit;
 }
 
@@ -399,7 +403,7 @@ export function accountAssignment(profile: AccountProfileFields) {
 
 export function accountProfileSelection(profile: AccountProfileFields): AccountProfileSelection {
   const selected = profileVersion(profile) >= 4
-    ? { office: stringValue(profile.office), division: stringValue(profile.division), unit: stringValue(profile.unit) }
+    ? { office: canonicalAdministrativeDivision(stringValue(profile.office)), division: canonicalAdministrativeDivision(stringValue(profile.division)), unit: canonicalAdministrativeDivision(stringValue(profile.unit)) }
     : legacyProfileSelection(profile);
   if (!accountOfficeOptions.includes(selected.office as (typeof accountOfficeOptions)[number])) {
     return { office: "", division: "", unit: "", assignment: "" };

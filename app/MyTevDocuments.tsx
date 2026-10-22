@@ -139,7 +139,7 @@ function cenrrDateRowSpan(rows: Array<ReturnType<typeof cenrrRows>[number] | und
 function MyTevLetterhead({ appendix }: { appendix?: string }) {
   return <header className="mytev-letterhead">
     <img src={daCaragaLogo} alt="Department of Agriculture Caraga Region" />
-    <div><span>Republic of the Philippines</span><strong>DEPARTMENT OF AGRICULTURE</strong><b>Caraga Region</b><span>Capitol Site, Butuan City</span><small>Tel. No: (085) 342-4092 Telefax No: (085) 341-2114</small></div>
+    <div><span>Republic of the Philippines</span><strong>DEPARTMENT OF AGRICULTURE</strong><b>Caraga Region</b><span>Capitol Site, Butuan City</span><small>Tel. No.: (085) 817-9561; Telefax No.: (085) 818-6163</small></div>
     {appendix && <span className="mytev-appendix">{appendix}</span>}
   </header>;
 }
@@ -156,7 +156,7 @@ function MyTevItineraryPage({ record, itinerary, page, pageNumber, documentPageN
     <div className="mytev-itinerary-document">
       <header className="mytev-itinerary-letterhead">
         <img src={daCaragaLogo} alt="Department of Agriculture Caraga Region" />
-        <div><span>Republic of the Philippines</span><strong>DEPARTMENT OF AGRICULTURE</strong><b>Caraga Region</b><span>Capitol Site, Butuan City</span><small>Tel. No: (085) 342-4092 Telefax No: (085) 341-2114</small></div>
+        <div><span>Republic of the Philippines</span><strong>DEPARTMENT OF AGRICULTURE</strong><b>Caraga Region</b><span>Capitol Site, Butuan City</span><small>Tel. No.: (085) 817-9561; Telefax No.: (085) 818-6163</small></div>
         <span className="mytev-itinerary-appendix">Appendix 45</span>
       </header>
       <h1 className="mytev-itinerary-title">ITINERARY OF TRAVEL{isContinuation ? " (CONTINUED)" : ""}</h1>

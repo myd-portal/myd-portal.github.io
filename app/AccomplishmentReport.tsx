@@ -121,7 +121,7 @@ function defaultImmediateSupervisor(office: string, division: string, assignment
     if (["Research Division", "Integrated Laboratories Division", "Regulatory Division"].includes(division)) {
       return isAdmin ? "role:RTD for Research and Regulations" : `division:${division}`;
     }
-    if (["Planning, Monitoring and Evaluation Division", "Administrative Division", "Finance Division"].includes(division)) {
+    if (["Planning, Monitoring and Evaluation Division", "Administrative and Finance Division", "Finance Division"].includes(division)) {
       return isAdmin ? "role:Regional Executive Director" : `division:${division}`;
     }
     return `division:${division}`;
@@ -143,7 +143,7 @@ function defaultImmediateSupervisor(office: string, division: string, assignment
     if (["Research Division", "Integrated Laboratories Division", "Regulatory Division"].includes(assignment)) {
       return isAdmin ? "role:RTD for Research and Regulations" : `division:${assignment}`;
     }
-    if (["Planning, Monitoring and Evaluation Division", "Administrative Division", "Finance Division"].includes(assignment)) {
+    if (["Planning, Monitoring and Evaluation Division", "Administrative and Finance Division", "Finance Division"].includes(assignment)) {
       return isAdmin ? "role:Regional Executive Director" : `division:${assignment}`;
     }
     if (assignment === "Regional Executive Director") return "role:Regional Executive Director";

@@ -722,8 +722,8 @@ service cloud.firestore {
         && newDecision.diff(oldDecision).affectedKeys().hasOnly(["status", "decidedAt", "decidedBy", "signerName", "signerSignatureURL", "approvedPermitNo"]);
     }
     function validProfileOfficeDivisionUnit(office, division, unit) {
-      return (office == "Division" && division == "Administrative Division"
-          && unit in ["Administrative Division", "General Services Section", "Human Resource Section"])
+      return (office == "Division" && division == "Administrative and Finance Division"
+          && unit in ["Administrative and Finance Division", "General Services Section", "Human Resource Section"])
         || (office == "Division" && division == "Agribusiness and Marketing Assistance Division"
           && unit == "Agribusiness and Marketing Assistance Division")
         || (office == "Division" && division == "Field Operations Division"
@@ -1974,7 +1974,7 @@ service cloud.firestore {
         && request.resource.data.inclusiveDateFrom is string
         && request.resource.data.inclusiveDateTo is string
         && request.resource.data.inclusiveDateTo >= request.resource.data.inclusiveDateFrom
-        && request.resource.data.division in ["Administrative Division", "Agribusiness and Marketing Assistance Division", "Field Operations Division", "Finance Division", "Integrated Laboratories Division", "Planning, Monitoring and Evaluation Division", "Regional Agricultural Engineering Division", "Regulatory Division", "Research Division"]
+        && request.resource.data.division in ["Administrative and Finance Division", "Agribusiness and Marketing Assistance Division", "Field Operations Division", "Finance Division", "Integrated Laboratories Division", "Planning, Monitoring and Evaluation Division", "Regional Agricultural Engineering Division", "Regulatory Division", "Research Division"]
         && request.resource.data.signatoryName is string
         && request.resource.data.signatoryPosition in ["Chief", "OIC"]
         && request.resource.data.affixSignature == "No"
@@ -2281,7 +2281,7 @@ service cloud.firestore {
           && recordData.evidenceOfTravel is string
           && recordData.evidenceOfTravel.size() > 0
           && recordData.evidenceOfTravel.size() <= 240
-          && recordData.divisionName in ["Field Operations Division", "Planning, Monitoring and Evaluation Division", "Administrative Division", "Finance Division", "Agribusiness and Marketing Assistance Division", "Regional Agricultural Engineering Division", "Research Division", "Regulatory Division", "Integrated Laboratories Division"]
+          && recordData.divisionName in ["Field Operations Division", "Planning, Monitoring and Evaluation Division", "Administrative and Finance Division", "Administrative Division", "Finance Division", "Agribusiness and Marketing Assistance Division", "Regional Agricultural Engineering Division", "Research Division", "Regulatory Division", "Integrated Laboratories Division"]
           && recordData.itineraries is list
           && recordData.itineraries.size() > 0
           && recordData.itineraries.size() <= 8
@@ -2319,7 +2319,7 @@ service cloud.firestore {
         && request.resource.data.evidenceOfTravel is string
         && request.resource.data.evidenceOfTravel.size() > 0
         && request.resource.data.evidenceOfTravel.size() <= 240
-        && request.resource.data.divisionName in ["Field Operations Division", "Planning, Monitoring and Evaluation Division", "Administrative Division", "Finance Division", "Agribusiness and Marketing Assistance Division", "Regional Agricultural Engineering Division", "Research Division", "Regulatory Division", "Integrated Laboratories Division"]
+        && request.resource.data.divisionName in ["Field Operations Division", "Planning, Monitoring and Evaluation Division", "Administrative and Finance Division", "Finance Division", "Agribusiness and Marketing Assistance Division", "Regional Agricultural Engineering Division", "Research Division", "Regulatory Division", "Integrated Laboratories Division"]
         && request.resource.data.itineraries is list
         && request.resource.data.itineraries.size() > 0
         && request.resource.data.itineraries.size() <= 8

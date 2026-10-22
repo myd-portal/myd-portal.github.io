@@ -32,9 +32,10 @@ const requiredColumns = [
 
 const divisionAliases: Record<string, TevDivision> = {
   "Planning, and Monitoring and Evaluation Division": "Planning, Monitoring and Evaluation Division",
+  "Administrative Division": "Administrative and Finance Division",
 };
 const certificateImportDivisions = new Set<TevDivision>([
-  "Administrative Division",
+  "Administrative and Finance Division",
   "Agribusiness and Marketing Assistance Division",
   "Field Operations Division",
   "Finance Division",
