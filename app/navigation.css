@@ -47,6 +47,7 @@
 .topbar .nav-button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .topbar .find-docs-nav-button{align-items:center;display:inline-flex;justify-content:center;padding:8px 10px}
 .find-docs-nav-icon{display:block;height:24px;object-fit:contain;width:24px}
+.mobile-find-docs-button{display:none}
 .topbar .nav-dropdown-arrow{color:#fff}
 .topbar .amia-document-nav-button{font-size:11px;padding-left:8px;padding-right:8px}
 .topbar .amia-document-nav-menu{
@@ -202,6 +203,8 @@
   .topbar .brand-logo{height:38px;width:38px}
   .topbar .user-menu{gap:4px}
   .topbar .notification-button{border-radius:0;height:32px;width:32px}
+  .topbar .mobile-find-docs-button{height:32px;width:32px}
+  .topbar .mobile-find-docs-button .find-docs-nav-icon{height:22px;width:22px}
   .topbar .profile-trigger{font-size:11px;max-width:42vw;min-height:38px;padding:7px 10px}
   .topbar .logout-button{height:32px;width:30px}
   .topbar .main-nav{gap:0;justify-content:space-between;scroll-padding-inline:4px}
@@ -237,6 +240,11 @@
   .topbar .profile-menu,.topbar .logout-button{display:none}
   .topbar .notification-button{height:40px;width:40px}
   .topbar .notification-button svg{height:26px;width:26px}
+  .topbar .mobile-find-docs-button{align-items:center;background:transparent;border:0;border-radius:50%;color:#fff;display:inline-flex;height:40px;justify-content:center;padding:6px;width:40px}
+  .topbar .mobile-find-docs-button:hover{background:#ffffff24}
+  .topbar .mobile-find-docs-button.active{background:#ffffff28}
+  .topbar .mobile-find-docs-button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  .topbar .mobile-find-docs-button .find-docs-nav-icon{height:24px;width:24px}
   .topbar .mobile-menu-toggle{
     align-items:center;
     background:transparent;
