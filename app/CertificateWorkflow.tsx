@@ -145,7 +145,7 @@ export function CertificateApprovalSignature({ record }: { record: CertificateWo
   const datePart = (type: string) => dateParts.find((part) => part.type === type)?.value ?? "";
   const approvalDate = approvedAt ? `${datePart("year")}.${datePart("month")}.${datePart("day")}` : "";
   const approvalTime = approvedAt
-    ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(approvedAt)} +0800`
+    ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(approvedAt)} +08'00'`
     : "";
   const signerName = (record.signerName?.trim() || record.signerDesignation || "Field Operations Division").toLocaleUpperCase("en");
   return <div className="certificate-approved-signature" aria-label={`Digitally signed by ${signerName}${approvalDate ? ` on ${approvalDate}` : ""}`}>
@@ -154,7 +154,7 @@ export function CertificateApprovalSignature({ record }: { record: CertificateWo
       <span>Digitally signed by</span>
       <strong>{signerName}</strong>
       {approvalDate && <small>Date: {approvalDate}</small>}
-      {approvalTime && <small>Time: {approvalTime}</small>}
+      {approvalTime && <small>{approvalTime}</small>}
     </div>
   </div>;
 }

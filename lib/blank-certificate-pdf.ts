@@ -320,7 +320,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     const datePart = (type: string) => dateParts.find((part) => part.type === type)?.value ?? "";
     const approvalDateText = approvedAt ? `${datePart("year")}.${datePart("month")}.${datePart("day")}` : "";
     const approvalTime = approvedAt
-      ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(approvedAt)} +0800`
+      ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(approvedAt)} +08'00'`
       : "";
     const metadataRight = 531.5;
     const metadataColumnWidth = 102;
@@ -341,7 +341,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
       drawRightAlignedMetadata("Digitally signed by", y + 72, metadataSize, regularFont);
       drawRightAlignedMetadata(signerName, y + 64, fittedSignerNameSize, boldFont);
       if (approvalDateText) drawRightAlignedMetadata(`Date: ${approvalDateText}`, y + 56, metadataSize, regularFont);
-      if (approvalTime) drawRightAlignedMetadata(`Time: ${approvalTime}`, y + 48, metadataSize, regularFont);
+      if (approvalTime) drawRightAlignedMetadata(approvalTime, y + 48, metadataSize, regularFont);
     }
   }
 
