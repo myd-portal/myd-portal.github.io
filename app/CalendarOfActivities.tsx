@@ -239,7 +239,7 @@ function CalendarOfActivitiesPaper({ plan, activities, pageNumber, pageCount }: 
   </article>;
 }
 
-function CalendarOfActivitiesPreview({ plan, onClose }: { plan: CalendarOfActivities; onClose: () => void }) {
+function CalendarOfActivitiesPreview({ plan, onClose, readOnly = false }: { plan: CalendarOfActivities; onClose: () => void; readOnly?: boolean }) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -298,7 +298,7 @@ function CalendarOfActivitiesPreview({ plan, onClose }: { plan: CalendarOfActivi
   }
 
   return <div className="calendar-of-activities-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="preview-toolbar calendar-of-activities-preview-toolbar"><span>{formatMonth(plan.month)} · {pages.length} {pages.length === 1 ? "page" : "pages"}</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" onClick={() => void downloadPdf()} disabled={downloading}>{downloading ? "Preparing PDF…" : "Download PDF"}</button><button type="button" className="pdf-button" onClick={() => void printDocument()} disabled={printing}>{printing ? "Preparing print…" : "Print"}</button>{error && <small role="alert">{error}</small>}</div>
+    <div className="preview-toolbar calendar-of-activities-preview-toolbar"><span>{formatMonth(plan.month)} · {pages.length} {pages.length === 1 ? "page" : "pages"}</span><button type="button" className="ghost-button" onClick={onClose}>Close</button>{!readOnly && <><button type="button" className="pdf-button" onClick={() => void downloadPdf()} disabled={downloading}>{downloading ? "Preparing PDF…" : "Download PDF"}</button><button type="button" className="pdf-button" onClick={() => void printDocument()} disabled={printing}>{printing ? "Preparing print…" : "Print"}</button>{error && <small role="alert">{error}</small>}</>}</div>
     <div className="calendar-of-activities-preview-pages" ref={pagesRef}>{pages.map((activities, index) => <CalendarOfActivitiesPaper key={`${plan.id}-${index}`} plan={plan} activities={activities} pageNumber={index + 1} pageCount={pages.length} />)}</div>
   </div>;
 }
@@ -562,7 +562,7 @@ function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView,
   </section>;
 }
 
-export default function CalendarOfActivitiesModule({ user, role = "regular", mode = "prepared", profileRevision = 0, focusCalendarId, onFocusHandled, onPreviewClose }: { user: User; role?: string; mode?: "prepared" | "approved-records" | "approval"; profileRevision?: number; focusCalendarId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
+export default function CalendarOfActivitiesModule({ user, role = "regular", mode = "prepared", profileRevision = 0, focusCalendarId, previewRecord, readOnlyPreview = false, onFocusHandled, onPreviewClose }: { user: User; role?: string; mode?: "prepared" | "approved-records" | "approval"; profileRevision?: number; focusCalendarId?: string; previewRecord?: Record<string, unknown>; readOnlyPreview?: boolean; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [adminAccounts, setAdminAccounts] = useState<Account[]>([]);
@@ -570,6 +570,10 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
   const [view, setView] = useState<"list" | "new" | "edit">("list");
   const [editingPlan, setEditingPlan] = useState<CalendarOfActivities | null>(null);
   const [preview, setPreview] = useState<CalendarOfActivities | null>(null);
+  useEffect(() => {
+    if (!previewRecord || typeof previewRecord.id !== "string") return;
+    setPreview({ ...previewRecord, id: previewRecord.id } as unknown as CalendarOfActivities);
+  }, [previewRecord]);
   const [pendingDelete, setPendingDelete] = useState<CalendarOfActivities | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
@@ -943,6 +947,6 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
     {error && <div className="error-message calendar-of-activities-error" role="alert">{error}</div>}
     {loading ? <section className="content-section"><p className="muted">Loading Calendar of Activities records…</p></section> : mode !== "approved-records" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Calendar of Activities.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={visiblePlans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Calendar of Activities."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} onAffixSignatureChange={(plan, value) => void updateCalendarAffixSignature(plan, value)} fullSignatureAvailable={Boolean(profile?.fullSignatureURL.trim())} deletingId={deletingId} updatingStatusId={updatingStatusId} updatingAffixSignatureId={updatingAffixSignatureId} adminRecordsOnly={mode === "approved-records"} approvalTasksOnly={mode === "approval"} />}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Calendar of Activities Deletion?" description="Are you sure you want to delete this Calendar of Activities? This action cannot be undone, and its activity notifications will also be removed." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteCalendarOfActivities(pendingDelete); }} />
-    {preview && <CalendarOfActivitiesPreview plan={preview} onClose={closePreview} />}
+    {preview && <CalendarOfActivitiesPreview plan={preview} onClose={closePreview} readOnly={readOnlyPreview} />}
   </>;
 }

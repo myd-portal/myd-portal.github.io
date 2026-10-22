@@ -1679,7 +1679,9 @@ service cloud.firestore {
     match /specialOrders/{orderId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])))
+        || request.auth.uid in resource.data.get("recipientIds", [])
+        || resource.data.get("approvalStage", "") == "approved"
+        || resource.data.get("affixSignature", "") == "Yes"))
         || isFodSoInitialSigner(resource.data)
         || isFodSoChiefSigner(resource.data);
       allow create: if (request.resource.data.get("approvalWorkflow", "") == "fod"
@@ -2121,7 +2123,9 @@ service cloud.firestore {
     match /ntaRecords/{ntaId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
         || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])))
+        || request.auth.uid in resource.data.get("recipientIds", [])
+        || resource.data.get("approvalStage", "") == "approved"
+        || resource.data.get("affixSignature", "") == "Yes"))
         || isFodSoInitialSigner(resource.data)
         || isFodSoChiefSigner(resource.data);
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid

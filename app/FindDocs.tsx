@@ -22,7 +22,7 @@ export const findDocsTypes = [
 ] as const;
 
 export type FindDocsType = (typeof findDocsTypes)[number];
-export type FindDocsRecord = { id: string; type: FindDocsType; data: Record<string, unknown> };
+export type FindDocsRecord = { id: string; type: FindDocsType; data: Record<string, unknown>; readOnly?: boolean };
 
 type FindDocsProps = {
   user: User;

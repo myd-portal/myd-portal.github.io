@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { collection, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, or, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import type { AccountRole } from "@/lib/user-roles";
@@ -58,6 +58,18 @@ type ApprovedCalendarOfActivities = {
   month: string;
   preparedName?: string;
   activities: { dateFrom: string; dateTo: string; activity: string; location: string; responsiblePeople?: { name: string }[] }[];
+};
+type ApprovedArchiveDocumentType = "Special Order" | "Notice to Attend" | "Calendar of Activities";
+type ApprovedArchiveRecord = { id: string; data: Record<string, unknown> };
+type ApprovedArchiveRow = {
+  key: string;
+  record: ApprovedArchiveRecord;
+  type: ApprovedArchiveDocumentType;
+  activityTitle: string;
+  designatedPersonnel: string;
+  dateFrom: string;
+  dateTo: string;
+  venue: string;
 };
 type StoredPermit = {
   id: string;
@@ -193,6 +205,14 @@ function CalendarFilterDropdown({ label, value, options, onChange }: {
       >{option.label}</button>)}
     </div>}
   </div>;
+}
+
+function archiveText(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function uniqueArchiveNames(names: string[]) {
+  return [...new Set(names.map((name) => name.trim()).filter(Boolean))].join(", ");
 }
 
 function normalizeUnit(value?: string): Exclude<PermitUnitFilter, "All"> | "" {
@@ -356,7 +376,7 @@ function formatCalendarDateRange(from: string, to: string) {
   return `${startDate} - ${endMonthName} ${endDay}, ${endYear}`;
 }
 
-export default function WhereaboutsCalendarModule({ user, accountRole, office, division, unit, assignment }: { user: User; accountRole: AccountRole; office: string; division?: string; unit?: string; assignment?: string }) {
+export default function WhereaboutsCalendarModule({ user, accountRole, office, division, unit, assignment, onViewApprovedDocument }: { user: User; accountRole: AccountRole; office: string; division?: string; unit?: string; assignment?: string; onViewApprovedDocument?: (record: { id: string; type: ApprovedArchiveDocumentType; data: Record<string, unknown>; readOnly: true }) => void }) {
   const canFilterOfficeAssignment = isPermitAdmin(user.email, accountRole);
   const accountScope = division !== undefined || unit !== undefined
     ? accountProfileSelection({ office, division: division ?? "", unit: unit ?? "", profileFieldsVersion: 4 })
@@ -369,20 +389,26 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   const [permitSlips, setPermitSlips] = useState<ApprovedPermitSlip[]>([]);
   const [leaveApplications, setLeaveApplications] = useState<ApprovedLeaveApplication[]>([]);
   const [calendarsOfActivities, setCalendarsOfActivities] = useState<ApprovedCalendarOfActivities[]>([]);
+  const [approvedSpecialOrders, setApprovedSpecialOrders] = useState<ApprovedArchiveRecord[]>([]);
+  const [approvedNtas, setApprovedNtas] = useState<ApprovedArchiveRecord[]>([]);
+  const [approvedArchiveLoading, setApprovedArchiveLoading] = useState(true);
+  const [approvedArchiveError, setApprovedArchiveError] = useState("");
   const [totalPersonnelCount, setTotalPersonnelCount] = useState<number | null>(null);
   const [totalPersonnelLoading, setTotalPersonnelLoading] = useState(true);
   const [accountScopes, setAccountScopes] = useState<Map<string, { office: string; division: string; unit: string; name: string }>>(() => new Map());
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [nameSearch, setNameSearch] = useState("");
-  const [documentFilter, setDocumentFilter] = useState<"permit" | "travel" | "leave" | "calendar-of-activities">("permit");
+  const [documentFilter, setDocumentFilter] = useState<"permit" | "travel" | "leave">("permit");
+  const [approvedArchiveFilter, setApprovedArchiveFilter] = useState<"all" | "so" | "nta" | "calendar">("all");
+  const [approvedArchiveSearch, setApprovedArchiveSearch] = useState("");
+  const [approvedArchivePage, setApprovedArchivePage] = useState(0);
   const [divisionFilter, setDivisionFilter] = useState(defaultDivisionFilter);
   const [unitFilter, setUnitFilter] = useState<PermitUnitFilter>(defaultUnitFilter);
   const [selectedPeoplePage, setSelectedPeoplePage] = useState(0);
   const [permitPage, setPermitPage] = useState(0);
   const [travelPage, setTravelPage] = useState(0);
   const [leavePage, setLeavePage] = useState(0);
-  const [calendarsOfActivitiesPage, setCalendarsOfActivitiesPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const approvedPermitNumbers = useMemo(() => assignApprovedPermitNumbers(permitSlips), [permitSlips]);
@@ -400,11 +426,15 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     setPermitSlips([]);
     setLeaveApplications([]);
     setCalendarsOfActivities([]);
+    setApprovedSpecialOrders([]);
+    setApprovedNtas([]);
+    setApprovedArchiveLoading(true);
+    setApprovedArchiveError("");
     setAccountScopes(new Map());
     setTotalPersonnelCount(null);
     setTotalPersonnelLoading(true);
     setError("");
-    if (!db) { setError("Firebase is not configured."); setLoading(false); setTotalPersonnelLoading(false); return () => { active = false; }; }
+    if (!db) { setError("Firebase is not configured."); setLoading(false); setTotalPersonnelLoading(false); setApprovedArchiveLoading(false); return () => { active = false; }; }
     const firestore = db;
     void getDocs(collection(firestore, "users")).then((snapshot) => {
       if (!active) return;
@@ -432,6 +462,11 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       });
     }
     const initialSources = new Set(["travel", "permits", "leave", "leave-backfill"]);
+    const initialArchiveSources = new Set(["special-orders", "ntas"]);
+    const finishArchiveLoad = (source: string) => {
+      initialArchiveSources.delete(source);
+      if (active && initialArchiveSources.size === 0) setApprovedArchiveLoading(false);
+    };
     const finishInitialLoad = (source: string) => {
       initialSources.delete(source);
       if (active && initialSources.size === 0) setLoading(false);
@@ -455,6 +490,24 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load Calendar of Activities (${code}).` : "Could not load Calendar of Activities. Refresh and try again.");
+    });
+    const unsubscribeApprovedSpecialOrders = onSnapshot(query(collection(firestore, "specialOrders"), or(where("approvalStage", "==", "approved"), where("affixSignature", "==", "Yes"))), (snapshot) => {
+      const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
+      if (active) setApprovedSpecialOrders(records);
+      finishArchiveLoad("special-orders");
+    }, (cause) => {
+      const code = (cause as { code?: string }).code;
+      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load approved Special Orders (${code}).` : "Could not load approved Special Orders."));
+      finishArchiveLoad("special-orders");
+    });
+    const unsubscribeApprovedNtas = onSnapshot(query(collection(firestore, "ntaRecords"), or(where("approvalStage", "==", "approved"), where("affixSignature", "==", "Yes"))), (snapshot) => {
+      const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
+      if (active) setApprovedNtas(records);
+      finishArchiveLoad("ntas");
+    }, (cause) => {
+      const code = (cause as { code?: string }).code;
+      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load approved Notices to Attend (${code}).` : "Could not load approved Notices to Attend."));
+      finishArchiveLoad("ntas");
     });
     const unsubscribePermits = onSnapshot(collection(firestore, "approvedPermitCalendar"), (snapshot) => {
       const approved = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ApprovedPermitSlip))
@@ -511,7 +564,7 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       if (active) setError(code ? `Could not sync existing Leave Applications (${code}).` : "Could not sync existing Leave Applications.");
       finishInitialLoad("leave-backfill");
     });
-    return () => { active = false; unsubscribeTravel(); unsubscribeCalendarsOfActivities(); unsubscribePermits(); unsubscribeLeaveApplications(); unsubscribeLeaveBackfill(); };
+    return () => { active = false; unsubscribeTravel(); unsubscribeCalendarsOfActivities(); unsubscribeApprovedSpecialOrders(); unsubscribeApprovedNtas(); unsubscribePermits(); unsubscribeLeaveApplications(); unsubscribeLeaveBackfill(); };
   }, [user.uid, user.email, accountRole, office, division, unit, assignment]);
 
   const year = month.getFullYear();
@@ -742,23 +795,56 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   const permitPageCount = Math.max(1, Math.ceil(annualPermits.length / 10));
   const travelPageCount = Math.max(1, Math.ceil(annualOrders.length / 10));
   const leavePageCount = Math.max(1, Math.ceil(annualLeaveApplications.length / 10));
-  const annualCalendarsOfActivities = calendarsOfActivities
-    .filter((plan) => plan.month.startsWith(`${summaryYear}-`))
-    .filter((plan) => recordMatchesAccountScope(plan.ownerId, plan.unit))
-    .filter((plan) => !normalizedSearch || plan.activities.some((activity) => (activity.responsiblePeople ?? []).some((person) => (person.name ?? "").toLocaleLowerCase().includes(normalizedSearch))))
-    .filter((plan) => unitMatchesFilter(recordUnitForFilter(plan.ownerId, plan.unit), unitFilter))
-    .sort((left, right) =>
-      right.month.localeCompare(left.month)
-      || (left.unit ?? "").localeCompare(right.unit ?? ""));
-  const calendarsOfActivitiesPageCount = Math.max(1, Math.ceil(annualCalendarsOfActivities.length / 10));
-  const currentCalendarsOfActivitiesPage = Math.min(calendarsOfActivitiesPage, calendarsOfActivitiesPageCount - 1);
-  const visibleCalendarsOfActivities = annualCalendarsOfActivities.slice(currentCalendarsOfActivitiesPage * 10, currentCalendarsOfActivitiesPage * 10 + 10);
   const currentPermitPage = Math.min(permitPage, permitPageCount - 1);
   const currentTravelPage = Math.min(travelPage, travelPageCount - 1);
   const currentLeavePage = Math.min(leavePage, leavePageCount - 1);
   const visibleAnnualPermits = annualPermits.slice(currentPermitPage * 10, currentPermitPage * 10 + 10);
   const visibleAnnualOrders = annualOrders.slice(currentTravelPage * 10, currentTravelPage * 10 + 10);
   const visibleAnnualLeaveApplications = annualLeaveApplications.slice(currentLeavePage * 10, currentLeavePage * 10 + 10);
+  const approvedArchiveRows = useMemo(() => {
+    const rows: ApprovedArchiveRow[] = [];
+    approvedSpecialOrders.forEach((record) => {
+      const data = record.data;
+      const participants = Array.isArray(data.participants) ? data.participants.map(archiveText) : [];
+      rows.push({ key: `so-${record.id}`, record, type: "Special Order", activityTitle: archiveText(data.activityTitle), designatedPersonnel: uniqueArchiveNames(participants), dateFrom: archiveText(data.dateFrom), dateTo: archiveText(data.dateTo), venue: archiveText(data.venue) });
+    });
+    approvedNtas.forEach((record) => {
+      const data = record.data;
+      const batches = Array.isArray(data.batches) ? data.batches as Record<string, unknown>[] : [];
+      if (batches.length) {
+        batches.forEach((batch, index) => {
+          const attendees = Array.isArray(batch.attendees) ? (batch.attendees as Record<string, unknown>[]).map((attendee) => archiveText(attendee.name)) : [];
+          rows.push({ key: `nta-${record.id}-${index}`, record, type: "Notice to Attend", activityTitle: archiveText(data.activityTitle), designatedPersonnel: uniqueArchiveNames(attendees), dateFrom: archiveText(batch.dateFrom) || archiveText(data.dateFrom), dateTo: archiveText(batch.dateTo) || archiveText(data.dateTo), venue: archiveText(batch.venue) || archiveText(batch.link) || archiveText(data.venue) || archiveText(data.link) });
+        });
+      } else {
+        const attendees = Array.isArray(data.attendees) ? (data.attendees as Record<string, unknown>[]).map((attendee) => archiveText(attendee.name)) : [];
+        rows.push({ key: `nta-${record.id}`, record, type: "Notice to Attend", activityTitle: archiveText(data.activityTitle), designatedPersonnel: uniqueArchiveNames([...attendees, archiveText(data.to)]), dateFrom: archiveText(data.dateFrom), dateTo: archiveText(data.dateTo), venue: archiveText(data.venue) || archiveText(data.link) });
+      }
+    });
+    calendarsOfActivities.forEach((plan) => {
+      plan.activities.forEach((activity, index) => rows.push({
+        key: `calendar-${plan.id}-${index}`,
+        record: { id: plan.id, data: plan as unknown as Record<string, unknown> },
+        type: "Calendar of Activities",
+        activityTitle: archiveText(activity.activity),
+        designatedPersonnel: uniqueArchiveNames((activity.responsiblePeople ?? []).map((person) => archiveText(person.name))),
+        dateFrom: archiveText(activity.dateFrom),
+        dateTo: archiveText(activity.dateTo),
+        venue: archiveText(activity.location),
+      }));
+    });
+    return rows.sort((left, right) => right.dateFrom.localeCompare(left.dateFrom) || left.activityTitle.localeCompare(right.activityTitle));
+  }, [approvedNtas, approvedSpecialOrders, calendarsOfActivities]);
+  const normalizedArchiveSearch = approvedArchiveSearch.trim().toLocaleLowerCase();
+  const filteredApprovedArchiveRows = approvedArchiveRows
+    .filter((row) => approvedArchiveFilter === "all"
+      || (approvedArchiveFilter === "so" && row.type === "Special Order")
+      || (approvedArchiveFilter === "nta" && row.type === "Notice to Attend")
+      || (approvedArchiveFilter === "calendar" && row.type === "Calendar of Activities"))
+    .filter((row) => !normalizedArchiveSearch || row.designatedPersonnel.toLocaleLowerCase().includes(normalizedArchiveSearch));
+  const approvedArchivePageCount = Math.max(1, Math.ceil(filteredApprovedArchiveRows.length / 5));
+  const currentApprovedArchivePage = Math.min(approvedArchivePage, approvedArchivePageCount - 1);
+  const visibleApprovedArchiveRows = filteredApprovedArchiveRows.slice(currentApprovedArchivePage * 5, currentApprovedArchivePage * 5 + 5);
   const selectedPersonnelTotal = (divisionFilter !== "All" || unitFilter !== "All")
     ? countUniquePersonnel([...accountScopes.values()].filter((person) => recordMatchesSelectedScope(person.office, person.division, person.unit)).map((person) => person.name))
     : totalPersonnelCount;
@@ -768,8 +854,8 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   return <section className="content-section whereabouts-calendar-section">
     <div className="section-heading whereabouts-heading"><div><p className="eyebrow">Travel, Leave, and Permit Records</p><h2>Whereabouts Calendar</h2><p className="muted">Select a date to view pending or approved Travel Orders and Leave Applications, approved Permit Slips, and 2026 Philippine holidays and special days.</p></div></div>
     <div className="whereabouts-calendar-filters" aria-label="Filter whereabouts calendar">
-      <CalendarFilterDropdown label="Division" value={divisionFilter} options={[{ value: "All", label: "All Divisions" }, ...availableSummaryDivisions.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setDivisionFilter(value); setUnitFilter("All"); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} />
-      <CalendarFilterDropdown label="Unit / Program / Project" value={unitFilter} options={[{ value: "All", label: "All Units / Programs / Projects" }, ...availableSummaryUnits.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setUnitFilter(value as PermitUnitFilter); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} />
+      <CalendarFilterDropdown label="Division" value={divisionFilter} options={[{ value: "All", label: "All Divisions" }, ...availableSummaryDivisions.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setDivisionFilter(value); setUnitFilter("All"); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); }} />
+      <CalendarFilterDropdown label="Unit / Program / Project" value={unitFilter} options={[{ value: "All", label: "All Units / Programs / Projects" }, ...availableSummaryUnits.map((option) => ({ value: option, label: option }))]} onChange={(value) => { setUnitFilter(value as PermitUnitFilter); setSelectedPeoplePage(0); setPermitPage(0); setTravelPage(0); setLeavePage(0); }} />
     </div>
     {error && <div className="error-message whereabouts-error">{error}</div>}
     <section className="whereabouts-calendar" aria-label="Whereabouts and Philippine holiday calendar">
@@ -811,8 +897,8 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     <section className="whereabouts-annual-summary" aria-label={`Whereabouts records for ${summaryYear}`}>
       <header className="whereabouts-summary-heading"><div><p className="eyebrow">Annual summary</p><h2>Approved Records — {summaryYear}</h2></div></header>
       <div className={`whereabouts-summary-filters${canFilterOfficeAssignment ? "" : " whereabouts-summary-filters-regular"}`}>
-        <label>Approved Document<select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value as "permit" | "travel" | "leave" | "calendar-of-activities")}><option value="permit">Permit Slips</option><option value="travel">Travel Orders</option><option value="leave">Leave Applications</option><option value="calendar-of-activities">Calendar of Activities</option></select></label>
-        <label>Name Search<input type="search" value={nameSearch} onChange={(event) => { setNameSearch(event.target.value); setPermitPage(0); setTravelPage(0); setLeavePage(0); setCalendarsOfActivitiesPage(0); }} placeholder="Search by Name" /></label>
+        <label>Approved Document<select value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value as "permit" | "travel" | "leave")}><option value="permit">Permit Slips</option><option value="travel">Travel Orders</option><option value="leave">Leave Applications</option></select></label>
+        <label>Name Search<input type="search" value={nameSearch} onChange={(event) => { setNameSearch(event.target.value); setPermitPage(0); setTravelPage(0); setLeavePage(0); }} placeholder="Search by Name" /></label>
       </div>
       {documentFilter === "permit" && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-permit-summary-title">
         <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-permit-summary-title">Approved Permit Slips</h3><span>{annualPermits.length === 0 ? "0 records" : `${currentPermitPage * 10 + 1}–${Math.min(currentPermitPage * 10 + visibleAnnualPermits.length, annualPermits.length)} of ${annualPermits.length}`}</span></div>
@@ -841,15 +927,30 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         </tbody></table></div>
         {leavePageCount > 1 && <nav className="whereabouts-pagination" aria-label="Approved Leave Applications pages"><button type="button" onClick={() => setLeavePage((page) => Math.max(0, page - 1))} disabled={currentLeavePage === 0}>Previous</button><span aria-live="polite">Page {currentLeavePage + 1} of {leavePageCount}</span><button type="button" onClick={() => setLeavePage((page) => Math.min(leavePageCount - 1, page + 1))} disabled={currentLeavePage >= leavePageCount - 1}>Next</button></nav>}
       </section>}
-      {documentFilter === "calendar-of-activities" && <section className="whereabouts-summary-table-section" aria-labelledby="whereabouts-calendar-of-activities-summary-title">
-        <div className="whereabouts-summary-table-heading"><h3 id="whereabouts-calendar-of-activities-summary-title">Approved Calendar of Activities Records</h3><span>{annualCalendarsOfActivities.length === 0 ? "0 records" : `${currentCalendarsOfActivitiesPage * 10 + 1}–${Math.min(currentCalendarsOfActivitiesPage * 10 + visibleCalendarsOfActivities.length, annualCalendarsOfActivities.length)} of ${annualCalendarsOfActivities.length}`}</span></div>
-        <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table whereabouts-activities-table"><thead><tr><th>Month</th><th>Office</th><th>Activities</th></tr></thead><tbody>
-          {visibleCalendarsOfActivities.map((plan) => <tr key={`annual-calendars-of-activities-${plan.id}`}><td>{formatCalendarDate(`${plan.month}-01`, { month: "long", year: "numeric" })}</td><td>{displayUnit(plan.unit) || "—"}</td><td>{plan.activities.map((activity, index) => <p key={index}><strong>{`${formatCalendarDateRange(activity.dateFrom, activity.dateTo).replace(/,? \d{4}/g, "")}:`}</strong>{` ${activity.activity}${activity.location ? ` (${activity.location})` : ""}`}</p>)}</td></tr>)}
-          {!loading && visibleCalendarsOfActivities.length === 0 && <tr><td className="whereabouts-summary-empty" colSpan={3}>No approved Calendar of Activities records match this year and filter.</td></tr>}
-          {loading && <tr><td className="whereabouts-summary-empty" colSpan={3}>Loading Calendar of Activities…</td></tr>}
+    </section>
+    <section className="whereabouts-approved-archive" aria-label="Approved SO, NTA, Calendar of Activities">
+      <header className="whereabouts-summary-heading"><div><p className="eyebrow">Public records</p><h2>Approved SO, NTA, Calendar of Activities</h2></div></header>
+      <div className="whereabouts-summary-filters whereabouts-approved-archive-filters">
+        <label>Approved Document<select value={approvedArchiveFilter} onChange={(event) => { setApprovedArchiveFilter(event.target.value as "all" | "so" | "nta" | "calendar"); setApprovedArchivePage(0); }}><option value="all">All</option><option value="so">SO</option><option value="nta">NTA</option><option value="calendar">Calendar of Activities</option></select></label>
+        <label>Name Search<input type="search" value={approvedArchiveSearch} onChange={(event) => { setApprovedArchiveSearch(event.target.value); setApprovedArchivePage(0); }} placeholder="Search by Name" /></label>
+      </div>
+      <section className="whereabouts-summary-table-section" aria-label="Approved document records">
+        <div className="whereabouts-summary-table-heading"><h3>Approved Documents</h3><span>{filteredApprovedArchiveRows.length === 0 ? "0 records" : `${currentApprovedArchivePage * 5 + 1}–${Math.min(currentApprovedArchivePage * 5 + visibleApprovedArchiveRows.length, filteredApprovedArchiveRows.length)} of ${filteredApprovedArchiveRows.length}`}</span></div>
+        {approvedArchiveError && <div className="error-message whereabouts-error" role="status">{approvedArchiveError}</div>}
+        <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table whereabouts-approved-archive-table"><thead><tr><th>Document Type</th><th>Activity Title</th><th>Designated Personnel</th><th>Date</th><th>Venue</th><th>View</th></tr></thead><tbody>
+          {visibleApprovedArchiveRows.map((row) => <tr key={row.key}>
+            <td>{row.type}</td>
+            <td>{row.activityTitle || "—"}</td>
+            <td>{row.designatedPersonnel || "—"}</td>
+            <td>{row.dateFrom ? formatCalendarDateRange(row.dateFrom, row.dateTo || row.dateFrom) : "—"}</td>
+            <td>{row.venue || "—"}</td>
+            <td><button type="button" className="whereabouts-archive-view" disabled={!onViewApprovedDocument} onClick={() => onViewApprovedDocument?.({ id: row.record.id, type: row.type, data: row.record.data, readOnly: true })}>View</button></td>
+          </tr>)}
+          {approvedArchiveLoading && <tr><td className="whereabouts-summary-empty" colSpan={6}>Loading approved documents…</td></tr>}
+          {!approvedArchiveLoading && visibleApprovedArchiveRows.length === 0 && <tr><td className="whereabouts-summary-empty" colSpan={6}>No approved documents match this filter.</td></tr>}
         </tbody></table></div>
-        {calendarsOfActivitiesPageCount > 1 && <nav className="whereabouts-pagination" aria-label="Calendar of Activities pages"><button type="button" onClick={() => setCalendarsOfActivitiesPage((page) => Math.max(0, page - 1))} disabled={currentCalendarsOfActivitiesPage === 0}>Previous</button><span aria-live="polite">Page {currentCalendarsOfActivitiesPage + 1} of {calendarsOfActivitiesPageCount}</span><button type="button" onClick={() => setCalendarsOfActivitiesPage((page) => Math.min(calendarsOfActivitiesPageCount - 1, page + 1))} disabled={currentCalendarsOfActivitiesPage >= calendarsOfActivitiesPageCount - 1}>Next</button></nav>}
-      </section>}
+        {approvedArchivePageCount > 1 && <nav className="whereabouts-pagination" aria-label="Approved document pages"><button type="button" onClick={() => setApprovedArchivePage((page) => Math.max(0, page - 1))} disabled={currentApprovedArchivePage === 0}>Previous</button><span aria-live="polite">Page {currentApprovedArchivePage + 1} of {approvedArchivePageCount}</span><button type="button" onClick={() => setApprovedArchivePage((page) => Math.min(approvedArchivePageCount - 1, page + 1))} disabled={currentApprovedArchivePage >= approvedArchivePageCount - 1}>Next</button></nav>}
+      </section>
     </section>
   </section>;
 }
