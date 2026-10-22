@@ -353,7 +353,7 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
   const isAdministrativeFinanceAdminUser = role === "admin"
     && office === "Division"
     && division === "Administrative and Finance Division"
-    && unit === "General Services Section";
+    && ["General Services Section", "Human Resource Section"].includes(unit ?? "");
   const recommendingSignatory = isAdministrativeFinanceRegularUser || isAdministrativeFinanceAdminUser
     ? getDivisionSignatory("Administrative and Finance Division")
     : { name: "REBECCA R. ATEGA", position: "RTD for Operations" };
