@@ -91,7 +91,7 @@
 .whereabouts-filter-option:hover,.whereabouts-filter-option.is-active{background:var(--accent);color:#fff}
 @media(min-width:1100px){.whereabouts-calendar-filters{gap:22px;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
 .whereabouts-summary-filters{display:grid;gap:14px;grid-template-columns:minmax(170px,.45fr) minmax(0,1fr)}
-.whereabouts-summary-filters-regular{grid-template-columns:minmax(0,.65fr) minmax(0,1fr);max-width:980px;width:100%}
+.whereabouts-summary-filters-regular{max-width:980px;width:100%}
 .whereabouts-approved-archive-filters{grid-template-columns:minmax(170px,.45fr) minmax(0,1fr)}
 .whereabouts-summary-filters label{color:var(--ink);display:grid;font-size:12px;font-weight:700;gap:7px;min-width:0}
 .whereabouts-summary-filters input,.whereabouts-summary-filters select{background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font:inherit;min-height:42px;min-width:0;padding:9px 11px;width:100%}
