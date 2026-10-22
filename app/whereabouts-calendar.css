@@ -104,7 +104,7 @@
 .whereabouts-summary-table{border-collapse:collapse;min-width:560px;text-align:left;width:100%}
 .whereabouts-approved-archive-table{min-width:980px}
 .whereabouts-summary-table.whereabouts-approved-archive-table th:nth-child(3),.whereabouts-summary-table.whereabouts-approved-archive-table td:nth-child(3){min-width:180px;white-space:normal}
-.whereabouts-archive-view{background:#fff;border:1px solid var(--accent);color:var(--accent-dark);cursor:pointer;font:inherit;font-size:11px;font-weight:700;min-height:32px;padding:0 11px}
+.whereabouts-archive-view{align-items:center;background:#fff;border:1px solid var(--accent);color:var(--accent-dark);cursor:pointer;display:inline-flex;font:inherit;height:34px;justify-content:center;min-height:34px;min-width:34px;padding:0;width:34px}
 .whereabouts-archive-view:hover{background:#fff2ed}
 .whereabouts-archive-view:focus-visible{outline:3px solid #df603c;outline-offset:2px}
 .whereabouts-archive-view:disabled{color:var(--muted);cursor:not-allowed;opacity:.6}

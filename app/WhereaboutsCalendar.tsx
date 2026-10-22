@@ -944,7 +944,7 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
             <td>{row.designatedPersonnel || "—"}</td>
             <td>{row.dateFrom ? formatCalendarDateRange(row.dateFrom, row.dateTo || row.dateFrom) : "—"}</td>
             <td>{row.venue || "—"}</td>
-            <td><button type="button" className="whereabouts-archive-view" disabled={!onViewApprovedDocument} onClick={() => onViewApprovedDocument?.({ id: row.record.id, type: row.type, data: row.record.data, readOnly: true })}>View</button></td>
+            <td><button type="button" className="whereabouts-archive-view" aria-label="View document" title="View document" disabled={!onViewApprovedDocument} onClick={() => onViewApprovedDocument?.({ id: row.record.id, type: row.type, data: row.record.data, readOnly: true })}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></button></td>
           </tr>)}
           {approvedArchiveLoading && <tr><td className="whereabouts-summary-empty" colSpan={6}>Loading documents…</td></tr>}
           {!approvedArchiveLoading && visibleApprovedArchiveRows.length === 0 && <tr><td className="whereabouts-summary-empty" colSpan={6}>No documents match this filter.</td></tr>}
