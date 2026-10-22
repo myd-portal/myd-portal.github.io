@@ -346,10 +346,15 @@ function TravelField({ label, children = "", className = "" }: { label: string; 
 }
 
 function TravelOrderPaper({ order, person, role, office, division, unit }: { order: TravelOrder; person: TravelOrderPerson; role: string; office: string; division: string; unit: string | null }) {
-  const recommendingSignatory = role === "admin"
+  const isAdministrativeFinanceRegularUser = role === "regular"
     && office === "Division"
     && division === "Administrative and Finance Division"
-    && unit === "General Services Section"
+    && ["General Services Section", "Human Resource Section", "Administrative and Finance Division"].includes(unit ?? "");
+  const isAdministrativeFinanceAdminUser = role === "admin"
+    && office === "Division"
+    && division === "Administrative and Finance Division"
+    && unit === "General Services Section";
+  const recommendingSignatory = isAdministrativeFinanceRegularUser || isAdministrativeFinanceAdminUser
     ? getDivisionSignatory("Administrative and Finance Division")
     : { name: "REBECCA R. ATEGA", position: "RTD for Operations" };
   const recommendingPosition = recommendingSignatory.position === "OIC"
