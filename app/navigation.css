@@ -45,6 +45,8 @@
 .topbar .nav-button.active{background:#ffffff28;color:#fff}
 .topbar .main-nav .nav-button:hover:not(.active){background:#ffffff24;color:#fff}
 .topbar .nav-button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.topbar .find-docs-nav-button{align-items:center;display:inline-flex;justify-content:center;padding:8px 10px}
+.find-docs-nav-icon{display:block;height:24px;object-fit:contain;width:24px}
 .topbar .nav-dropdown-arrow{color:#fff}
 .topbar .amia-document-nav-button{font-size:11px;padding-left:8px;padding-right:8px}
 .topbar .amia-document-nav-menu{
@@ -271,6 +273,7 @@
     width:min(72vw,560px);
     z-index:60;
   }
+  .mobile-navigation .find-docs-nav-icon{filter:brightness(0)}
   .mobile-profile-link{
     align-items:center;
     background:#fff;
@@ -382,6 +385,7 @@
   .mobile-nav-scrim{background:transparent}
   .mobile-navigation{background:linear-gradient(160deg,#ed704b 0%,#d85532 55%,#bf482b 100%);border-radius:0;box-shadow:none;color:#fff;max-width:calc(100vw - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px));width:min(88vw,380px)}
   .mobile-navigation button,.mobile-navigation a{border-radius:0}
+  .mobile-navigation .find-docs-nav-icon{filter:none}
   .mobile-profile-link{background:transparent;border-bottom-color:#ffffff80;color:#fff;height:auto;justify-content:flex-start;min-height:64px;padding:12px 20px;text-align:left}
   .mobile-navigation-links{padding:9px 20px 0}
   .mobile-nav-link{flex-direction:row;justify-content:space-between;padding:0 12px;text-align:left}
