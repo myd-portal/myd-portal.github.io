@@ -11,7 +11,9 @@ import { loadPersonnel as loadAccountPersonnel, personnelDisplayName, type Perso
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import DeleteConfirmation from "./DeleteConfirmation";
 import { divisionSignatory as getDivisionSignatory } from "@/lib/mytev";
+import { formatCurrencyAmount, normalizeCurrencyValue } from "@/lib/currency";
 import { LEGACY_PENDING_STATUS, normalizeWorkflowStatus, type WorkflowStatus } from "./workflow-status";
+import CurrencyInput from "./CurrencyInput";
 import "./travel-order.css";
 
 type TravelOrderStatus = WorkflowStatus;
@@ -74,10 +76,7 @@ function formatTravelDate(value: string) {
 }
 
 function formatTravelSalary(value: string) {
-  if (!value.trim()) return "";
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return value;
-  return new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  return formatCurrencyAmount(value);
 }
 
 function formatTravelDateRange(departureDate: string, returnDate: string) {
@@ -168,7 +167,7 @@ function TravelOrderForm({ user, office, unit, initialOrder, onSaved, onCancel, 
     if (!db) { onError("Firebase is not configured."); return; }
     if (!unit) { onError("Your Unit / Program / Project is still loading. Try saving again in a moment."); return; }
     if (!transportation.length) { onError("Select at least one means of transportation."); return; }
-    const normalizedPeople = people.map((person) => ({ ...person, name: person.name.trim(), position: person.position.trim(), salary: person.salary.trim() }));
+    const normalizedPeople = people.map((person) => ({ ...person, name: person.name.trim(), position: person.position.trim(), salary: normalizeCurrencyValue(person.salary) }));
     if (!normalizedPeople.length || normalizedPeople.some((person) => !person.userId)) {
       onError("Select a registered account for each person so every Travel Order can be assigned privately.");
       return;
@@ -242,7 +241,7 @@ function TravelOrderForm({ user, office, unit, initialOrder, onSaved, onCancel, 
           <legend>Personnel {index + 1}</legend>
           <div className="name-search-field"><span>Name</span><NameSearchSelect aria-label={`Personnel name ${index + 1}`} value={person.userId ?? ""} onChange={(userId) => { const selectedPerson = personnel.find((entry) => entry.userId === userId); updatePerson(index, { userId, name: selectedPerson?.name ?? "", position: selectedPerson?.position ?? "" }); }} required disabled={personnelStatus !== "ready"}><option value="" disabled>{personnelStatus === "loading" ? "Loading personnel..." : personnelStatus === "error" ? "Personnel list unavailable" : "Select a personnel"}</option>{personnel.filter((entry) => entry.userId === person.userId || !selectedPersonnelIds.has(entry.userId)).map((entry) => <option key={entry.userId} value={entry.userId}>{personnelDisplayName(entry)}</option>)}</NameSearchSelect></div>
           <label>Position<input value={person.position} readOnly required /></label>
-          <label>Monthly Salary <span className="muted-inline">(optional)</span><div className="travel-order-currency-field"><span aria-hidden="true">₱</span><input type="number" inputMode="decimal" min="0" step="0.01" value={person.salary} onChange={(event) => updatePerson(index, { salary: event.target.value })} onBlur={() => { if (person.salary !== "") updatePerson(index, { salary: Number(person.salary).toFixed(2) }); }} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" /></div></label>
+          <label>Monthly Salary <span className="muted-inline">(optional)</span><div className="travel-order-currency-field"><span aria-hidden="true">₱</span><CurrencyInput value={person.salary} onValueChange={(salary) => updatePerson(index, { salary })} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" /></div></label>
           {people.length > 1 && <button type="button" className="remove-participant" aria-label={`Delete person ${index + 1}`} onClick={() => setPeople((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Delete</button>}
         </fieldset>)}
         {!travelersLocked && <button type="button" className="text-button plain-action add-item-text-button" onClick={() => setPeople((current) => [...current, { name: "", position: "", salary: "" }])}>+ Add Personnel</button>}

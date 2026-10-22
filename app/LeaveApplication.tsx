@@ -8,8 +8,10 @@ import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import { isSuperadminRole } from "@/lib/user-roles";
 import { accountAssignment, accountDivision, accountOffice } from "@/lib/account-profile";
+import { formatCurrencyAmount, normalizeCurrencyValue } from "@/lib/currency";
 import { tevDivisions, type TevDivision } from "@/lib/mytev";
 import { makeDocumentNotification } from "@/lib/document-notifications";
+import CurrencyInput from "./CurrencyInput";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
 import "./leave-application.css";
@@ -236,17 +238,11 @@ function fileDate(value: string) {
 }
 
 function decimalSalary(value: string) {
-  if (!value.trim()) return "";
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount.toFixed(2) : value.trim();
+  return normalizeCurrencyValue(value);
 }
 
 function formatSalaryForDocument(value: string) {
-  if (!value.trim()) return "";
-  const amount = Number(value);
-  return Number.isFinite(amount)
-    ? new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
-    : value.trim();
+  return formatCurrencyAmount(value);
 }
 
 function inclusiveDates(record: Pick<LeaveApplicationRecord, "inclusiveDateFrom" | "inclusiveDateTo">) {
@@ -1128,7 +1124,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
       <div className="section-heading leave-application-heading"><div><p className="eyebrow">New record</p><h2>Create Leave Application</h2><p className="muted">Enter the details for the Civil Service Commission Leave Application form.</p></div><button type="button" className="ghost-button" onClick={() => { setView("list"); setError(""); }}>Cancel</button></div>
       <form className="leave-application-form" onSubmit={save}>
         <label>Date of Filing<input type="date" value={filedDate} onChange={(event) => setFiledDate(event.target.value)} required /></label>
-        <label>Monthly Salary<div className="leave-application-currency-field"><span aria-hidden="true">₱</span><input type="number" inputMode="decimal" min="0" step="0.01" value={salary} onChange={(event) => setSalary(event.target.value)} onBlur={() => { if (salary !== "") setSalary(decimalSalary(salary)); }} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" required /></div></label>
+        <label>Monthly Salary<div className="leave-application-currency-field"><span aria-hidden="true">₱</span><CurrencyInput value={salary} onValueChange={setSalary} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" required /></div></label>
         <div className={`leave-application-leave-type-row leave-application-wide-field leave-application-leave-type-row-${leaveTypeFieldCount}`}>
           <label>Type of Leave<select value={leaveType} onChange={(event) => { const selected = event.target.value as LeaveType | ""; setLeaveType(selected); setLeaveDetails(""); setSpecifyAbroad(""); setSpecifyIllness(""); setStudyLeaveOtherPurpose(""); }} required><option value="" disabled>Select type of leave</option>{leaveTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
           {showLeaveDetails && <label>Details of Leave<select value={leaveDetails} onChange={(event) => { const selected = event.target.value; setLeaveDetails(selected); if (selected !== "Abroad") setSpecifyAbroad(""); if (selected !== "Other Purpose") setStudyLeaveOtherPurpose(""); }} required><option value="" disabled>Select details of leave</option>{(leaveType === "Sick Leave" ? sickLeaveDetails : leaveType === "Study Leave" ? studyLeaveDetails : travelLeaveDetails).map((option) => <option key={option}>{option}</option>)}</select></label>}
