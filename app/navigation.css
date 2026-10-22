@@ -30,7 +30,7 @@
   flex-wrap:nowrap;
   gap:3px;
   justify-content:flex-end;
-  margin:0 8px 0 auto;
+  margin:0 0 0 auto;
   min-width:0;
 }
 .topbar .nav-dropdown{flex:0 0 auto}
