@@ -55,9 +55,9 @@
 .ar-document-prepared{font-size:1.05em;margin-top:1.3em}
 .ar-document-prepared>p{margin:0 0 2.6em}
 .ar-document-prepared.has-affixed-signature>p{margin-bottom:.3em}
-.ar-document-digital-signature{align-items:center;display:grid;gap:.4cqi;grid-template-columns:11cqi minmax(0,1fr);margin:0 0 .1em;width:48cqi}
-.ar-document-digital-signature>img{grid-column:1;grid-row:1;height:6cqi;object-fit:contain;object-position:left center;width:11cqi}
-.ar-document-digital-signature>div{display:grid;gap:.12cqi;grid-column:2;grid-row:1;line-height:1.18;min-width:0}
+.ar-document-digital-signature{align-items:end;display:grid;gap:.75cqi;grid-template-columns:max-content minmax(0,1fr);margin:0 0 .1em;width:48cqi}
+.ar-document-digital-signature>img{grid-column:1;grid-row:1;height:calc(3.344em + 1.2cqi);justify-self:start;max-height:calc(3.344em + 1.2cqi);max-width:100%;object-fit:contain;object-position:left;width:auto}
+.ar-document-digital-signature>div{display:grid;gap:.4cqi;grid-column:2;grid-row:1;line-height:1.1;min-width:0}
 .ar-document-digital-signature>div>span,.ar-document-digital-signature>div>small{font-size:.74em}
 .ar-document-digital-signature>div>strong{font-size:.82em}
 .ar-document-prepared-name{display:grid;gap:.4cqi}
@@ -68,14 +68,15 @@
 .ar-document-noted>p{margin:0 0 .5cqi}
 .ar-document-noted-approval{display:grid;gap:.3cqi;justify-items:start;max-width:100%;width:68cqi}
 .ar-document-noted-affixes{display:grid;gap:.2cqi;width:100%}
-.ar-document-noted-affix-row{align-items:center;display:grid;gap:1cqi;min-width:0}
-.ar-document-noted-affix-row-initial{gap:.35cqi;grid-template-columns:3.2cqi minmax(0,1fr)}
-.ar-document-noted-affix-row-full{grid-template-columns:10cqi minmax(0,1fr)}
-.ar-document-noted-affix-row-initial>img{height:4cqi;object-fit:contain;object-position:left center;width:100%}
-.ar-document-noted-affix-row-full>img{height:5cqi;object-fit:contain;object-position:left center;width:100%}
-.ar-document-noted-affix-details{align-content:center;display:grid;gap:.1cqi;line-height:1.18;min-width:0}
+.ar-document-noted-affix-row{align-items:end;display:grid;gap:.75cqi;min-width:0}
+.ar-document-noted-affix-row-initial{align-items:start;gap:.45cqi;grid-template-columns:3.8cqi minmax(0,1fr);margin-left:16cqi}
+.ar-document-noted-affix-row-full{align-items:start;grid-template-columns:max-content minmax(0,1fr);width:48cqi}
+.ar-document-noted-affix-row-initial>img{align-self:start;grid-column:1;grid-row:1;height:4cqi;margin-top:calc(.814em + .4cqi);object-fit:contain;object-position:left center;width:3.2cqi}
+.ar-document-noted-affix-row-initial>.ar-document-noted-affix-details{grid-column:2;grid-row:1}
+.ar-document-noted-affix-row-full>img{height:calc(3.344em + 1.2cqi);justify-self:start;max-height:calc(3.344em + 1.2cqi);max-width:100%;object-fit:contain;object-position:left;width:auto}
+.ar-document-noted-affix-details{align-content:end;display:grid;gap:.4cqi;line-height:1.1;min-width:0}
+.ar-document-noted-affix-details>span,.ar-document-noted-affix-details>small{font-size:.74em}
 .ar-document-noted-affix-details>strong{font-size:.82em}
-.ar-document-noted-affix-details>small{font-size:.74em}
 .ar-document-noted-signatory{display:grid;gap:.4cqi;max-width:100%}
 .ar-document-noted strong{font-weight:700}
 .ar-document-noted em{font-style:italic;font-weight:400}
@@ -129,5 +130,6 @@
 .ar-preview-backdrop ::placeholder{font-size:16px!important}
 .ar-preview-actions button{font-size:13px!important}
 .ar-preview-backdrop .ar-document-digital-signature>div>span,.ar-preview-backdrop .ar-document-digital-signature>div>small,.ar-preview-backdrop .ar-document-digital-signature>div>strong{font-size:9.6px!important}
-.ar-preview-backdrop .ar-document-noted-affix-details>strong{font-size:10px!important}
-.ar-preview-backdrop .ar-document-noted-affix-details>small{font-size:9px!important}
+.ar-preview-backdrop .ar-document-digital-signature>img{height:calc(42.24px + 1.2cqi)!important;max-height:calc(42.24px + 1.2cqi)!important}
+.ar-preview-backdrop .ar-document-noted-affix-details>span,.ar-preview-backdrop .ar-document-noted-affix-details>strong,.ar-preview-backdrop .ar-document-noted-affix-details>small{font-size:9.6px!important}
+.ar-preview-backdrop .ar-document-noted-affix-row-full>img{height:calc(42.24px + 1.2cqi)!important;max-height:calc(42.24px + 1.2cqi)!important}

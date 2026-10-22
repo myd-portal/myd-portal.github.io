@@ -238,7 +238,7 @@ function signatureDate(value: unknown) {
 
 function signatureTime(value: unknown) {
   const millis = createdTime(value);
-  return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +0800` : "";
+  return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +08'00'` : "";
 }
 
 function AccomplishmentReportNotedSignatory({ report }: { report: Report }) {
@@ -253,8 +253,8 @@ function AccomplishmentReportNotedSignatory({ report }: { report: Report }) {
 function AccomplishmentReportNotedAffixes({ report }: { report: Report }) {
   if (!report.affixInitialSignatureURL && !report.affixChiefSignatureURL) return null;
   return <div className="ar-document-noted-affixes">
-    {report.affixInitialSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-initial"><img src={report.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${report.affixInitialSignatureName || "Project Leader"}`} /><div className="ar-document-noted-affix-details"><strong>Digitally Initialized: {(report.affixInitialSignatureName || "PROJECT LEADER").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixInitialSignatureAt)}</small><small>Time: {signatureTime(report.affixInitialSignatureAt)}</small></div></div>}
-    {report.affixChiefSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-full"><img src={report.affixChiefSignatureURL} crossOrigin="anonymous" alt={`Full signature of ${report.affixChiefSignatureName || "Field Operations Chief"}`} /><div className="ar-document-noted-affix-details"><strong>Digitally Signed: {(report.affixChiefSignatureName || "FIELD OPERATIONS CHIEF").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixChiefSignatureAt)}</small><small>Time: {signatureTime(report.affixChiefSignatureAt)}</small></div></div>}
+    {report.affixInitialSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-initial"><img src={report.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${report.affixInitialSignatureName || "Project Leader"}`} /><div className="ar-document-noted-affix-details"><span>Digitally signed by</span><strong>{(report.affixInitialSignatureName || "PROJECT LEADER").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixInitialSignatureAt)}</small><small>{signatureTime(report.affixInitialSignatureAt)}</small></div></div>}
+    {report.affixChiefSignatureURL && <div className="ar-document-noted-affix-row ar-document-noted-affix-row-full"><img src={report.affixChiefSignatureURL} crossOrigin="anonymous" alt={`Full signature of ${report.affixChiefSignatureName || "Field Operations Chief"}`} /><div className="ar-document-noted-affix-details"><span>Digitally signed by</span><strong>{(report.affixChiefSignatureName || "FIELD OPERATIONS CHIEF").toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixChiefSignatureAt)}</small><small>{signatureTime(report.affixChiefSignatureAt)}</small></div></div>}
   </div>;
 }
 
@@ -271,7 +271,7 @@ function AccomplishmentReportDocument({ report, pageRef }: { report: Report; pag
       <header className="ar-document-heading"><h1>ACCOMPLISHMENT REPORT</h1><p>{reportPeriod(report)}</p></header>
       <p className="ar-document-unit">{reportUnit(report.unit)}</p>
       <ol className="ar-document-activities">{report.activities.map((activity, index) => <li key={`${index}-${activity}`}>{activity}</li>)}</ol>
-      <section className={`ar-document-prepared${report.affixSignature === "Yes" && report.affixSignatureURL ? " has-affixed-signature" : ""}`}><p>Prepared:</p>{report.affixSignature === "Yes" && report.affixSignatureURL && <div className="ar-document-digital-signature"><img src={report.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${report.affixSignatureName || report.preparedName}`} /><div><span>Digitally Signed By</span><strong>{(report.affixSignatureName || report.preparedName).toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixSignatureAt)}</small><small>Time: {signatureTime(report.affixSignatureAt)}</small></div></div>}<div className="ar-document-prepared-name"><strong>{report.preparedName.toLocaleUpperCase("en-PH")}</strong><em>{report.preparedPosition}</em></div></section>
+      <section className={`ar-document-prepared${report.affixSignature === "Yes" && report.affixSignatureURL ? " has-affixed-signature" : ""}`}><p>Prepared:</p>{report.affixSignature === "Yes" && report.affixSignatureURL && <div className="ar-document-digital-signature"><img src={report.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${report.affixSignatureName || report.preparedName}`} /><div><span>Digitally signed by</span><strong>{(report.affixSignatureName || report.preparedName).toLocaleUpperCase("en-PH")}</strong><small>Date: {signatureDate(report.affixSignatureAt)}</small><small>{signatureTime(report.affixSignatureAt)}</small></div></div>}<div className="ar-document-prepared-name"><strong>{report.preparedName.toLocaleUpperCase("en-PH")}</strong><em>{report.preparedPosition}</em></div></section>
       <section className="ar-document-noted"><p>Noted:</p><div className="ar-document-noted-approval"><AccomplishmentReportNotedAffixes report={report} /><AccomplishmentReportNotedSignatory report={report} /></div></section>
     </div>
   </article>;

@@ -138,11 +138,20 @@
 
 .nta-signatory{position:relative}
 /* Keep signature overlays inside the existing signatory gap so they never change pagination. */
-.nta-signature-affixes{display:grid;gap:0;margin:0;position:static}
+.nta-signature-affixes{display:grid;gap:.2cqi;margin:0;position:static;width:100%}
 .nta-signature-affix{align-items:flex-start;display:flex;gap:.6cqi;min-width:0}
 .nta-signature-affixes img{display:block;height:3.4cqi;max-height:3.4cqi;max-width:24cqi;object-fit:contain;object-position:left bottom;width:auto}
-.nta-signature-affix-initial img{height:2.8cqi;max-height:2.8cqi;max-width:16.8cqi}
+.nta-signature-affix-initial{align-items:start;display:grid;gap:.45cqi;grid-template-columns:3.8cqi minmax(0,1fr);margin-left:16cqi}
+.nta-signature-affix-initial>img{align-self:start;grid-column:1;grid-row:1;height:4cqi;margin-top:calc(.814em + .4cqi);max-height:4cqi;max-width:none;object-fit:contain;object-position:left center;width:3.2cqi}
+.nta-signature-affix-full{align-items:start;display:grid;gap:.75cqi;grid-template-columns:max-content minmax(0,1fr);width:48cqi}
+.nta-signature-affix-full>img{grid-column:1;grid-row:1;height:calc(3.344em + 1.2cqi);justify-self:start;max-height:calc(3.344em + 1.2cqi);max-width:100%;object-fit:contain;object-position:left;width:auto}
 .nta-signature-details{display:grid;gap:.05cqi;justify-items:start;line-height:1.1;min-width:0}
+.nta-signature-affix-initial .nta-signature-details{gap:.4cqi;grid-column:2;grid-row:1}
+.nta-signature-affix-full .nta-signature-details{align-content:end;gap:.4cqi;grid-column:2;grid-row:1}
+.nta-document-content .nta-signature-affix-initial .nta-signature-details>span,.nta-document-content .nta-signature-affix-initial .nta-signature-details>small{font-size:.74em;line-height:1.1}
+.nta-document-content .nta-signature-affix-initial .nta-signature-details>strong{font-size:.82em;line-height:1.1;max-width:none;overflow-wrap:normal;text-transform:uppercase}
+.nta-document-content .nta-signature-affix-full .nta-signature-details>span,.nta-document-content .nta-signature-affix-full .nta-signature-details>small{font-size:.74em;line-height:1.1}
+.nta-document-content .nta-signature-affix-full .nta-signature-details>strong{font-size:.82em;line-height:1.1;max-width:none;overflow-wrap:normal;text-transform:uppercase}
 .nta-document-content .nta-signature-details strong{font-size:.95cqi;line-height:1.1;max-width:45cqi;overflow-wrap:anywhere;text-transform:none}
 .nta-document-content .nta-signature-details small{font-size:.9cqi;line-height:1.1;white-space:nowrap}
 .nta-individual-closing .nta-signatory-with-affixes,.nta-individual-closing-compact .nta-signatory-with-affixes,.nta-individual-closing-compact.nta-individual-closing-pulled .nta-signatory-with-affixes{margin-top:1lh}

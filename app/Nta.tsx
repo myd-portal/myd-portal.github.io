@@ -592,7 +592,7 @@ function ntaSignatureTime(value: unknown) {
     ? value.toDate() as Date
     : value instanceof Date ? value : typeof value === "string" || typeof value === "number" ? new Date(value) : null;
   if (!date || Number.isNaN(date.getTime())) return "";
-  return `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date)} +0800`;
+  return `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(date)} +08'00'`;
 }
 
 function NtaSignatureAffixes({ record }: { record: NtaRecord }) {
@@ -600,8 +600,8 @@ function NtaSignatureAffixes({ record }: { record: NtaRecord }) {
   const signed = record.affixSignature === "Yes";
   if (!initialized && !signed) return null;
   return <div className="nta-signature-affixes">
-    {initialized && record.affixInitialSignatureURL?.trim() && <div className="nta-signature-affix nta-signature-affix-initial"><img src={record.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${record.affixInitialSignatureName || "Project Leader"}`} /><div className="nta-signature-details"><strong>Digitally Initialized: {(record.affixInitialSignatureName || "PROJECT LEADER").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixInitialSignatureAt) || "—"}</small><small>Time: {ntaSignatureTime(record.affixInitialSignatureAt) || "—"}</small></div></div>}
-    {signed && record.affixSignatureURL?.trim() && <div className="nta-signature-affix"><img src={record.affixSignatureURL} crossOrigin="anonymous" alt={`Digital signature of ${record.affixSignatureName || record.signatoryName || "signatory"}`} /><div className="nta-signature-details"><strong>Digitally Signed: {(record.affixSignatureName || record.signatoryName || "CHIEF").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixSignatureAt) || "—"}</small><small>Time: {ntaSignatureTime(record.affixSignatureAt) || "—"}</small></div></div>}
+    {initialized && record.affixInitialSignatureURL?.trim() && <div className="nta-signature-affix nta-signature-affix-initial"><img src={record.affixInitialSignatureURL} crossOrigin="anonymous" alt={`Initial signature of ${record.affixInitialSignatureName || "Project Leader"}`} /><div className="nta-signature-details"><span>Digitally signed by</span><strong>{(record.affixInitialSignatureName || "PROJECT LEADER").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixInitialSignatureAt) || "—"}</small><small>{ntaSignatureTime(record.affixInitialSignatureAt) || "—"}</small></div></div>}
+    {signed && record.affixSignatureURL?.trim() && <div className="nta-signature-affix nta-signature-affix-full"><img src={record.affixSignatureURL} crossOrigin="anonymous" alt={`Full signature of ${record.affixSignatureName || record.signatoryName || "signatory"}`} /><div className="nta-signature-details"><span>Digitally signed by</span><strong>{(record.affixSignatureName || record.signatoryName || "CHIEF").trim().toLocaleUpperCase("en-PH")}</strong><small>Date: {ntaSignatureDate(record.affixSignatureAt) || "—"}</small><small>{ntaSignatureTime(record.affixSignatureAt) || "—"}</small></div></div>}
   </div>;
 }
 

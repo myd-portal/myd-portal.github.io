@@ -321,6 +321,10 @@ function signatureTime(value: unknown) {
   return `${time} +0800`;
 }
 
+function permitSignatureTime(value: unknown) {
+  return signatureTime(value).replace(" +0800", " +08'00'");
+}
+
 function Login({ onError }: { onError: (message: string) => void }) {
   const [registering, setRegistering] = useState(false);
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
@@ -1112,6 +1116,7 @@ function permitFooterSignatory(ownerOffice: string, ownerDivision: string, owner
 function PermitCard({ permit, name, permitNo, decisionKey, approvedPermitNumbers, ownerOffice, ownerAssignment, adminSignatories }: { permit: Permit; name: string; permitNo: string; decisionKey: string; approvedPermitNumbers: Record<string, string>; ownerOffice: string; ownerAssignment: string; adminSignatories: PermitAdminSignatory[] }) {
   const decision = permit.personStatuses?.[decisionKey];
   const decisionTime = signatureTime(decision?.decidedAt);
+  const permitDecisionTime = permitSignatureTime(decision?.decidedAt);
   const isApproved = normalizeWorkflowStatus(decision?.status) === "Approved";
   const displayNumber = isApproved ? (decision?.approvedPermitNo ?? approvedPermitNumbers[displayPermitNumber(permitNo)] ?? displayPermitNumber(permitNo)) || "—" : "Pending";
   const permitOwnerOffice = permit.ownerOffice ?? ownerOffice;
@@ -1239,7 +1244,7 @@ function PermitCard({ permit, name, permitNo, decisionKey, approvedPermitNumbers
 
     <div className="permit-approval">
       <div className="permit-approved-label">Approved:</div>
-      {isApproved && <div className="permit-digital-signature">{signerSignatureURL && <img src={signerSignatureURL} alt="Permit Slip approver full signature" />}<div><span>Digitally Signed By</span><strong>{decision?.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision?.decidedAt)}</span><span>Time: {decisionTime}</span></div></div>}
+      {isApproved && <div className={`permit-digital-signature${signerSignatureURL ? " has-signature-image" : ""}`}>{signerSignatureURL && <img src={signerSignatureURL} alt="Permit Slip approver full signature" />}<div><span>Digitally signed by</span><strong>{decision?.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</strong><span>Date: {signatureDate(decision?.decidedAt)}</span><span>{permitDecisionTime}</span></div></div>}
       {decision?.status === "Disapproved" && <div className="permit-disapproved-stamp"><strong>Disapproved</strong><span>By {decision.signerName?.trim().toLocaleUpperCase("en") || "ADMIN"}</span><span>Date: {signatureDate(decision.decidedAt)}</span><span>Time: {decisionTime}</span></div>}
       <div className="permit-approved-name">{signatory?.name.toLocaleUpperCase("en") || (requiresConfiguredSignatory ? "" : "GERLIE B. ANTIPASO")}</div>
       {signatory?.kind === "fod"
