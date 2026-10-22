@@ -12,6 +12,7 @@ import "./document-notification-admin.css";
 type DocumentNotificationRow = {
   id: string;
   documentType?: string;
+  read: boolean;
   createdAt?: unknown;
   searchText?: string;
 };
@@ -63,6 +64,7 @@ export default function DocumentNotificationAdmin() {
         return {
           id: item.id,
           documentType: typeof data.documentType === "string" ? data.documentType : "Unknown",
+          read: data.read === true,
           createdAt: data.createdAt,
           searchText: searchableAdminText(data),
         };
@@ -78,7 +80,7 @@ export default function DocumentNotificationAdmin() {
   }, []);
 
   async function deleteNotification() {
-    if (!db || !pendingDelete || busyId) return;
+    if (!db || !pendingDelete || !pendingDelete.read || busyId) return;
     setBusyId(pendingDelete.id);
     setError("");
     setMessage("");
@@ -113,11 +115,12 @@ export default function DocumentNotificationAdmin() {
       {filteredNotifications.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No matching document notifications</h3><p>Try another document type, name, date, or detail.</p></div> : <>
       <div className="document-notification-admin-table-wrap">
         <table className="document-notification-admin-table">
-          <thead><tr><th>Document Type</th><th>Created At</th><th>Action</th></tr></thead>
+          <thead><tr><th>Document Type</th><th>Created At</th><th>Response</th><th>Action</th></tr></thead>
           <tbody>{visibleRecords.map((notification) => <tr key={notification.id}>
             <td data-label="Document Type">{notification.documentType || "Unknown"}</td>
             <td data-label="Created At">{formatCreatedAt(notification.createdAt)}</td>
-            <td data-label="Action"><button type="button" className="document-notification-admin-delete" disabled={Boolean(busyId)} onClick={() => setPendingDelete(notification)}>Delete</button></td>
+            <td data-label="Response"><span className={`document-notification-admin-response${notification.read ? " is-read" : " is-unread"}`}>{notification.read ? "Read" : "Unread"}</span></td>
+            <td data-label="Action"><button type="button" className="document-notification-admin-delete" disabled={Boolean(busyId) || !notification.read} onClick={() => setPendingDelete(notification)}>Delete</button></td>
           </tr>)}</tbody>
         </table>
       </div>

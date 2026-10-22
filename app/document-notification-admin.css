@@ -62,17 +62,40 @@
 
 .document-notification-admin-table th:nth-child(1),
 .document-notification-admin-table td:nth-child(1) {
-  width: 48%;
+  width: 40%;
 }
 
 .document-notification-admin-table th:nth-child(2),
 .document-notification-admin-table td:nth-child(2) {
-  width: 32%;
+  width: 28%;
 }
 
 .document-notification-admin-table th:nth-child(3),
 .document-notification-admin-table td:nth-child(3) {
-  width: 20%;
+  width: 16%;
+}
+
+.document-notification-admin-table th:nth-child(4),
+.document-notification-admin-table td:nth-child(4) {
+  width: 16%;
+}
+
+.document-notification-admin-response {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+
+.document-notification-admin-response.is-read {
+  background: #edf7f0;
+  color: #26633b;
+}
+
+.document-notification-admin-response.is-unread {
+  background: #fff5e8;
+  color: #8a5614;
 }
 
 .document-notification-admin-delete {
@@ -94,8 +117,8 @@
 }
 
 .document-notification-admin-delete:disabled {
-  cursor: wait;
-  opacity: 0.65;
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 @media (max-width: 720px) {
@@ -144,7 +167,7 @@
     text-transform: uppercase;
   }
 
-  .document-notification-admin-table td:nth-child(3) {
+  .document-notification-admin-table td:nth-child(4) {
     grid-column: 1 / -1;
   }
 }
