@@ -1193,16 +1193,7 @@ service cloud.firestore {
       }
     }
     match /calendarOfActivities/{calendarId} {
-      allow read: if isVerifiedUser()
-        && (resource.data.ownerId == request.auth.uid
-          || resource.data.unit == signedInUnit()
-          || (resource.data.get("initialSignerId", "") == request.auth.uid
-            && isFodCalendarApproverAccount(request.auth.uid, "AGRISTAT/DRRM/AMIA Project Leader"))
-          || (resource.data.get("chiefSignerId", "") == request.auth.uid
-            && isFodCalendarApproverAccount(request.auth.uid, "Chief"))
-          || resource.data.status == "Approved"
-          || isPermitAdmin()
-          || isCalendarOwnerOrSameUnit(calendarId));
+      allow read: if isSuperAdmin() || isVerifiedUser();
       allow create: if isVerifiedUser()
         && request.resource.data.keys().size() <= 18
         && request.resource.data.ownerId == request.auth.uid
@@ -1677,11 +1668,7 @@ service cloud.firestore {
         && !existsAfter(/databases/$(database)/documents/permits/$(resource.data.permitId)));
     }
     match /specialOrders/{orderId} {
-      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
-        || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])
-        || resource.data.get("approvalStage", "") == "approved"
-        || resource.data.get("affixSignature", "") == "Yes"))
+      allow read: if isSuperAdmin() || isVerifiedUser()
         || isFodSoInitialSigner(resource.data)
         || isFodSoChiefSigner(resource.data);
       allow create: if (request.resource.data.get("approvalWorkflow", "") == "fod"
@@ -2121,11 +2108,7 @@ service cloud.firestore {
         && !existsAfter(/databases/$(database)/documents/travelOrders/$(resource.data.travelOrderId)));
     }
     match /ntaRecords/{ntaId} {
-      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
-        || (resource.data.ownerUnit is string && resource.data.ownerUnit == signedInUnit())
-        || request.auth.uid in resource.data.get("recipientIds", [])
-        || resource.data.get("approvalStage", "") == "approved"
-        || resource.data.get("affixSignature", "") == "Yes"))
+      allow read: if isSuperAdmin() || isVerifiedUser()
         || isFodSoInitialSigner(resource.data)
         || isFodSoChiefSigner(resource.data);
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid

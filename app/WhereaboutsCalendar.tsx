@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { collection, doc, getDocs, onSnapshot, or, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import type { AccountRole } from "@/lib/user-roles";
@@ -483,7 +483,7 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       if (active) setError(code ? `Could not load Travel Orders (${code}).` : "Could not load Travel Orders. Refresh and try again.");
       finishInitialLoad("travel");
     });
-    const unsubscribeCalendarsOfActivities = onSnapshot(query(collection(firestore, calendarOfActivitiesCollection), where("status", "==", "Approved")), (snapshot) => {
+    const unsubscribeCalendarsOfActivities = onSnapshot(collection(firestore, calendarOfActivitiesCollection), (snapshot) => {
       const approved = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ApprovedCalendarOfActivities))
         .filter((plan) => plan.month && Array.isArray(plan.activities));
       if (active) setCalendarsOfActivities(approved);
@@ -491,22 +491,22 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load Calendar of Activities (${code}).` : "Could not load Calendar of Activities. Refresh and try again.");
     });
-    const unsubscribeApprovedSpecialOrders = onSnapshot(query(collection(firestore, "specialOrders"), or(where("approvalStage", "==", "approved"), where("affixSignature", "==", "Yes"))), (snapshot) => {
+    const unsubscribeApprovedSpecialOrders = onSnapshot(collection(firestore, "specialOrders"), (snapshot) => {
       const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
       if (active) setApprovedSpecialOrders(records);
       finishArchiveLoad("special-orders");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
-      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load approved Special Orders (${code}).` : "Could not load approved Special Orders."));
+      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load Special Orders (${code}).` : "Could not load Special Orders."));
       finishArchiveLoad("special-orders");
     });
-    const unsubscribeApprovedNtas = onSnapshot(query(collection(firestore, "ntaRecords"), or(where("approvalStage", "==", "approved"), where("affixSignature", "==", "Yes"))), (snapshot) => {
+    const unsubscribeApprovedNtas = onSnapshot(collection(firestore, "ntaRecords"), (snapshot) => {
       const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
       if (active) setApprovedNtas(records);
       finishArchiveLoad("ntas");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
-      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load approved Notices to Attend (${code}).` : "Could not load approved Notices to Attend."));
+      if (active) setApprovedArchiveError((current) => current || (code ? `Could not load Notices to Attend (${code}).` : "Could not load Notices to Attend."));
       finishArchiveLoad("ntas");
     });
     const unsubscribePermits = onSnapshot(collection(firestore, "approvedPermitCalendar"), (snapshot) => {
@@ -928,14 +928,14 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         {leavePageCount > 1 && <nav className="whereabouts-pagination" aria-label="Approved Leave Applications pages"><button type="button" onClick={() => setLeavePage((page) => Math.max(0, page - 1))} disabled={currentLeavePage === 0}>Previous</button><span aria-live="polite">Page {currentLeavePage + 1} of {leavePageCount}</span><button type="button" onClick={() => setLeavePage((page) => Math.min(leavePageCount - 1, page + 1))} disabled={currentLeavePage >= leavePageCount - 1}>Next</button></nav>}
       </section>}
     </section>
-    <section className="whereabouts-approved-archive" aria-label="Approved SO, NTA, Calendar of Activities">
-      <header className="whereabouts-summary-heading"><div><p className="eyebrow">Public records</p><h2>Approved SO, NTA, Calendar of Activities</h2></div></header>
+    <section className="whereabouts-approved-archive" aria-label="SO, NTA, Calendar of Activities">
+      <header className="whereabouts-summary-heading"><div><p className="eyebrow">Public records</p><h2>SO, NTA, Calendar of Activities</h2></div></header>
       <div className="whereabouts-summary-filters whereabouts-approved-archive-filters">
         <label>Approved Document<select value={approvedArchiveFilter} onChange={(event) => { setApprovedArchiveFilter(event.target.value as "all" | "so" | "nta" | "calendar"); setApprovedArchivePage(0); }}><option value="all">All</option><option value="so">SO</option><option value="nta">NTA</option><option value="calendar">Calendar of Activities</option></select></label>
         <label>Name Search<input type="search" value={approvedArchiveSearch} onChange={(event) => { setApprovedArchiveSearch(event.target.value); setApprovedArchivePage(0); }} placeholder="Search by Name" /></label>
       </div>
-      <section className="whereabouts-summary-table-section" aria-label="Approved document records">
-        <div className="whereabouts-summary-table-heading"><h3>Approved Documents</h3><span>{filteredApprovedArchiveRows.length === 0 ? "0 records" : `${currentApprovedArchivePage * 5 + 1}–${Math.min(currentApprovedArchivePage * 5 + visibleApprovedArchiveRows.length, filteredApprovedArchiveRows.length)} of ${filteredApprovedArchiveRows.length}`}</span></div>
+      <section className="whereabouts-summary-table-section" aria-label="Document records">
+        <div className="whereabouts-summary-table-heading"><h3>Documents</h3><span>{filteredApprovedArchiveRows.length === 0 ? "0 records" : `${currentApprovedArchivePage * 5 + 1}–${Math.min(currentApprovedArchivePage * 5 + visibleApprovedArchiveRows.length, filteredApprovedArchiveRows.length)} of ${filteredApprovedArchiveRows.length}`}</span></div>
         {approvedArchiveError && <div className="error-message whereabouts-error" role="status">{approvedArchiveError}</div>}
         <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table whereabouts-approved-archive-table"><thead><tr><th>Document Type</th><th>Activity Title</th><th>Designated Personnel</th><th>Date</th><th>Venue</th><th>View</th></tr></thead><tbody>
           {visibleApprovedArchiveRows.map((row) => <tr key={row.key}>
@@ -946,10 +946,10 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
             <td>{row.venue || "—"}</td>
             <td><button type="button" className="whereabouts-archive-view" disabled={!onViewApprovedDocument} onClick={() => onViewApprovedDocument?.({ id: row.record.id, type: row.type, data: row.record.data, readOnly: true })}>View</button></td>
           </tr>)}
-          {approvedArchiveLoading && <tr><td className="whereabouts-summary-empty" colSpan={6}>Loading approved documents…</td></tr>}
-          {!approvedArchiveLoading && visibleApprovedArchiveRows.length === 0 && <tr><td className="whereabouts-summary-empty" colSpan={6}>No approved documents match this filter.</td></tr>}
+          {approvedArchiveLoading && <tr><td className="whereabouts-summary-empty" colSpan={6}>Loading documents…</td></tr>}
+          {!approvedArchiveLoading && visibleApprovedArchiveRows.length === 0 && <tr><td className="whereabouts-summary-empty" colSpan={6}>No documents match this filter.</td></tr>}
         </tbody></table></div>
-        {approvedArchivePageCount > 1 && <nav className="whereabouts-pagination" aria-label="Approved document pages"><button type="button" onClick={() => setApprovedArchivePage((page) => Math.max(0, page - 1))} disabled={currentApprovedArchivePage === 0}>Previous</button><span aria-live="polite">Page {currentApprovedArchivePage + 1} of {approvedArchivePageCount}</span><button type="button" onClick={() => setApprovedArchivePage((page) => Math.min(approvedArchivePageCount - 1, page + 1))} disabled={currentApprovedArchivePage >= approvedArchivePageCount - 1}>Next</button></nav>}
+        {approvedArchivePageCount > 1 && <nav className="whereabouts-pagination" aria-label="Document pages"><button type="button" onClick={() => setApprovedArchivePage((page) => Math.max(0, page - 1))} disabled={currentApprovedArchivePage === 0}>Previous</button><span aria-live="polite">Page {currentApprovedArchivePage + 1} of {approvedArchivePageCount}</span><button type="button" onClick={() => setApprovedArchivePage((page) => Math.min(approvedArchivePageCount - 1, page + 1))} disabled={currentApprovedArchivePage >= approvedArchivePageCount - 1}>Next</button></nav>}
       </section>
     </section>
   </section>;
