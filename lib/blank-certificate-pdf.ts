@@ -303,10 +303,12 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
   }
 
   const signatureAsset = fieldOperationsAppearanceApprovalSignatureAsset(record);
-  if (signatureAsset) {
-    const signatureResponse = await fetch(publicAsset(`/${signatureAsset}`));
-    if (!signatureResponse.ok) throw new Error("The Certificate of Appearance signatory signature could not be loaded.");
+  const signatureURL = record.signerSignatureURL?.trim();
+  if (signatureAsset && signatureURL) {
+    const signatureResponse = await fetch(signatureURL);
+    if (!signatureResponse.ok) throw new Error("The administrator's Full Signature could not be loaded.");
     const signatureImage = await pdf.embedPng(await signatureResponse.arrayBuffer());
+    const signatureDimensions = signatureImage.scaleToFit(102, 51);
     const [regularFont, boldFont] = await Promise.all([pdf.embedFont("Helvetica"), pdf.embedFont("Helvetica-Bold")]);
     const approvedAt = approvalDate(record.decidedAt);
     const dateParts = approvedAt
@@ -327,8 +329,13 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
       page.drawText(text, { x: metadataRight - font.widthOfTextAtSize(text, size), y, size, font });
     };
     for (const y of [480, 66.5]) {
-      page.drawImage(signatureImage, { x: 360.5, y: y + 38, width: 102, height: 51 });
-      drawRightAlignedText("Digitally Signed By", y + 72, metadataSize, regularFont);
+      page.drawImage(signatureImage, {
+        x: 360.5 + (102 - signatureDimensions.width) / 2,
+        y: y + 38 + (51 - signatureDimensions.height) / 2,
+        width: signatureDimensions.width,
+        height: signatureDimensions.height,
+      });
+      drawRightAlignedText("Digitally signed by", y + 72, metadataSize, regularFont);
       drawRightAlignedText(signerName, y + 64, fittedSignerNameSize, boldFont);
       if (approvalDateText) drawRightAlignedText(`Date: ${approvalDateText}`, y + 56, metadataSize, regularFont);
       if (approvalTime) drawRightAlignedText(`Time: ${approvalTime}`, y + 48, metadataSize, regularFont);

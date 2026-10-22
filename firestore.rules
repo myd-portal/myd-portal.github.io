@@ -552,6 +552,25 @@ service cloud.firestore {
     function canReadAppearanceCertificate(data) {
       return canReviewAppearanceCertificate(data);
     }
+    function isValidFodAppearanceFullSignature(profile, data, decision, newStatus) {
+      let signerSignatureURL = decision.get("signerSignatureURL", "");
+      let signerDesignation = decision.get("signerDesignation", "");
+      return newStatus == "Approved"
+        && decision.get("signerOffice", "") == "Division"
+        && signerSignatureURL is string
+        && signerSignatureURL.size() > 0
+        && signerSignatureURL.size() <= 2048
+        && signerSignatureURL == profile.get("fullSignatureURL", "")
+        && data.get("recordType", "appearance") in ["appearance", "blank"]
+        && isFodAppearanceOwnerRecord(data)
+        && ((certificateScopeUnit(data) in ["4K", "APCO - ADN", "APCO - ADS", "APCO - SDN", "APCO - SDS", "APCO - PDI", "CFIDP", "Corn Program", "ELCAC", "Extension and Partnership", "F2C2", "Field Operations Division", "Gender and Development", "Halal Projects", "HVCD Program", "IPM", "Livestock Program", "NUPA Program", "Organic Agriculture Program", "Rice Program", "RSBSA", "SAAD", "Soybean Program"]
+            && isFodAppearanceApproverProfile(profile, "Chief")
+            && signerDesignation == "Chief")
+          || (certificateScopeUnit(data) in ["AGRISTAT", "AMIA", "DRRM"]
+            && isFodAppearanceApproverProfile(profile, "AGRISTAT/DRRM/AMIA Project Leader")
+            && data.get("signatoryAdminId", request.auth.uid) == request.auth.uid
+            && signerDesignation == "AGRISTAT/DRRM/AMIA Project Leader"));
+    }
     function isValidFodProjectLeaderBlankAppearanceCreate(data) {
       return request.auth != null
         && isVerifiedUser()
@@ -647,10 +666,11 @@ service cloud.firestore {
       let oldStatus = resource.data.get("status", "Pending");
       let newStatus = request.resource.data.get("status", "");
       let signatureAsset = request.resource.data.get("signatureAsset", "");
+      let signerSignatureURL = request.resource.data.get("signerSignatureURL", "");
       // Every call site first authorizes the reviewer through canReviewAppearanceCertificate or canReviewUnitCertificate.
       return oldStatus != "Approved"
         && newStatus in ["Approved", "Disapproved"]
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "decidedAt", "decidedBy", "signerName", "signerPosition", "signerDesignation", "signerOffice", "signatureAsset"])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "decidedAt", "decidedBy", "signerName", "signerPosition", "signerDesignation", "signerOffice", "signatureAsset", "signerSignatureURL"])
         && request.resource.data.diff(resource.data).affectedKeys().hasAny(["status"])
         && request.resource.data.decidedAt is timestamp
         && request.resource.data.decidedBy == request.auth.uid
@@ -658,6 +678,7 @@ service cloud.firestore {
         && request.resource.data.signerPosition == profile.get("position", "")
         && request.resource.data.signerDesignation == profile.get("designation", "")
         && request.resource.data.signerOffice == profileOffice(profile)
+        && (signerSignatureURL == "" || (allowAppearanceSignature && isValidFodAppearanceFullSignature(profile, resource.data, request.resource.data, newStatus)))
         && (signatureAsset == "" || (allowAppearanceSignature
           && resource.data.get("recordType", "appearance") in ["appearance", "blank"]
           && newStatus == "Approved"

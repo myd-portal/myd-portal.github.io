@@ -14,6 +14,7 @@ export type CertificateWorkflowFields = {
   signerDesignation?: string;
   signerOffice?: string;
   signatureAsset?: string;
+  signerSignatureURL?: string;
   ownerRole?: string;
   ownerOffice?: string;
   ownerDivision?: string;
@@ -81,8 +82,6 @@ export function CertificateDisapprovalStamp({ record }: { record: CertificateWor
   </div>;
 }
 
-const publicAsset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
-
 export function fieldOperationsAppearanceApprovalSignatureAsset(record: CertificateWorkflowFields) {
   if (certificateWorkflowStatus(record.status) !== "Approved"
     || (record.ownerRole !== "regular" && record.ownerRole !== "user")) return "";
@@ -137,7 +136,8 @@ export function appearanceCertificateSignatory(record: CertificateWorkflowFields
 
 export function CertificateApprovalSignature({ record }: { record: CertificateWorkflowFields }) {
   const signatureAsset = fieldOperationsAppearanceApprovalSignatureAsset(record);
-  if (!signatureAsset) return null;
+  const signatureURL = record.signerSignatureURL?.trim();
+  if (!signatureAsset || !signatureURL) return null;
   const approvedAt = toDate(record.decidedAt);
   const dateParts = approvedAt
     ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(approvedAt)
@@ -149,9 +149,9 @@ export function CertificateApprovalSignature({ record }: { record: CertificateWo
     : "";
   const signerName = (record.signerName?.trim() || record.signerDesignation || "Field Operations Division").toLocaleUpperCase("en");
   return <div className="certificate-approved-signature" aria-label={`Digitally signed by ${signerName}${approvalDate ? ` on ${approvalDate}` : ""}`}>
-    <img src={publicAsset(`/${signatureAsset}`)} alt="" />
+    <img src={signatureURL} crossOrigin="anonymous" alt={`Full signature of ${signerName}`} />
     <div className="certificate-approved-signature-meta">
-      <span>Digitally Signed By</span>
+      <span>Digitally signed by</span>
       <strong>{signerName}</strong>
       {approvalDate && <small>Date: {approvalDate}</small>}
       {approvalTime && <small>Time: {approvalTime}</small>}

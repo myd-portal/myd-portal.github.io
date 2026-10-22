@@ -376,21 +376,28 @@ export default function CertificateApproval({ user, role, office, division, unit
             } : {}),
           };
         }).sort((left, right) => (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0));
-        setRecords(enrichedRecords);
-        if (isFodProjectLeaderAdmin) {
-          enrichedRecords.forEach((record) => {
-            const signatureAsset = fieldOperationsAppearanceApprovalSignatureAsset(record);
-            if (record.collectionName === "certificatesOfAppearance"
-              && certificateWorkflowStatus(record.status) === "Approved"
-              && !record.signatureAsset
-              && record.decidedBy === user.uid
-              && signatureAsset === "agristat_and_drrm_focal_persons_amia_project_leader.png") {
-              void updateDoc(doc(firestore, record.collectionName, record.id), { signatureAsset }).catch(() => {
-                // The preview still resolves the assigned image if a legacy record cannot be repaired.
-              });
-            }
-          });
-        }
+        const signerProfileSignatures = new Map<string, Promise<string>>();
+        const recordsWithSignatures = await Promise.all(enrichedRecords.map(async (record) => {
+          const decidedBy = record.decidedBy?.trim();
+          if (record.collectionName !== "certificatesOfAppearance"
+            || certificateWorkflowStatus(record.status) !== "Approved"
+            || record.signerSignatureURL?.trim()
+            || !decidedBy
+            || !fieldOperationsAppearanceApprovalSignatureAsset(record)) return record;
+          let signaturePromise = signerProfileSignatures.get(decidedBy);
+          if (!signaturePromise) {
+            signaturePromise = getDoc(doc(firestore, "users", decidedBy))
+              .then((profileSnapshot) => {
+                const signatureURL = profileSnapshot.data()?.fullSignatureURL;
+                return typeof signatureURL === "string" ? signatureURL.trim() : "";
+              })
+              .catch(() => "");
+            signerProfileSignatures.set(decidedBy, signaturePromise);
+          }
+          const signatureURL = await signaturePromise;
+          return signatureURL ? { ...record, signerSignatureURL: signatureURL } : record;
+        }));
+        setRecords(recordsWithSignatures);
       } catch (cause) {
         if (!active) return;
         const code = (cause as { code?: string }).code;
@@ -455,6 +462,12 @@ export default function CertificateApproval({ user, role, office, division, unit
       && signerMatchesAppearanceRoute
       && (ownerSignatory?.designation !== "AGRISTAT/DRRM/AMIA Project Leader" || signerMatchesAssignedProjectLeader)
       && status === "Approved";
+    const signerSignatureURL = typeof signerProfile.fullSignatureURL === "string" ? signerProfile.fullSignatureURL.trim() : "";
+    if (useAppearanceSignature && !signerSignatureURL) {
+      setError("Upload your Full Signature in Profile before approving this Certificate of Appearance.");
+      setSavingKey(null);
+      return;
+    }
     const decision = {
       status,
       decidedAt: serverTimestamp(),
@@ -463,7 +476,7 @@ export default function CertificateApproval({ user, role, office, division, unit
       signerPosition,
       signerDesignation,
       signerOffice,
-      signatureAsset: useAppearanceSignature ? ownerSignatory?.signatureAsset ?? "" : "",
+      signerSignatureURL: useAppearanceSignature ? signerSignatureURL : "",
     };
     try {
       const certificateRef = doc(db, record.collectionName, record.id);
@@ -482,27 +495,8 @@ export default function CertificateApproval({ user, role, office, division, unit
           destination: record.destination || record.eventDestination || "",
         });
       }
-      let appliedDecision = decision;
-      let signatureSkipped = false;
-      try {
-        await updateDoc(certificateRef, decision);
-      } catch (cause) {
-        const code = (cause as { code?: string }).code;
-        if (!decision.signatureAsset || code !== "permission-denied") throw cause;
-        appliedDecision = { ...decision, signatureAsset: "" };
-        await updateDoc(certificateRef, appliedDecision);
-        signatureSkipped = true;
-      }
-      if (signatureSkipped && decision.signatureAsset === "agristat_and_drrm_focal_persons_amia_project_leader.png") {
-        try {
-          await updateDoc(certificateRef, { signatureAsset: decision.signatureAsset });
-          appliedDecision = { ...appliedDecision, signatureAsset: decision.signatureAsset };
-          signatureSkipped = false;
-        } catch {
-          // The certificate preview resolves the approved signatory image from its scope if this repair is denied.
-        }
-      }
-      setRecords((current) => current.map((item) => item.id === record.id && item.collectionName === record.collectionName ? { ...item, ...appliedDecision, decidedAt: new Date() } : item));
+      await updateDoc(certificateRef, decision);
+      setRecords((current) => current.map((item) => item.id === record.id && item.collectionName === record.collectionName ? { ...item, ...decision, decidedAt: new Date() } : item));
       let notificationSent = false;
       if (decisionNotification) {
         try {
@@ -514,7 +508,7 @@ export default function CertificateApproval({ user, role, office, division, unit
       }
       setMessage(record.certificateType === "Appearance" && status === "Approved"
         ? "Appearance certificate approved."
-        : `${record.certificateType} certificate ${status.toLowerCase()}${signatureSkipped ? "; the approved signatory image will appear in the certificate preview" : ""}${notificationSent ? "; the owner was notified." : decisionNotification ? "; the owner notification could not be sent." : "."}`);
+        : `${record.certificateType} certificate ${status.toLowerCase()}${notificationSent ? "; the owner was notified." : decisionNotification ? "; the owner notification could not be sent." : "."}`);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       if (code === "permission-denied") {
@@ -555,7 +549,6 @@ export default function CertificateApproval({ user, role, office, division, unit
           ownerSignatory,
           signerMatchesAppearanceRoute,
           useAppearanceSignature,
-          signatureAsset: decision.signatureAsset,
         };
         const diagnosticText = JSON.stringify(diagnostic, null, 2);
         setApprovalDiagnostic(diagnosticText);

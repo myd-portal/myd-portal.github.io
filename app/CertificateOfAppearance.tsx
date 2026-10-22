@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import { db } from "@/lib/firebase";
@@ -12,7 +12,7 @@ import { makeBlankCertificatePdf as createBlankCertificatePdf } from "@/lib/blan
 import { isSuperadminRole, normalizeAccountStatus, type AccountRole } from "@/lib/user-roles";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { divisionSignatory, isTevDivision, tevDivisions, type TevDivision } from "@/lib/mytev";
-import { appearanceCertificateSignatory, CertificateApprovalSignature, CertificateDisapprovalStamp, CertificateStatusBadge, certificateWorkflowStatus, hasFieldOperationsAppearanceApprovalSignature, type CertificateWorkflowFields } from "./CertificateWorkflow";
+import { appearanceCertificateSignatory, CertificateApprovalSignature, CertificateDisapprovalStamp, CertificateStatusBadge, certificateWorkflowStatus, fieldOperationsAppearanceApprovalSignatureAsset, hasFieldOperationsAppearanceApprovalSignature, type CertificateWorkflowFields } from "./CertificateWorkflow";
 import DeleteConfirmation from "./DeleteConfirmation";
 import "./certificate-of-appearance.css";
 import "./certificate-workflow.css";
@@ -270,9 +270,29 @@ export default function CertificateOfAppearance({ user, ownerOffice, ownerDivisi
             signatoryAdminId: assigned.id,
           };
         }));
+        const signerProfileSignatures = new Map<string, Promise<string>>();
+        const recordsWithSignatures = await Promise.all(enriched.map(async (record) => {
+          const decidedBy = record.decidedBy?.trim();
+          if (record.signerSignatureURL?.trim()
+            || !decidedBy
+            || !db
+            || !fieldOperationsAppearanceApprovalSignatureAsset(record)) return record;
+          let signaturePromise = signerProfileSignatures.get(decidedBy);
+          if (!signaturePromise) {
+            signaturePromise = getDoc(doc(db, "users", decidedBy))
+              .then((profileSnapshot) => {
+                const signatureURL = profileSnapshot.data()?.fullSignatureURL;
+                return typeof signatureURL === "string" ? signatureURL.trim() : "";
+              })
+              .catch(() => "");
+            signerProfileSignatures.set(decidedBy, signaturePromise);
+          }
+          const signatureURL = await signaturePromise;
+          return signatureURL ? { ...record, signerSignatureURL: signatureURL } : record;
+        }));
         if (!active) return;
-        enriched.sort((first, second) => (second.createdAt?.toMillis?.() ?? 0) - (first.createdAt?.toMillis?.() ?? 0));
-        setRecords(enriched);
+        recordsWithSignatures.sort((first, second) => (second.createdAt?.toMillis?.() ?? 0) - (first.createdAt?.toMillis?.() ?? 0));
+        setRecords(recordsWithSignatures);
       })
       .catch((cause) => {
         if (!active) return;
