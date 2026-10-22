@@ -245,8 +245,6 @@
 .nav-dropdown-item:hover,.nav-dropdown-item.active{background:var(--mint);color:var(--ink)}
 .nav-dropdown-divider{border-top:1px solid var(--line);margin:4px 7px 2px}
 .nav-dropdown-label{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.06em;padding:5px 12px 2px;text-transform:uppercase}
-.certificate-nav-button{white-space:nowrap}
-@media(max-width:720px){.certificate-nav-button{min-height:42px;padding-left:9px;padding-right:9px}.certificate-nav-menu{left:auto;min-width:0;right:0;width:min(280px,calc(100vw - 24px))}.certificate-nav-menu .nav-dropdown-item{min-height:42px;white-space:normal;overflow-wrap:anywhere}}
 .special-order-signatory strong{text-transform:uppercase}.special-order-signatory span{font-style:normal}
 .dashboard-header h1 .dashboard-greeting-name{color:var(--accent)}
 .profile-menu{position:relative}
