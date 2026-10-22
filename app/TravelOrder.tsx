@@ -47,6 +47,11 @@ type TravelOrder = {
   createdAt?: unknown;
 };
 
+function mergeSavedTravelOrders(current: TravelOrder[], savedOrders: TravelOrder[], replacedOrderId?: string) {
+  const savedById = new Map(savedOrders.map((order) => [order.id, order]));
+  return [...savedById.values(), ...current.filter((order) => order.id !== replacedOrderId && !savedById.has(order.id))];
+}
+
 const officeStations = ["DA-RFO XIII", "DA-ILD Caraga"] as const;
 const chargeOptions = ["FOD-AGRISTAT", "FOD-AMIA", "FOD-DRRM"];
 const travelTransportationOptions = ["Boat", "MCH", "Plane", "PUB", "PUV", "RP"] as const;
@@ -869,7 +874,7 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
 
   return <>
     {error && <div className="error-message travel-order-error">{error}</div>}
-    {editingOrder ? <TravelOrderForm key={editingOrder.id} user={user} office={office} unit={unit} initialOrder={editingOrder} onSaved={(savedOrders, replacedOrderId) => { setOrders((current) => [...savedOrders, ...current.filter((order) => order.id !== replacedOrderId)]); setEditingOrder(null); }} onCancel={() => setEditingOrder(null)} onError={setError} /> : view === "new" ? <TravelOrderForm user={user} office={office} unit={unit} onSaved={(savedOrders) => { setOrders((current) => [...savedOrders, ...current]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : loading ? <section className="content-section"><p className="muted">Loading Travel Orders...</p></section> : <TravelOrderList orders={orders} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} onNew={() => { setError(""); setView("new"); }} onEdit={(order) => { setError(""); setEditingOrder(order); }} onPreview={setPreview} onCopy={(order) => void copyOrder(order)} onDelete={setPendingDelete} onStatusChange={changeStatus} updatingId={updatingId} deletingId={deletingId} copyingId={copyingId} />}
+    {editingOrder ? <TravelOrderForm key={editingOrder.id} user={user} office={office} unit={unit} initialOrder={editingOrder} onSaved={(savedOrders, replacedOrderId) => { setOrders((current) => mergeSavedTravelOrders(current, savedOrders, replacedOrderId)); setEditingOrder(null); }} onCancel={() => setEditingOrder(null)} onError={setError} /> : view === "new" ? <TravelOrderForm user={user} office={office} unit={unit} onSaved={(savedOrders) => { setOrders((current) => mergeSavedTravelOrders(current, savedOrders)); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : loading ? <section className="content-section"><p className="muted">Loading Travel Orders...</p></section> : <TravelOrderList orders={orders} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} onNew={() => { setError(""); setView("new"); }} onEdit={(order) => { setError(""); setEditingOrder(order); }} onPreview={setPreview} onCopy={(order) => void copyOrder(order)} onDelete={setPendingDelete} onStatusChange={changeStatus} updatingId={updatingId} deletingId={deletingId} copyingId={copyingId} />}
     <DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid)} title="Confirm Travel Order Deletion?" description="Are you sure you want to delete this Travel Order? This action cannot be undone. Its assigned TO No. values will be released." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteOrder(pendingDelete); }} />
     {preview && <TravelOrderPreview order={preview} role={role} office={office} division={division} unit={unit} onClose={closePreview} />}
   </>;
