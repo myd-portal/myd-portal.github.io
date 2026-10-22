@@ -500,6 +500,10 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
     try {
       await reload(user);
       if (!user.emailVerified) throw new Error("Verify your email address before completing your account.");
+      // Email verification updates the user record before the cached ID token
+      // receives its email_verified claim. Refresh it before Firestore rules
+      // evaluate the profile completion write.
+      await user.getIdToken(true);
       const name = [normalizedFirstName, normalizedMiddleName, normalizedLastName].filter(Boolean).join(" ");
       const isRootSuperAdmin = user.email?.trim().toLowerCase() === SUPERADMIN_EMAIL;
       await updateProfile(user, { displayName: name });
