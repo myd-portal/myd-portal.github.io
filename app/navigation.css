@@ -128,7 +128,7 @@
 }
 .topbar .amia-document-nav-menu{overflow-y:auto}
 
-:root{--preview-toolbar-offset:108px}
+:root{--preview-toolbar-offset:32px}
 .app-shell .preview-backdrop,
 .app-shell .ar-preview-backdrop,
 .app-shell .nta-preview-backdrop,
@@ -145,7 +145,7 @@
 }
 
 @media(max-width:920px){
-  :root{--preview-toolbar-offset:142px}
+  :root{--preview-toolbar-offset:24px}
   .topbar{
     align-items:center;
     border-radius:26px;
@@ -191,7 +191,7 @@
 }
 
 @media(max-width:480px){
-  :root{--preview-toolbar-offset:122px}
+  :root{--preview-toolbar-offset:18px}
   .topbar{border-width:4px;border-radius:22px;margin:8px 8px 0;padding:4px 7px 6px}
   .topbar .brand-logo{height:38px;width:38px}
   .topbar .user-menu{gap:4px}
@@ -213,7 +213,7 @@
 .mobile-navigation{display:none}
 
 @media(max-width:1120px){
-  :root{--preview-toolbar-offset:94px}
+  :root{--preview-toolbar-offset:24px}
   .topbar{
     align-items:center;
     border:2px solid #f1d0c5;
