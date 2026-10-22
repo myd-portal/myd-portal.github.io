@@ -310,7 +310,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     const signatureImage = await pdf.embedPng(await signatureResponse.arrayBuffer());
     const signatureBoxX = 360.5;
     const signatureBoxWidth = 102;
-    const signatureOffsetX = 4;
+    const signatureOffsetX = 6;
     const signatureDimensions = signatureImage.scaleToFit(signatureBoxWidth, 51);
     const [regularFont, boldFont] = await Promise.all([pdf.embedFont("Helvetica"), pdf.embedFont("Helvetica-Bold")]);
     const approvedAt = approvalDate(record.decidedAt);

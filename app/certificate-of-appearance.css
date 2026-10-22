@@ -50,7 +50,7 @@
 .coa-signatory span{font-style:normal}
 .coa-signatory-role{overflow-wrap:normal;white-space:nowrap}
 .coa-signatory-block>.certificate-approved-signature{bottom:auto;gap:.65cqi;grid-template-columns:minmax(0,1fr) minmax(0,1fr);justify-self:end;left:auto;position:relative;right:auto;top:auto;width:43.4%;font-size:1.2cqi}
-.coa-signatory-block.is-approved .certificate-approved-signature img{justify-self:end;object-position:right center;transform:translateX(2.2cqi)}
+.coa-signatory-block.is-approved .certificate-approved-signature img{justify-self:end;object-position:right center;transform:translateX(5cqi)}
 .coa-signatory-block.is-approved .certificate-approved-signature-meta{text-align:right}
 .coa-signatory-block>.certificate-approved-signature strong{font-size:1.25cqi}
 .coa-signatory-block>.certificate-approved-signature small{font-size:1cqi}
