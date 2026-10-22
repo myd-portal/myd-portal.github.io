@@ -309,7 +309,7 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     if (!signatureResponse.ok) throw new Error("The administrator's Full Signature could not be loaded.");
     const signatureImage = await pdf.embedPng(await signatureResponse.arrayBuffer());
     const signatureBoxX = 360.5;
-    const signatureBoxWidth = 87;
+    const signatureBoxWidth = 102;
     const signatureDimensions = signatureImage.scaleToFit(signatureBoxWidth, 51);
     const [regularFont, boldFont] = await Promise.all([pdf.embedFont("Helvetica"), pdf.embedFont("Helvetica-Bold")]);
     const approvedAt = approvalDate(record.decidedAt);
@@ -321,15 +321,14 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
     const approvalTime = approvedAt
       ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(approvedAt)} +0800`
       : "";
-    const metadataX = 453.5;
     const metadataRight = 531.5;
-    const metadataColumnWidth = metadataRight - metadataX;
+    const metadataColumnWidth = 102;
     const metadataSize = 6.8;
     const signerNameSize = 7.1;
     const signerName = (record.signerName?.trim() || record.signerDesignation || "Field Operations Division").toLocaleUpperCase("en");
     const fittedSignerNameSize = Math.min(signerNameSize, signerNameSize * metadataColumnWidth / boldFont.widthOfTextAtSize(signerName, signerNameSize));
-    const drawMetadataText = (text: string, y: number, size: number, font: typeof regularFont) => {
-      page.drawText(text, { x: metadataX, y, size, font });
+    const drawRightAlignedMetadata = (text: string, y: number, size: number, font: typeof regularFont) => {
+      page.drawText(text, { x: metadataRight - font.widthOfTextAtSize(text, size), y, size, font });
     };
     for (const y of [480, 66.5]) {
       page.drawImage(signatureImage, {
@@ -338,10 +337,10 @@ export async function makeBlankCertificatePdf(record: BlankCertificatePdfRecord)
         width: signatureDimensions.width,
         height: signatureDimensions.height,
       });
-      drawMetadataText("Digitally signed by", y + 72, metadataSize, regularFont);
-      drawMetadataText(signerName, y + 64, fittedSignerNameSize, boldFont);
-      if (approvalDateText) drawMetadataText(`Date: ${approvalDateText}`, y + 56, metadataSize, regularFont);
-      if (approvalTime) drawMetadataText(`Time: ${approvalTime}`, y + 48, metadataSize, regularFont);
+      drawRightAlignedMetadata("Digitally signed by", y + 72, metadataSize, regularFont);
+      drawRightAlignedMetadata(signerName, y + 64, fittedSignerNameSize, boldFont);
+      if (approvalDateText) drawRightAlignedMetadata(`Date: ${approvalDateText}`, y + 56, metadataSize, regularFont);
+      if (approvalTime) drawRightAlignedMetadata(`Time: ${approvalTime}`, y + 48, metadataSize, regularFont);
     }
   }
 
