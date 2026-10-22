@@ -10,6 +10,7 @@ import { loadPdfTools } from "@/lib/pdf-tools";
 import { loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import DeleteConfirmation from "./DeleteConfirmation";
+import { divisionSignatory as getDivisionSignatory } from "@/lib/mytev";
 import { LEGACY_PENDING_STATUS, normalizeWorkflowStatus, type WorkflowStatus } from "./workflow-status";
 import "./travel-order.css";
 
@@ -65,6 +66,13 @@ function localDateValue() {
 function formatTravelDate(value: string) {
   if (!value) return "";
   return new Intl.DateTimeFormat("en-PH", { month: "long", day: "numeric", year: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatTravelSalary(value: string) {
+  if (!value.trim()) return "";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return value;
+  return new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 }
 
 function formatTravelDateRange(departureDate: string, returnDate: string) {
@@ -333,7 +341,16 @@ function TravelField({ label, children = "", className = "" }: { label: string; 
   return <div className={`travel-order-field ${className}`}><strong>{label}:</strong><span className="travel-order-value">{children || "\u00a0"}</span></div>;
 }
 
-function TravelOrderPaper({ order, person }: { order: TravelOrder; person: TravelOrderPerson }) {
+function TravelOrderPaper({ order, person, role, office, division, unit }: { order: TravelOrder; person: TravelOrderPerson; role: string; office: string; division: string; unit: string | null }) {
+  const recommendingSignatory = role === "admin"
+    && office === "Division"
+    && division === "Administrative and Finance Division"
+    && unit === "General Services Section"
+    ? getDivisionSignatory("Administrative and Finance Division")
+    : { name: "REBECCA R. ATEGA", position: "RTD for Operations" };
+  const recommendingPosition = recommendingSignatory.position === "OIC"
+    ? "OIC, Administrative and Finance Division"
+    : recommendingSignatory.position;
   return <article className="travel-order-paper">
     <div className="travel-order-frame" />
     <img className="travel-order-letterhead" src={asset("/Travel%20Order%20-%20header.jpg")} alt="Department of Agriculture Caraga Region letterhead" />
@@ -343,7 +360,7 @@ function TravelOrderPaper({ order, person }: { order: TravelOrder; person: Trave
       <div className="travel-order-number-date"><TravelField label="No.">{person.toNumber ?? ""}</TravelField> <TravelField label="Date" className="travel-order-date-field">{formatTravelDate(order.date)}</TravelField></div>
       <div className="travel-order-person-fields">
         <div><TravelField label="Name">{person.name}</TravelField><TravelField label="Position">{person.position}</TravelField></div>
-        <div><TravelField label="Salary Per Month">{person.salary}</TravelField><TravelField label="Office Station">{order.officeStation}</TravelField></div>
+        <div><TravelField label="Salary Per Month">{formatTravelSalary(person.salary)}</TravelField><TravelField label="Office Station">{order.officeStation}</TravelField></div>
       </div>
       <div className="travel-order-date-fields"><TravelField label="Departure Date">{formatTravelDate(order.departureDate)}</TravelField><TravelField label="Return Date">{formatTravelDate(order.returnDate)}</TravelField></div>
       <div className="travel-order-fields-stack">
@@ -357,7 +374,7 @@ function TravelOrderPaper({ order, person }: { order: TravelOrder; person: Trave
         <TravelField label="Remarks or Special Instructions">{order.remarks}</TravelField>
       </div>
       <div className="travel-order-approvals">
-        <div><span>Recommending Approval:</span><strong>REBECCA R. ATEGA</strong><em>RTD for Operations</em></div>
+        <div><span>Recommending Approval:</span><strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong><em>{recommendingPosition}</em></div>
         <div><span>Approved:</span><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></div>
       </div>
       <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr></tbody></table>
@@ -366,7 +383,7 @@ function TravelOrderPaper({ order, person }: { order: TravelOrder; person: Trave
   </article>;
 }
 
-function TravelOrderPreview({ order, onClose }: { order: TravelOrder; onClose: () => void }) {
+function TravelOrderPreview({ order, role, office, division, unit, onClose }: { order: TravelOrder; role: string; office: string; division: string; unit: string | null; onClose: () => void }) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
@@ -419,10 +436,10 @@ function TravelOrderPreview({ order, onClose }: { order: TravelOrder; onClose: (
     }
   }
 
-  return <div className="preview-backdrop travel-order-preview-backdrop"><div className="preview-toolbar"><span>Travel Order preview · {order.people.length} {order.people.length === 1 ? "page" : "pages"}</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={downloadPdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={printPreview}>{printing ? "Preparing print..." : "Print"}</button>{error && <small className="download-error">{error}</small>}{printError && <small className="download-error" role="alert">{printError}</small>}</div><div ref={pagesRef} className="travel-order-preview-pages">{order.people.map((person, index) => <TravelOrderPaper key={`${order.id}-${index}`} order={order} person={person} />)}</div></div>;
+  return <div className="preview-backdrop travel-order-preview-backdrop"><div className="preview-toolbar"><span>Travel Order preview · {order.people.length} {order.people.length === 1 ? "page" : "pages"}</span><button type="button" className="ghost-button" onClick={onClose}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={downloadPdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={printPreview}>{printing ? "Preparing print..." : "Print"}</button>{error && <small className="download-error">{error}</small>}{printError && <small className="download-error" role="alert">{printError}</small>}</div><div ref={pagesRef} className="travel-order-preview-pages">{order.people.map((person, index) => <TravelOrderPaper key={`${order.id}-${index}`} order={order} person={person} role={role} office={office} division={division} unit={unit} />)}</div></div>;
 }
 
-export default function TravelOrderModule({ user, office, unit, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; office: string; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
+export default function TravelOrderModule({ user, role, office, division, unit, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; role: string; office: string; division: string; unit: string | null; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [orders, setOrders] = useState<TravelOrder[]>([]);
   const [preparedByNames, setPreparedByNames] = useState<Record<string, string>>({});
   const [accountName, setAccountName] = useState(user.displayName?.trim() ?? "");
@@ -854,6 +871,6 @@ export default function TravelOrderModule({ user, office, unit, focusRecordId, o
     {error && <div className="error-message travel-order-error">{error}</div>}
     {editingOrder ? <TravelOrderForm key={editingOrder.id} user={user} office={office} unit={unit} initialOrder={editingOrder} onSaved={(savedOrders, replacedOrderId) => { setOrders((current) => [...savedOrders, ...current.filter((order) => order.id !== replacedOrderId)]); setEditingOrder(null); }} onCancel={() => setEditingOrder(null)} onError={setError} /> : view === "new" ? <TravelOrderForm user={user} office={office} unit={unit} onSaved={(savedOrders) => { setOrders((current) => [...savedOrders, ...current]); setView("list"); }} onCancel={() => setView("list")} onError={setError} /> : loading ? <section className="content-section"><p className="muted">Loading Travel Orders...</p></section> : <TravelOrderList orders={orders} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} onNew={() => { setError(""); setView("new"); }} onEdit={(order) => { setError(""); setEditingOrder(order); }} onPreview={setPreview} onCopy={(order) => void copyOrder(order)} onDelete={setPendingDelete} onStatusChange={changeStatus} updatingId={updatingId} deletingId={deletingId} copyingId={copyingId} />}
     <DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid)} title="Confirm Travel Order Deletion?" description="Are you sure you want to delete this Travel Order? This action cannot be undone. Its assigned TO No. values will be released." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteOrder(pendingDelete); }} />
-    {preview && <TravelOrderPreview order={preview} onClose={closePreview} />}
+    {preview && <TravelOrderPreview order={preview} role={role} office={office} division={division} unit={unit} onClose={closePreview} />}
   </>;
 }
