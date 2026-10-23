@@ -221,7 +221,7 @@ function CalendarOfActivitiesPaper({ plan, activities, pageNumber, pageCount }: 
   return <article className="calendar-of-activities-paper">
     <header className="calendar-of-activities-paper-heading">
       <img src={asset("/da-caraga-logo.jpg")} alt="Department of Agriculture Caraga Region" />
-      <div><p>Republic of the Philippines</p><strong>DEPARTMENT OF AGRICULTURE</strong><span>Caraga Region</span><small>Capitol Site, Butuan City 8600</small><small>Tel. No.: (085) 817-9561; Telefax No.: (085) 818-6163</small></div>
+      <div><p>Republic of the Philippines</p><strong>DEPARTMENT OF AGRICULTURE</strong><span>Caraga Region</span><small>Capitol Site, Butuan City 8600</small><small>Tel. No.: (085) 817-9581; (085) 818-6366</small></div>
     </header>
     <div className="calendar-of-activities-paper-rule" />
     <div className="calendar-of-activities-paper-title"><h1>CALENDAR OF ACTIVITIES</h1><p className="calendar-of-activities-paper-unit">{unitDescription[plan.unit]}</p><p className="calendar-of-activities-paper-month">{formatMonth(plan.month)}</p></div>
