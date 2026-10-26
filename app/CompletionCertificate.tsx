@@ -95,7 +95,7 @@ function ordinalDay(value: string) {
   return <><strong>{day}<sup className="completion-ordinal-suffix">{suffix}</sup></strong> day of <strong>{month} {date.getFullYear()}</strong></>;
 }
 
-export default function CompletionCertificate({ user, focusRecordId, onFocusHandled }: { user: User; focusRecordId?: string; onFocusHandled?: () => void }) {
+export default function CompletionCertificate({ user, canCreateFodCertificateTemplates, focusRecordId, onFocusHandled }: { user: User; canCreateFodCertificateTemplates: boolean; focusRecordId?: string; onFocusHandled?: () => void }) {
   const [records, setRecords] = useState<CompletionRecord[]>([]);
   const [view, setView] = useState<"list" | "new" | "edit">("list");
   const [editingRecord, setEditingRecord] = useState<CompletionRecord | null>(null);
@@ -163,6 +163,10 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
   async function saveCompletion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (!canCreateFodCertificateTemplates) {
+      setError("FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.");
+      return;
+    }
     if (!db) {
       setError("Completion certificate storage is unavailable.");
       return;
@@ -238,6 +242,10 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
     if (!file) return;
     setError("");
     setImportMessage("");
+    if (!canCreateFodCertificateTemplates) {
+      setError("FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.");
+      return;
+    }
     if (!db) {
       setError("Completion certificate storage is unavailable.");
       return;
@@ -389,7 +397,9 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
   }
 
   if (view === "new") {
-    return <CompletionForm onCancel={() => { setView("list"); setError(""); }} onSubmit={saveCompletion} saving={saving} error={error} />;
+    return canCreateFodCertificateTemplates
+      ? <CompletionForm onCancel={() => { setView("list"); setError(""); }} onSubmit={saveCompletion} saving={saving} error={error} />
+      : <section className="content-section completion-section"><p className="muted">FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.</p><button type="button" className="ghost-button" onClick={() => setView("list")}>Back</button></section>;
   }
   if (view === "edit" && editingRecord) {
     return <CompletionNameForm record={editingRecord} onCancel={() => { setEditingRecord(null); setView("list"); setError(""); }} onSubmit={saveNameCorrection} saving={saving} error={error} />;
@@ -397,11 +407,11 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
 
   return <>
   <section className="content-section completion-section">
-    <div className="section-heading"><div><p className="eyebrow">Document generator</p><h2>Completion Generated Reports</h2><p className="muted">Create certificates manually or import the <a className="completion-template-link" href={importTemplate} download="Completion_Importing_Template.xlsx">Completion_Importing_Template.xlsx</a>.</p></div><div className="completion-list-actions"><button type="button" className="primary-button" onClick={() => { setError(""); setView("new"); }}>Add</button><button type="button" className="ghost-button" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Import"}</button></div></div>
-    <input ref={importInputRef} className="completion-import-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importCompletions(event)} aria-label="Import Completion certificate workbook" />
+    <div className="section-heading"><div><p className="eyebrow">Document generator</p><h2>Completion Generated Reports</h2><p className="muted">{canCreateFodCertificateTemplates ? <>Create certificates manually or import the <a className="completion-template-link" href={importTemplate} download="Completion_Importing_Template.xlsx">Completion_Importing_Template.xlsx</a>.</> : "You can view and download your records. Creating FOD certificates is available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins."}</p></div>{canCreateFodCertificateTemplates && <div className="completion-list-actions"><button type="button" className="primary-button" onClick={() => { setError(""); setView("new"); }}>Add</button><button type="button" className="ghost-button" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Import"}</button></div>}</div>
+    {canCreateFodCertificateTemplates && <input ref={importInputRef} className="completion-import-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importCompletions(event)} aria-label="Import Completion certificate workbook" />}
     {error && <p className="completion-error" role="alert">{error}</p>}
     {importMessage && <p className="completion-success" role="status">{importMessage}</p>}
-    {loading ? <p className="muted">Loading completion certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No completion certificates yet</h3><p>Add completion details manually or import the completed Completion_Importing_Template.xlsx workbook.</p><div className="completion-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Completion Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="completion-record-list"><div className="completion-record-head"><span>Office</span><span>Completer(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="completion-record-row" key={record.id}><span><span className="completion-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="completion-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
+    {loading ? <p className="muted">Loading completion certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No completion certificates yet</h3><p>{canCreateFodCertificateTemplates ? "Add completion details manually or import the completed Completion_Importing_Template.xlsx workbook." : "Creating FOD certificates is available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins."}</p>{canCreateFodCertificateTemplates && <div className="completion-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Completion Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div>}</div> : <div className="completion-record-list"><div className="completion-record-head"><span>Office</span><span>Completer(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="completion-record-row" key={record.id}><span><span className="completion-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="completion-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Completion Certificate Deletion?" description="Are you sure you want to delete this Completion Certificate? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;

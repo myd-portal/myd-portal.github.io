@@ -21,6 +21,16 @@ service cloud.firestore {
         // both a missing and null status as Approved.
         || (exists(userPath) && get(userPath).data.get("accountStatus", "Approved") in ["Approved", null]));
     }
+    function canCreateFodCertificateTemplates() {
+      let userPath = currentUserPath();
+      let profile = exists(userPath) ? get(userPath).data : {};
+      return isVerifiedUser()
+        && exists(userPath)
+        && ((normalizedAccountRole(profile) in ["regular", "user"]
+            && profileAssignment(profile) in ["AGRISTAT", "AMIA", "DRRM"])
+          || (normalizedAccountRole(profile) == "admin"
+            && profileDivision(profile) == "Field Operations Division"));
+    }
     function isCalendarActivityAdminAccount(userId) {
       let userPath = /databases/$(database)/documents/users/$(userId);
       return userId is string
@@ -1812,7 +1822,7 @@ service cloud.firestore {
     }
     match /appreciationCertificates/{certificateId} {
       allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReviewUnitCertificate(resource.data));
-      allow create: if isVerifiedUser()
+      allow create: if canCreateFodCertificateTemplates()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(["unit", "speakerName", "speakerGender", "speakerPosition", "speakerOffice", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt"])
         && request.resource.data.keys().hasOnly(["unit", "speakerName", "speakerGender", "speakerPosition", "speakerOffice", "speakers", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt", "status"])
@@ -1883,7 +1893,7 @@ service cloud.firestore {
     }
     match /completionCertificates/{certificateId} {
       allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReviewUnitCertificate(resource.data));
-      allow create: if isVerifiedUser()
+      allow create: if canCreateFodCertificateTemplates()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(["unit", "participantNames", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt"])
         && request.resource.data.keys().hasOnly(["unit", "participantNames", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt", "status"])
@@ -1921,7 +1931,7 @@ service cloud.firestore {
     }
     match /participationCertificates/{certificateId} {
       allow read: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid || canReviewUnitCertificate(resource.data));
-      allow create: if isVerifiedUser()
+      allow create: if canCreateFodCertificateTemplates()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.keys().hasAll(["unit", "participantNames", "participantGenders", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt"])
         && request.resource.data.keys().hasOnly(["unit", "participantNames", "participantGenders", "eventTitle", "eventDateFrom", "eventDateTo", "eventDestination", "distributionDate", "distributionSameAsDestination", "distributionPlace", "ownerId", "createdAt", "status"])

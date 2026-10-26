@@ -105,7 +105,7 @@ function ordinalDay(value: string) {
   return <><strong>{day}<sup className="participation-ordinal-suffix">{suffix}</sup></strong> day of <strong>{month} {date.getFullYear()}</strong></>;
 }
 
-export default function ParticipationCertificate({ user, focusRecordId, onFocusHandled }: { user: User; focusRecordId?: string; onFocusHandled?: () => void }) {
+export default function ParticipationCertificate({ user, canCreateFodCertificateTemplates, focusRecordId, onFocusHandled }: { user: User; canCreateFodCertificateTemplates: boolean; focusRecordId?: string; onFocusHandled?: () => void }) {
   const [records, setRecords] = useState<ParticipationRecord[]>([]);
   const [view, setView] = useState<"list" | "new" | "edit">("list");
   const [editingRecord, setEditingRecord] = useState<ParticipationRecord | null>(null);
@@ -174,6 +174,10 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
   async function saveParticipation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (!canCreateFodCertificateTemplates) {
+      setError("FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.");
+      return;
+    }
     if (!db) {
       setError("Participation certificate storage is unavailable.");
       return;
@@ -254,6 +258,10 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
     if (!file) return;
     setError("");
     setImportMessage("");
+    if (!canCreateFodCertificateTemplates) {
+      setError("FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.");
+      return;
+    }
     if (!db) {
       setError("Participation certificate storage is unavailable.");
       return;
@@ -397,7 +405,9 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
   }
 
   if (view === "new") {
-    return <ParticipationForm onCancel={() => { setView("list"); setError(""); }} onSubmit={saveParticipation} saving={saving} error={error} />;
+    return canCreateFodCertificateTemplates
+      ? <ParticipationForm onCancel={() => { setView("list"); setError(""); }} onSubmit={saveParticipation} saving={saving} error={error} />
+      : <section className="content-section participation-section"><p className="muted">FOD certificate templates are available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins.</p><button type="button" className="ghost-button" onClick={() => setView("list")}>Back</button></section>;
   }
   if (view === "edit" && editingRecord) {
     return <ParticipationNameForm record={editingRecord} onCancel={() => { setEditingRecord(null); setView("list"); setError(""); }} onSubmit={saveNameCorrection} saving={saving} error={error} />;
@@ -405,11 +415,11 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
 
   return <>
   <section className="content-section participation-section">
-    <div className="section-heading"><div><p className="eyebrow">Document generator</p><h2>Participation Generated Reports</h2><p className="muted">Create AMIA and DRRM certificates manually or import rows from the <a className="participation-template-link" href={importTemplate} download="Participation_Importing_Template.xlsx">Participation_Importing_Template.xlsx</a>.</p></div><div className="participation-list-actions"><button type="button" className="primary-button" onClick={() => { setError(""); setView("new"); }}>Add</button><button type="button" className="ghost-button" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Import"}</button></div></div>
-    <input ref={importInputRef} className="participation-import-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importParticipations(event)} aria-label="Import Participation certificate workbook" />
+    <div className="section-heading"><div><p className="eyebrow">Document generator</p><h2>Participation Generated Reports</h2><p className="muted">{canCreateFodCertificateTemplates ? <>Create AGRISTAT, AMIA, and DRRM certificates manually or import rows from the <a className="participation-template-link" href={importTemplate} download="Participation_Importing_Template.xlsx">Participation_Importing_Template.xlsx</a>.</> : "You can view and download your records. Creating FOD certificates is available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins."}</p></div>{canCreateFodCertificateTemplates && <div className="participation-list-actions"><button type="button" className="primary-button" onClick={() => { setError(""); setView("new"); }}>Add</button><button type="button" className="ghost-button" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Import"}</button></div>}</div>
+    {canCreateFodCertificateTemplates && <input ref={importInputRef} className="participation-import-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importParticipations(event)} aria-label="Import Participation certificate workbook" />}
     {error && <p className="participation-error" role="alert">{error}</p>}
     {importMessage && <p className="participation-success" role="status">{importMessage}</p>}
-    {loading ? <p className="muted">Loading participation certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No participation certificates yet</h3><p>Add participation details manually or import the completed Participation_Importing_Template.xlsx workbook.</p><div className="participation-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Participation Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="participation-record-list"><div className="participation-record-head"><span>Office</span><span>Participant(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="participation-record-row" key={record.id}><span><span className="participation-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="participation-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
+    {loading ? <p className="muted">Loading participation certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No participation certificates yet</h3><p>{canCreateFodCertificateTemplates ? "Add participation details manually or import the completed Participation_Importing_Template.xlsx workbook." : "Creating FOD certificates is available to regular AGRISTAT, AMIA, and DRRM accounts and Field Operations Division admins."}</p>{canCreateFodCertificateTemplates && <div className="participation-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Participation Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div>}</div> : <div className="participation-record-list"><div className="participation-record-head"><span>Office</span><span>Participant(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="participation-record-row" key={record.id}><span><span className="participation-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="participation-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Participation Certificate Deletion?" description="Are you sure you want to delete this Participation Certificate? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;
