@@ -718,18 +718,13 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
         };
         const personnelAndDivisionAdmins = allAccountsSnapshot.docs.filter(inCalendarUnit).map(accountFromUser).filter((account) => account.name).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
         const colleagues = allAccountsSnapshot.docs.filter((item) => {
-          if (isSuperadminRole(item.data().accountRole, item.data().email)) return false;
           const person = item.data();
+          if (isSuperadminRole(person.accountRole, person.email)) return false;
           const personProfile = accountProfileSelection(person);
-          const isAdminInPreparedUnit = person.accountRole === "admin"
-            && personProfile.office === loadedProfile.office
-            && personProfile.division === loadedProfile.division
-            && personProfile.unit === loadedProfile.unit;
-          if (item.id === user.uid && !isAdminInPreparedUnit) return false;
-          return isAdminInPreparedUnit || personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
-            includeAdminAccounts: true,
-            accountRole: person.accountRole,
-            accountStatus: person.accountStatus,
+          const isAdminInPreparedDivision = isApprovedAdminAccount(person.accountRole, person.accountStatus, person.email)
+            && personProfile.division === loadedProfile.division;
+          if (item.id === user.uid && !isAdminInPreparedDivision) return false;
+          return isAdminInPreparedDivision || personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
             division: loadedProfile.division,
             candidateDivision: personProfile.division,
           });
