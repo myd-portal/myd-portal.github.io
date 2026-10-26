@@ -407,7 +407,7 @@ function CalendarOfActivitiesForm({ user, profile, accounts, unitPersonnel, admi
       row.responsiblePeople.forEach((person) => {
         if (person.userId === allPersonnelOptionId) {
           unitPersonnel.forEach((unitPerson) => {
-            if (unitPerson.id !== user.uid) rowRecipients.set(unitPerson.id, { userId: unitPerson.id, name: unitPerson.name });
+            rowRecipients.set(unitPerson.id, { userId: unitPerson.id, name: unitPerson.name });
           });
         } else {
           rowRecipients.set(person.userId, person);

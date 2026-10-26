@@ -1377,7 +1377,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(["recipientId", "ownerId", "calendarId", "unit", "month", "activities", "read", "createdAt"])
         && request.resource.data.keys().hasOnly(["recipientId", "ownerId", "calendarId", "unit", "month", "activities", "workflowEvent", "read", "createdAt"])
         && request.resource.data.recipientId is string
-        && request.resource.data.recipientId != request.auth.uid
+        && (request.resource.data.recipientId != request.auth.uid
+          || request.resource.data.ownerId == request.auth.uid)
         && request.resource.data.unit is string
         && request.resource.data.unit.size() > 0
         && request.resource.data.calendarId is string
