@@ -25,11 +25,12 @@
 .travel-order-person .remove-participant{align-self:end;grid-column:auto;justify-self:end}
 .travel-order-list-head,.travel-order-list-row{grid-template-columns:minmax(140px,1.25fr) minmax(120px,1.1fr) minmax(140px,1.4fr) minmax(120px,1.15fr) minmax(110px,1fr) minmax(210px,1.4fr)}
 .travel-order-list-row{align-items:center}
+.travel-order-list-row>[data-label]{min-width:0;overflow-wrap:anywhere;white-space:normal}
 .travel-order-list-row>strong{font-weight:400}
 .travel-order-list-row>.travel-order-status{min-width:0;width:100%}
 .travel-order-list-row>.travel-order-row-actions{flex-wrap:nowrap;gap:clamp(8px,.8vw,12px);min-width:0;white-space:nowrap}
 .travel-order-list-row>.travel-order-row-actions .row-action,.travel-order-list-row>.travel-order-row-actions .delete-button{padding:5px 2px;white-space:nowrap}
-.travel-order-list-purpose{overflow-wrap:anywhere}
+.travel-order-list-purpose{min-width:0;overflow-wrap:anywhere}
 .travel-order-pagination{align-items:center;display:flex;gap:12px;justify-content:space-between;margin:12px 8px}
 .travel-order-pagination>span,.travel-order-pagination-controls>span{color:var(--muted);font-size:12px}
 .travel-order-pagination-controls{align-items:center;display:flex;gap:10px}
