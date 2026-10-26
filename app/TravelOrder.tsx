@@ -385,7 +385,7 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
         <div><span>Recommending Approval:</span><strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong><em>{recommendingSignatory.position === "OIC" ? <>OIC, <span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingPosition}</em></div>
         <div><span>Approved:</span><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></div>
       </div>
-      <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr></tbody></table>
+      <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr>{Array.from({ length: 5 }, (_, index) => <tr key={`certification-row-${index}`}><td /><td /><td /><td /></tr>)}</tbody></table>
     </div>
     {order.status === "Disapproved" && <div className="travel-order-disapproved-stamp" aria-label="Disapproved">DISAPPROVED</div>}
   </article>;
