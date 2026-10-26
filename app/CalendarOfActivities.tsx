@@ -6,7 +6,7 @@ import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import NameSearchSelect from "./NameSearchSelect";
 import { accountDesignation, accountProfileSelection } from "@/lib/account-profile";
-import { isApprovedAdminAccount, personnelMatchesAccountScope } from "@/lib/personnel";
+import { isApprovedAdminAccount } from "@/lib/personnel";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { isSuperadminRole, normalizeAccountRole } from "@/lib/user-roles";
 import { calendarOfActivitiesApprovalNotificationsCollection, calendarOfActivitiesCollection, calendarOfActivitiesNotificationsCollection } from "@/lib/calendar-of-activities-storage";
@@ -125,7 +125,12 @@ const allPersonnelOptionId = "__all_personnel__";
 const allPersonnelResponsible: ResponsiblePerson = { userId: allPersonnelOptionId, name: "All Personnel" };
 
 function isAdminRoleAccount(accountRole: unknown, email?: unknown) {
-  return accountRole === "admin" && !isSuperadminRole(accountRole, email);
+  return normalizeAccountRole(accountRole, typeof email === "string" ? email : undefined) === "admin"
+    && !isSuperadminRole(accountRole, email);
+}
+
+function isRegularRoleAccount(accountRole: unknown, email?: unknown) {
+  return normalizeAccountRole(accountRole, typeof email === "string" ? email : undefined) === "regular";
 }
 
 function isFodCalendarOwner(profile: Pick<Profile, "rawAccountRole" | "office" | "division" | "unit">) {
@@ -710,10 +715,8 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
           const isAdminInPreparedDivision = isAdminRoleAccount(data.accountRole, data.email)
             && personProfile.division === loadedProfile.division;
           if (isAdminInPreparedDivision) return true;
-          return personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
-            division: loadedProfile.division,
-            candidateDivision: personProfile.division,
-          });
+          return isRegularRoleAccount(data.accountRole, data.email)
+            && personProfile.unit === loadedProfile.unit;
         };
         const accountFromUser = (item: (typeof allAccountsSnapshot.docs)[number]): Account => {
           const data = item.data();
@@ -727,11 +730,8 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
           const personProfile = accountProfileSelection(person);
           const isAdminInPreparedDivision = isAdminRoleAccount(person.accountRole, person.email)
             && personProfile.division === loadedProfile.division;
-          if (item.id === user.uid && !isAdminInPreparedDivision) return false;
-          return isAdminInPreparedDivision || personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
-            division: loadedProfile.division,
-            candidateDivision: personProfile.division,
-          });
+          return isAdminInPreparedDivision || (isRegularRoleAccount(person.accountRole, person.email)
+            && personProfile.unit === loadedProfile.unit);
         }).map(accountFromUser).filter((account) => account.name).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
         const rowsById = new Map<string, CalendarOfActivities>([...unitPlansSnapshot.docs, ...ownedPlansSnapshot.docs, ...(initialSignerPlansSnapshot?.docs ?? []), ...(chiefSignerPlansSnapshot?.docs ?? [])].map((item): [string, CalendarOfActivities] => [item.id, { id: item.id, ...item.data() } as CalendarOfActivities]));
         receivedPlans.forEach((item) => {
