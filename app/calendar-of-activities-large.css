@@ -12,6 +12,7 @@
 .calendar-of-activities-list-status.travel-order-status-disapproved select{background:#fff0ed;color:#a23d2d}
 .calendar-of-activities-list-status.travel-order-status-approved select,.calendar-of-activities-status-badge.is-approved{background:#eaf5ed;color:#21603a}
 .calendar-of-activities-status-badge.is-pending{background:#fff5e8;color:#8e5712}
+.calendar-of-activities-status-badge.is-disapproved{background:#fff0ed;color:#a23d2d}
 .calendar-of-activities-status-badge{border:1px solid var(--line);border-radius:0;display:block;font-size:12px;padding:8px;text-align:left;width:100%}
 .calendar-of-activities-form{align-items:start;display:grid;gap:22px;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
 .calendar-of-activities-signatories{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
