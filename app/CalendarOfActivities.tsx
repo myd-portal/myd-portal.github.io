@@ -124,6 +124,10 @@ const fodCalendarOwnerUnits = ["AGRISTAT", "DRRM", "AMIA"];
 const allPersonnelOptionId = "__all_personnel__";
 const allPersonnelResponsible: ResponsiblePerson = { userId: allPersonnelOptionId, name: "All Personnel" };
 
+function isAdminRoleAccount(accountRole: unknown, email?: unknown) {
+  return accountRole === "admin" && !isSuperadminRole(accountRole, email);
+}
+
 function isFodCalendarOwner(profile: Pick<Profile, "rawAccountRole" | "office" | "division" | "unit">) {
   const accountRole = profile.rawAccountRole.toLowerCase();
   return ["regular", "user"].includes(accountRole)
@@ -504,7 +508,7 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
   }
 
   return <section className="content-section form-section calendar-of-activities-form-section">
-    <div className="section-heading"><div><p className="eyebrow">{plan ? "Edit record" : "New record"}</p><h2>{plan ? "Edit Calendar of Activities" : "Calendar of Activities"}</h2><p className="muted">{plan ? `Update the date, activity, location, or responsible people for this calendar. The original preparer remains ${plan.preparedName}, ${plan.preparedPosition}.` : `Add one or more activities for ${unitLabel(profile.unit)}. Selected colleagues receive an in-app notification with each activity’s dates, activity, and location. Choose All Personnel to include everyone in this unit and active admins in your Division.`}</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
+    <div className="section-heading"><div><p className="eyebrow">{plan ? "Edit record" : "New record"}</p><h2>{plan ? "Edit Calendar of Activities" : "Calendar of Activities"}</h2><p className="muted">{plan ? `Update the date, activity, location, or responsible people for this calendar. The original preparer remains ${plan.preparedName}, ${plan.preparedPosition}.` : `Add one or more activities for ${unitLabel(profile.unit)}. Selected colleagues receive an in-app notification with each activity’s dates, activity, and location. Choose All Personnel to include everyone in this unit and admins in your Division.`}</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     <form className="permit-form travel-order-form calendar-of-activities-form" onSubmit={save}>
       <div className="calendar-of-activities-meta wide-field"><label>Month and Year<input type="month" value={month} onChange={(event) => updateMonth(event.target.value)} disabled={Boolean(plan)} required /></label></div>
       <div className="calendar-of-activities-rows wide-field"><div className="calendar-of-activities-rows-heading"><strong>Activities</strong><span>Set one responsible person or add several for each row.</span></div>
@@ -703,7 +707,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
           const data = item.data();
           if (isSuperadminRole(data.accountRole, data.email)) return false;
           const personProfile = accountProfileSelection(data);
-          const isAdminInPreparedDivision = isApprovedAdminAccount(data.accountRole, data.accountStatus, data.email)
+          const isAdminInPreparedDivision = isAdminRoleAccount(data.accountRole, data.email)
             && personProfile.division === loadedProfile.division;
           if (isAdminInPreparedDivision) return true;
           return personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
@@ -714,14 +718,14 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
         const accountFromUser = (item: (typeof allAccountsSnapshot.docs)[number]): Account => {
           const data = item.data();
           const accountProfile = accountProfileSelection(data);
-          return { id: item.id, name: String(data.name ?? "").trim(), adminAccount: isApprovedAdminAccount(data.accountRole, data.accountStatus, data.email), designation: accountDesignation(data.designation), position: typeof data.position === "string" ? data.position.trim() : "", assignment: accountProfile.unit || accountProfile.division, office: accountProfile.office, division: accountProfile.division, unit: accountProfile.unit || accountProfile.division, storedName: String(data.name ?? ""), storedPosition: typeof data.position === "string" ? data.position : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedOffice: typeof data.office === "string" ? data.office : "", storedDivision: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "" };
+          return { id: item.id, name: String(data.name ?? "").trim(), adminAccount: isAdminRoleAccount(data.accountRole, data.email), designation: accountDesignation(data.designation), position: typeof data.position === "string" ? data.position.trim() : "", assignment: accountProfile.unit || accountProfile.division, office: accountProfile.office, division: accountProfile.division, unit: accountProfile.unit || accountProfile.division, storedName: String(data.name ?? ""), storedPosition: typeof data.position === "string" ? data.position : "", storedDesignation: typeof data.designation === "string" ? data.designation : "", storedOffice: typeof data.office === "string" ? data.office : "", storedDivision: typeof data.division === "string" ? data.division : "", storedUnit: typeof data.unit === "string" ? data.unit : "" };
         };
         const personnelAndDivisionAdmins = allAccountsSnapshot.docs.filter(inCalendarUnit).map(accountFromUser).filter((account) => account.name).sort((first, second) => first.name.localeCompare(second.name, "en", { sensitivity: "base" }));
         const colleagues = allAccountsSnapshot.docs.filter((item) => {
           const person = item.data();
           if (isSuperadminRole(person.accountRole, person.email)) return false;
           const personProfile = accountProfileSelection(person);
-          const isAdminInPreparedDivision = isApprovedAdminAccount(person.accountRole, person.accountStatus, person.email)
+          const isAdminInPreparedDivision = isAdminRoleAccount(person.accountRole, person.email)
             && personProfile.division === loadedProfile.division;
           if (item.id === user.uid && !isAdminInPreparedDivision) return false;
           return isAdminInPreparedDivision || personnelMatchesAccountScope(personProfile.office, personProfile.unit || personProfile.division, loadedProfile.office, loadedProfile.unit, {
