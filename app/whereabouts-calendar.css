@@ -117,6 +117,8 @@
 .whereabouts-summary-table th{background:#f6f8f6;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.04em;overflow-wrap:anywhere;text-transform:uppercase}
 .whereabouts-summary-table td{color:var(--ink);overflow-wrap:anywhere}
 .whereabouts-summary-table th:nth-child(3),.whereabouts-summary-table td:nth-child(3){min-width:0;white-space:normal}
+.whereabouts-archive-activity-list{display:grid;gap:7px;list-style:none;margin:0;padding:0}
+.whereabouts-archive-month{display:block;margin-bottom:7px}
 .whereabouts-summary-table.whereabouts-activities-table th:nth-child(3),.whereabouts-summary-table.whereabouts-activities-table td:nth-child(3){white-space:normal;width:60%}
 .whereabouts-activities-table td p{margin:0 0 6px;overflow-wrap:anywhere;white-space:normal}
 .whereabouts-activities-table td p:last-child{margin-bottom:0}

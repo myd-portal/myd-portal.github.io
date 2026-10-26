@@ -61,6 +61,13 @@ type ApprovedCalendarOfActivities = {
 };
 type ApprovedArchiveDocumentType = "Special Order" | "Notice to Attend" | "Calendar of Activities";
 type ApprovedArchiveRecord = { id: string; data: Record<string, unknown> };
+type ApprovedCalendarArchiveActivity = {
+  activityTitle: string;
+  designatedPersonnel: string[];
+  dateFrom: string;
+  dateTo: string;
+  venue: string;
+};
 type ApprovedArchiveRow = {
   key: string;
   record: ApprovedArchiveRecord;
@@ -70,6 +77,8 @@ type ApprovedArchiveRow = {
   dateFrom: string;
   dateTo: string;
   venue: string;
+  calendarMonth?: string;
+  calendarActivities?: ApprovedCalendarArchiveActivity[];
 };
 type StoredPermit = {
   id: string;
@@ -822,16 +831,26 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       }
     });
     calendarsOfActivities.forEach((plan) => {
-      plan.activities.forEach((activity, index) => rows.push({
-        key: `calendar-${plan.id}-${index}`,
-        record: { id: plan.id, data: plan as unknown as Record<string, unknown> },
-        type: "Calendar of Activities",
+      const activities = plan.activities.map((activity) => ({
         activityTitle: archiveText(activity.activity),
-        designatedPersonnel: uniqueArchiveNames((activity.responsiblePeople ?? []).map((person) => archiveText(person.name))),
+        designatedPersonnel: [...new Set((activity.responsiblePeople ?? []).map((person) => archiveText(person.name)).filter(Boolean))],
         dateFrom: archiveText(activity.dateFrom),
         dateTo: archiveText(activity.dateTo),
         venue: archiveText(activity.location),
       }));
+      const monthStart = /^\d{4}-\d{2}$/.test(plan.month) ? `${plan.month}-01` : "";
+      rows.push({
+        key: `calendar-${plan.id}`,
+        record: { id: plan.id, data: plan as unknown as Record<string, unknown> },
+        type: "Calendar of Activities",
+        activityTitle: activities.map((activity) => activity.activityTitle).filter(Boolean).join(" "),
+        designatedPersonnel: uniqueArchiveNames(activities.flatMap((activity) => activity.designatedPersonnel)),
+        dateFrom: monthStart,
+        dateTo: monthStart,
+        venue: [...new Set(activities.map((activity) => activity.venue).filter(Boolean))].join(", "),
+        calendarMonth: monthStart ? formatCalendarDate(monthStart, { month: "long", year: "numeric" }) : plan.month,
+        calendarActivities: activities,
+      });
     });
     return rows.sort((left, right) => right.dateFrom.localeCompare(left.dateFrom) || left.activityTitle.localeCompare(right.activityTitle));
   }, [approvedNtas, approvedSpecialOrders, calendarsOfActivities]);
@@ -940,10 +959,10 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         <div className="whereabouts-summary-table-wrap"><table className="whereabouts-summary-table whereabouts-approved-archive-table"><thead><tr><th>Document Type</th><th>Activity Title</th><th>Designated Personnel</th><th>Date</th><th>Venue</th><th>View</th></tr></thead><tbody>
           {visibleApprovedArchiveRows.map((row) => <tr key={row.key}>
             <td>{row.type}</td>
-            <td>{row.activityTitle || "—"}</td>
-            <td>{row.designatedPersonnel || "—"}</td>
-            <td>{row.dateFrom ? formatCalendarDateRange(row.dateFrom, row.dateTo || row.dateFrom) : "—"}</td>
-            <td>{row.venue || "—"}</td>
+            <td>{row.calendarActivities ? <ul className="whereabouts-archive-activity-list">{row.calendarActivities.map((activity, index) => <li key={`${row.key}-title-${index}`}>{activity.activityTitle || "—"}</li>)}</ul> : row.activityTitle || "—"}</td>
+            <td>{row.calendarActivities ? <ul className="whereabouts-archive-activity-list">{row.calendarActivities.map((activity, index) => <li key={`${row.key}-personnel-${index}`}>{activity.designatedPersonnel.join(", ") || "—"}</li>)}</ul> : row.designatedPersonnel || "—"}</td>
+            <td>{row.calendarActivities ? <><strong className="whereabouts-archive-month">{row.calendarMonth}</strong><ul className="whereabouts-archive-activity-list">{row.calendarActivities.map((activity, index) => <li key={`${row.key}-date-${index}`}>{activity.dateFrom ? formatCalendarDateRange(activity.dateFrom, activity.dateTo || activity.dateFrom) : "—"}</li>)}</ul></> : row.dateFrom ? formatCalendarDateRange(row.dateFrom, row.dateTo || row.dateFrom) : "—"}</td>
+            <td>{row.calendarActivities ? <ul className="whereabouts-archive-activity-list">{row.calendarActivities.map((activity, index) => <li key={`${row.key}-venue-${index}`}>{activity.venue || "—"}</li>)}</ul> : row.venue || "—"}</td>
             <td><button type="button" className="whereabouts-archive-view" aria-label="View document" title="View document" disabled={!onViewApprovedDocument} onClick={() => onViewApprovedDocument?.({ id: row.record.id, type: row.type, data: row.record.data, readOnly: true })}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></button></td>
           </tr>)}
           {approvedArchiveLoading && <tr><td className="whereabouts-summary-empty" colSpan={6}>Loading documents…</td></tr>}
