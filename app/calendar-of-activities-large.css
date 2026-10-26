@@ -60,14 +60,14 @@
 .calendar-of-activities-preview-toolbar>small{color:#a23d2d;flex:1 0 100%;font-size:12px;text-align:right}
 .calendar-of-activities-preview-pages{display:grid;gap:24px;justify-items:center;margin:0 auto;width:100%}
 .calendar-of-activities-paper{aspect-ratio:297/210;background:#fff;box-shadow:0 18px 50px #0004;box-sizing:border-box;color:#111;container-type:inline-size;font-family:Cambria,'Times New Roman',serif;overflow:hidden;padding:4.7% 5.8% 3%;position:relative;width:min(96vw,297mm)}
-.calendar-of-activities-paper-heading{align-items:center;display:flex;gap:2cqi;justify-content:center;min-height:10cqi;text-align:center}
+.calendar-of-activities-paper-heading{align-items:center;display:flex;gap:2cqi;justify-content:center;min-height:10cqi;text-align:center;transform:translateX(-1cqi)}
 .calendar-of-activities-paper-heading img{height:6.5cqi;max-height:26mm;object-fit:contain;width:6.5cqi}
 .calendar-of-activities-paper-heading>div{display:grid;gap:.28cqi;line-height:1.12}
 .calendar-of-activities-paper-heading p,.calendar-of-activities-paper-heading strong,.calendar-of-activities-paper-heading span,.calendar-of-activities-paper-heading small{margin:0}
-.calendar-of-activities-paper-heading p{font-size:1.18cqi}
-.calendar-of-activities-paper-heading strong{font-size:1.45cqi;letter-spacing:.025em}
-.calendar-of-activities-paper-heading span{font-size:1.3cqi}
-.calendar-of-activities-paper-heading small{font-size:1.03cqi}
+.calendar-of-activities-paper-heading p{font-size:1.32cqi}
+.calendar-of-activities-paper-heading strong{font-size:1.65cqi;letter-spacing:.025em}
+.calendar-of-activities-paper-heading span{font-size:1.46cqi}
+.calendar-of-activities-paper-heading small{font-size:1.15cqi}
 .calendar-of-activities-paper-rule{border-top:1px solid #252525;margin:1.2cqi 0 1.15cqi}
 .calendar-of-activities-paper-title{margin:0 0 1.1cqi;text-align:center}
 .calendar-of-activities-paper-title h1{font-size:2.1cqi;letter-spacing:.04em;margin:0}
