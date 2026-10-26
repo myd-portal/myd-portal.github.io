@@ -48,7 +48,7 @@
 .appreciation-paper-agristat .appreciation-speaker-name-agristat{font-size:4cqi;height:9%;left:0;padding:0 4.6%;top:47.2%;width:100%}
 .appreciation-paper-agristat .appreciation-speaker-role-agristat{font-size:1.75cqi;font-weight:700;height:4%;left:4.6%;padding:0;top:57.2%;width:91%;white-space:normal}
 .appreciation-paper-agristat .appreciation-body-agristat{--appreciation-body-size:1.8cqi;bottom:8%;gap:1.8cqi;left:4.6%;line-height:1.12;right:4.6%;top:63.1%}
-.appreciation-paper-agristat .appreciation-signatory-agristat{transform:translateY(-2.75cqi)}
+.appreciation-paper-agristat .appreciation-signatory-agristat{transform:translateY(-2cqi)}
 .appreciation-paper-agristat .appreciation-signatory-agristat em{font-size:.9em}
 .appreciation-speaker-name,.appreciation-speaker-role,.appreciation-body,.appreciation-signatory{position:absolute;z-index:1}
 .appreciation-speaker-name{align-items:center;background:transparent;color:#fff;display:flex;font-size:4.25cqi;font-weight:700;height:12.2%;left:17.5%;line-height:1.05;overflow-wrap:anywhere;padding:1.2% 2.5% 1.2% 2.7%;text-transform:uppercase;top:34.7%;width:73.3%}
