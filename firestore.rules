@@ -345,6 +345,18 @@ service cloud.firestore {
         && firstAssignment is string && firstAssignment.size() > 0
         && firstAssignment == secondAssignment;
     }
+    function sameCalendarActivityUnit(firstProfile, secondProfile) {
+      let firstUnit = profileAssignment(firstProfile);
+      let secondUnit = profileAssignment(secondProfile);
+      return firstUnit is string && firstUnit.size() > 0
+        && secondUnit is string && firstUnit == secondUnit;
+    }
+    function sameCalendarActivityDivision(firstProfile, secondProfile) {
+      let firstDivision = profileDivision(firstProfile);
+      let secondDivision = profileDivision(secondProfile);
+      return firstDivision is string && firstDivision.size() > 0
+        && secondDivision is string && firstDivision == secondDivision;
+    }
     function calendarRecipientInOwnerScope(calendarId, recipientId) {
       let calendarRef = /databases/$(database)/documents/calendarOfActivities/$(calendarId);
       let ownerId = get(calendarRef).data.ownerId;
@@ -353,10 +365,10 @@ service cloud.firestore {
       return exists(calendarRef)
         && exists(ownerPath)
         && exists(recipientPath)
-        && (samePersonnelScope(get(ownerPath).data, get(recipientPath).data)
-          || (get(recipientPath).data.get("accountRole", "") == "admin"
-            // The app treats legacy Admin profiles with a missing or null status as approved.
-            && get(recipientPath).data.get("accountStatus", "Approved") in ["Approved", null]));
+        && ((normalizedAccountRole(get(recipientPath).data) in ["regular", "user"]
+            && sameCalendarActivityUnit(get(ownerPath).data, get(recipientPath).data))
+          || (normalizedAccountRole(get(recipientPath).data) == "admin"
+            && sameCalendarActivityDivision(get(ownerPath).data, get(recipientPath).data)));
     }
     function isCalendarOwnerOrSameUnit(calendarId) {
       let calendarRef = /databases/$(database)/documents/calendarOfActivities/$(calendarId);
