@@ -1,6 +1,6 @@
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { isSuperadminRole } from "@/lib/user-roles";
+import { isSuperadminRole, normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
 import { accountDesignation, accountProfileSelection, fieldOperationsCombinedAssignment } from "@/lib/account-profile";
 
 export type PersonnelEntry = { userId: string; name: string; position: string; office: string; division: string; unit: string; accountRole?: string; accountStatus?: string };
@@ -8,6 +8,12 @@ export type PermitAdminSignatory = { userId: string; name: string; position: str
 
 export function isApprovedAdminAccount(accountRole: unknown, accountStatus: unknown, email?: unknown) {
   return accountRole === "admin" && !isSuperadminRole(accountRole, email) && (accountStatus === undefined || accountStatus === null || accountStatus === "Approved");
+}
+
+export function isEligiblePersonnelAccount(accountRole: unknown, accountStatus: unknown, email?: unknown) {
+  const role = normalizeAccountRole(accountRole, typeof email === "string" ? email : undefined);
+  return normalizeAccountStatus(accountStatus) === "Approved"
+    && (role === "regular" || (role === "admin" && isApprovedAdminAccount(role, accountStatus, email)));
 }
 
 export function personnelDisplayName(person: Pick<PersonnelEntry, "name">) {
@@ -46,6 +52,13 @@ export function filterPersonnelForDivision(entries: PersonnelEntry[], office: st
   const selectedDivision = division.trim();
   if (!selectedOffice || !selectedDivision) return [];
   return entries.filter((person) => person.office === selectedOffice && person.division === selectedDivision);
+}
+
+export function filterPersonnelForDivisionRecipients(entries: PersonnelEntry[], division: string) {
+  const selectedDivision = division.trim();
+  if (!selectedDivision) return [];
+  return entries.filter((person) => person.division.trim() === selectedDivision
+    && isEligiblePersonnelAccount(person.accountRole, person.accountStatus));
 }
 
 const personnelCacheDurationMs = 60_000;
@@ -114,7 +127,7 @@ export async function loadPersonnel(options: { deduplicateByName?: boolean } = {
           office: profile.office,
           division: profile.division,
           unit: profile.unit || profile.assignment,
-          accountRole: typeof data.accountRole === "string" ? data.accountRole : undefined,
+          accountRole: normalizeAccountRole(data.accountRole, data.email),
           accountStatus: typeof data.accountStatus === "string" ? data.accountStatus : undefined,
         };
       }).filter((person) => person.name);

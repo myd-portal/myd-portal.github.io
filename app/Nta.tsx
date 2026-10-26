@@ -9,7 +9,7 @@ import { db, functions } from "@/lib/firebase";
 import { accountDesignation, accountProfileSelection } from "@/lib/account-profile";
 import NameSearchSelect from "./NameSearchSelect";
 import { loadPdfTools } from "@/lib/pdf-tools";
-import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
+import { filterPersonnelForAccount, filterPersonnelForDivisionRecipients, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
 import { isSuperadminRole, normalizeAccountRole, normalizeAccountStatus } from "@/lib/user-roles";
@@ -176,7 +176,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
     let cancelled = false;
     async function loadPersonnel() {
       try {
-        const loadedPersonnel = filterPersonnelForDivision(await loadAccountPersonnel({ deduplicateByName: false }), office, division ?? "");
+        const loadedPersonnel = filterPersonnelForDivisionRecipients(await loadAccountPersonnel({ deduplicateByName: false }), division ?? "");
         if (!cancelled) {
           setPersonnel(loadedPersonnel);
           setPersonnelStatus("ready");

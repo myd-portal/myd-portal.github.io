@@ -36,7 +36,7 @@ import {
   type QuerySnapshot,
 } from "firebase/firestore";
 import { auth, db, functions, isFirebaseConfigured } from "@/lib/firebase";
-import { filterPersonnelForAccount, filterPersonnelForDivision, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
+import { filterPersonnelForAccount, filterPersonnelForDivisionRecipients, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
 import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
 import { accountRoleForEmail, isSuperadminRole, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
 import { accountOffice, accountAssignment, accountDesignation, accountDesignationOptions, accountOfficeOptions, accountPositionOptions, accountProfileSelection, assignmentsForOffice, divisionsForOffice, unitsForOfficeDivision, fieldOperationsAssignments, fieldOperationsCombinedAssignment } from "@/lib/account-profile";
@@ -605,7 +605,7 @@ function PermitForm({ user, office, assignment, division = "", unit = "", design
     let cancelled = false;
     async function loadPersonnel() {
       try {
-        const entries = await loadAccountPersonnel({ deduplicateByName: false });
+        const entries = filterPersonnelForDivisionRecipients(await loadAccountPersonnel({ deduplicateByName: false }), division);
         if (!cancelled) {
           setPersonnel(entries);
           setPersonnelStatus("ready");
@@ -616,7 +616,7 @@ function PermitForm({ user, office, assignment, division = "", unit = "", design
     }
     void loadPersonnel();
     return () => { cancelled = true; };
-  }, []);
+  }, [division]);
 
   function selectPerson(index: number, userId: string) {
     const selectedPerson = personnel.find((person) => person.userId === userId);
@@ -1441,7 +1441,7 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
     let cancelled = false;
     async function loadPersonnel() {
       try {
-        const entries = filterPersonnelForDivision(await loadAccountPersonnel({ deduplicateByName: false }), ownerOffice, ownerDivision ?? "");
+        const entries = filterPersonnelForDivisionRecipients(await loadAccountPersonnel({ deduplicateByName: false }), ownerDivision ?? "");
         if (!cancelled) {
           setPersonnel(entries);
           setPersonnelStatus("ready");
