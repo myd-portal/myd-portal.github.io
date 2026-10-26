@@ -119,6 +119,7 @@ const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${pat
 const emptyActivity = (): ActivityDraft => ({ dateFrom: "", dateTo: "", activity: "", location: "", responsiblePeople: [], nextResponsibleId: "" });
 const pageSize = 6;
 const maximumActivities = 100;
+const calendarNotificationBatchSize = 8;
 const fodCalendarOwnerUnits = ["AGRISTAT", "DRRM", "AMIA"];
 const allPersonnelOptionId = "__all_personnel__";
 const allPersonnelResponsible: ResponsiblePerson = { userId: allPersonnelOptionId, name: "All Personnel" };
@@ -451,10 +452,10 @@ function CalendarOfActivitiesForm({ user, profile, accounts, unitPersonnel, admi
         }
         existingByRecipient.forEach((notifications) => notifications.forEach((notification) => notificationChanges.push({ kind: "delete", reference: notification.ref })));
 
-        for (let start = 0; start < Math.max(notificationChanges.length, 1); start += 17) {
+        for (let start = 0; start < Math.max(notificationChanges.length, 1); start += calendarNotificationBatchSize) {
           const batch = writeBatch(firestore);
           if (start === 0) batch.update(planRef, { activities: rows, ...signatories });
-          notificationChanges.slice(start, start + 17).forEach((change) => {
+          notificationChanges.slice(start, start + calendarNotificationBatchSize).forEach((change) => {
             if (change.kind === "delete") batch.delete(change.reference);
             else if (change.kind === "update") batch.update(change.reference, change.data!);
             else batch.set(change.reference, change.data!);
@@ -474,9 +475,9 @@ function CalendarOfActivitiesForm({ user, profile, accounts, unitPersonnel, admi
           data: { recipientId, ownerId: user.uid, calendarId: planRef.id, unit: profile.unit, month, activities: notices, read: false, createdAt: serverTimestamp() },
         }));
         try {
-          for (let start = 0; start < notificationDocuments.length; start += 18) {
+          for (let start = 0; start < notificationDocuments.length; start += calendarNotificationBatchSize) {
             const batch = writeBatch(firestore);
-            notificationDocuments.slice(start, start + 18).forEach((notification) => batch.set(notification.reference, notification.data));
+            notificationDocuments.slice(start, start + calendarNotificationBatchSize).forEach((notification) => batch.set(notification.reference, notification.data));
             await batch.commit();
           }
         } catch (cause) {
