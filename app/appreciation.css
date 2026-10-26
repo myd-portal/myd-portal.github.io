@@ -42,8 +42,12 @@
 .appreciation-preview-toolbar{max-width:11in}
 .appreciation-preview-pages{display:grid;gap:18px;justify-items:center;margin:0 auto}
 .appreciation-print-sheet{aspect-ratio:11 / 8.5;background:#fff;box-shadow:0 18px 50px #18211f24;container-type:inline-size;height:auto;overflow:hidden;position:relative;width:min(96vw,11in)}
+.appreciation-print-sheet-agristat{aspect-ratio:297 / 210;width:min(96vw,297mm)}
 .appreciation-paper{background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;height:100%;overflow:hidden;position:relative;width:100%}
 .appreciation-blank{height:100%;inset:0;object-fit:fill;pointer-events:none;position:absolute;width:100%;z-index:0}
+.appreciation-paper-agristat .appreciation-speaker-name-agristat{font-size:4cqi;height:9%;left:0;padding:0 4.6%;top:47.2%;width:100%}
+.appreciation-paper-agristat .appreciation-speaker-role-agristat{font-size:1.75cqi;font-weight:700;height:4%;left:4.6%;padding:0;top:57.2%;width:91%;white-space:normal}
+.appreciation-paper-agristat .appreciation-body-agristat{--appreciation-body-size:1.8cqi;bottom:6%;gap:1.8cqi;left:4.6%;line-height:1.12;right:4.6%;top:63.1%}
 .appreciation-speaker-name,.appreciation-speaker-role,.appreciation-body,.appreciation-signatory{position:absolute;z-index:1}
 .appreciation-speaker-name{align-items:center;background:transparent;color:#fff;display:flex;font-size:4.25cqi;font-weight:700;height:12.2%;left:17.5%;line-height:1.05;overflow-wrap:anywhere;padding:1.2% 2.5% 1.2% 2.7%;text-transform:uppercase;top:34.7%;width:73.3%}
 .appreciation-speaker-role{align-items:center;background:transparent;color:#fff;display:flex;font-size:1.2cqi;height:3.25%;left:17.5%;line-height:1.1;overflow:hidden;padding:0 2.5% 0 2.7%;text-overflow:ellipsis;top:47.1%;white-space:nowrap;width:73.3%}
@@ -83,12 +87,14 @@
   .appreciation-preview-toolbar>button{font-size:clamp(10px,3vw,13px);min-width:0;padding:9px 4px;white-space:nowrap}
   .appreciation-preview-pages{gap:12px;min-width:0;width:100%}
   .appreciation-print-sheet{max-width:11in;width:100%}
+  .appreciation-print-sheet-agristat{max-width:297mm;width:100%}
   .appreciation-error{max-width:11in;width:100%}
 }
 @media print{
   .appreciation-preview-toolbar,.appreciation-error{display:none!important}
   .appreciation-preview-pages{display:block!important;margin:0!important}
   .appreciation-print-sheet{aspect-ratio:auto!important;break-inside:avoid!important;box-shadow:none!important;height:8.5in!important;margin:0 auto!important;page-break-inside:avoid!important;width:11in!important}
+  .appreciation-print-sheet-agristat{aspect-ratio:auto!important;height:210mm!important;width:297mm!important}
   .appreciation-print-sheet:not(:last-child){break-after:page!important;page-break-after:always!important}
   .appreciation-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}
   .appreciation-paper,.appreciation-paper *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}

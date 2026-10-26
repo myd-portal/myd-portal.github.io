@@ -29,6 +29,7 @@ type CompletionRecord = CertificateWorkflowFields & {
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const blankTemplate = `${basePath}/completion-drrm-blank.jpg`;
+const agristatBlankTemplate = `${basePath}/completion-agristat-blank.png`;
 const amiaBlankTemplate = `${basePath}/AMIA%20Certificate%20-%20Blank.jpg`;
 const bagongPilipinasLogo = `${basePath}/bagong-pilipinas-logo.webp`;
 const daCaragaLogo = `${basePath}/da-caraga-logo.jpg`;
@@ -170,8 +171,8 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
     const eventDestination = String(form.get("event-destination") ?? "").trim();
     const sameAsDestination = form.get("distribution-same") === "yes";
     const unit = String(form.get("unit") ?? "") as CompletionUnit;
-    if (unit !== "DRRM" && unit !== "AMIA") {
-      setError("AGRISTAT completion template on hold.");
+    if (unit !== "DRRM" && unit !== "AMIA" && unit !== "AGRISTAT") {
+      setError("Select a valid completion certificate template.");
       return;
     }
     const names = form.getAll("participant-name").map((value) => String(value).trim());
@@ -307,8 +308,9 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
       const { html2canvas, jsPDF } = await loadPdfTools();
       await waitForTemplate();
       const sheets = Array.from(pageRef.current!.querySelectorAll<HTMLElement>(".completion-print-sheet"));
-      const paperFormat = preview!.unit === "AMIA" ? "a4" : "letter";
-      const paperSize = preview!.unit === "AMIA" ? "297mm" : "11in";
+      const isA4 = preview!.unit !== "DRRM";
+      const paperFormat = isA4 ? "a4" : "letter";
+      const paperSize = isA4 ? "297mm" : "11in";
       originalPaperSizes = sheets.map((sheet): [string, string] => [sheet.style.width, sheet.style.maxWidth]);
       sheets.forEach((sheet) => {
         sheet.style.width = paperSize;
@@ -365,7 +367,7 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
       await waitForTemplate();
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       printPageStyle = document.createElement("style");
-      printPageStyle.textContent = preview!.unit === "AMIA"
+      printPageStyle.textContent = preview!.unit !== "DRRM"
         ? "@media print{@page{size:A4 landscape;margin:0}}"
         : "@media print{@page{size:11in 8.5in;margin:0}}";
       document.head.appendChild(printPageStyle);
@@ -382,7 +384,7 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
     return <div className="preview-backdrop completion-preview-backdrop">
       <div className="preview-toolbar completion-preview-toolbar"><span>Completion certificate preview</span><button type="button" className="ghost-button" onClick={() => { setPreview(null); setError(""); }}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={() => void downloadPdf()}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={() => void printCertificate()}>{printing ? "Preparing print..." : "Print"}</button></div>
       {error && <p className="completion-error" role="alert">{error}</p>}
-      <div className="completion-preview-pages" ref={pageRef}>{participantNames(preview).map((name, index) => <section className={`completion-print-sheet${preview.unit === "AMIA" ? " completion-print-sheet-amia" : ""}`} key={`${preview.id}-${index}`} aria-label={`${preview.unit === "AMIA" ? "A4" : "Letter"} landscape completion certificate for ${name}`}><CompletionPaper record={preview} participantName={name} /></section>)}</div>
+      <div className="completion-preview-pages" ref={pageRef}>{participantNames(preview).map((name, index) => <section className={`completion-print-sheet${preview.unit === "AMIA" ? " completion-print-sheet-amia" : preview.unit === "AGRISTAT" ? " completion-print-sheet-agristat" : ""}`} key={`${preview.id}-${index}`} aria-label={`${preview.unit === "DRRM" ? "Letter" : "A4"} landscape completion certificate for ${name}`}><CompletionPaper record={preview} participantName={name} /></section>)}</div>
     </div>;
   }
 
@@ -400,7 +402,6 @@ export default function CompletionCertificate({ user, focusRecordId, onFocusHand
     {error && <p className="completion-error" role="alert">{error}</p>}
     {importMessage && <p className="completion-success" role="status">{importMessage}</p>}
     {loading ? <p className="muted">Loading completion certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No completion certificates yet</h3><p>Add completion details manually or import the completed Completion_Importing_Template.xlsx workbook.</p><div className="completion-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Completion Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="completion-record-list"><div className="completion-record-head"><span>Office</span><span>Completer(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="completion-record-row" key={record.id}><span><span className="completion-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="completion-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
-    <p className="completion-hold-note">AGRISTAT completion template on hold.</p>
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Completion Certificate Deletion?" description="Are you sure you want to delete this Completion Certificate? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;
@@ -415,10 +416,10 @@ function CompletionForm({ onCancel, onSubmit, saving, error }: { onCancel: () =>
   const [distributionPlace, setDistributionPlace] = useState("");
 
   return <section className="content-section completion-section completion-form-section">
-    <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Completion</h2><p className="muted">Enter the event and completer details. AMIA certificates print on A4; DRRM certificates print on landscape Letter paper.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
+    <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Completion</h2><p className="muted">Enter the event and completer details. AGRISTAT and AMIA certificates print on A4; DRRM certificates print on landscape Letter paper.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     {error && <p className="completion-error" role="alert">{error}</p>}
     <form className="permit-form completion-form" onSubmit={onSubmit}>
-      <label className="wide-field">Certificate Template From<select name="unit" defaultValue="AMIA"><option value="AGRISTAT" disabled>FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select><small>AGRISTAT completion template on hold.</small></label>
+      <label className="wide-field">Certificate Template From<select name="unit" defaultValue="AMIA"><option value="AGRISTAT">FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select></label>
       <fieldset className="wide-field completion-participants-fieldset"><legend>Completer&apos;s Name</legend><p className="completion-participants-hint">Enter one or more names. A separate certificate will be created for each completer.</p>{names.map((name, index) => <div className="completion-name-row" key={index}><label>Completer {index + 1}<input name="participant-name" maxLength={180} value={name} onChange={(event) => setNames((current) => current.map((person, personIndex) => personIndex === index ? event.target.value : person))} required /></label>{names.length > 1 && <button type="button" className="remove-participant" aria-label={`Delete completer ${index + 1}`} onClick={() => setNames((current) => current.filter((_, personIndex) => personIndex !== index))}>Delete</button>}</div>)}<button type="button" className="text-button plain-action add-item-text-button" disabled={names.length >= MAX_PARTICIPANTS} onClick={() => setNames((current) => [...current, ""])}>+ Add completer</button></fieldset>
       <label>Event&apos;s Title<input name="event-title" maxLength={240} required /></label>
       <label>Event&apos;s Destination<input name="event-destination" maxLength={240} value={eventDestination} onChange={(event) => setEventDestination(event.target.value)} required /></label>
@@ -467,6 +468,17 @@ function CompletionPaper({ record, participantName }: { record: CompletionRecord
         <p>Given this {ordinalDay(record.eventDateTo)} in at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
       </div>
       <footer className="completion-signatory completion-signatory-amia"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+    </article>;
+  }
+  if (record.unit === "AGRISTAT") {
+    return <article className="completion-paper completion-paper-agristat">
+      <img className="completion-template completion-template-agristat" src={agristatBlankTemplate} alt="" />
+      <h1 className="completion-participant completion-participant-agristat">{participantName}</h1>
+      <div className="completion-body completion-body-agristat">
+        <p>has completed the <strong className="completion-event-title">{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong>, at <strong>{record.eventDestination}</strong>.</p>
+        <p>Given this {ordinalDay(record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
+      </div>
+      <footer className="completion-signatory completion-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
     </article>;
   }
   return <article className="completion-paper">

@@ -16,7 +16,7 @@ type AppreciationSpeaker = { name: string; gender: AppreciationGender; position:
 type AppreciationSpeakerDraft = { name: string; gender: AppreciationGender | ""; position: string; office: string };
 type AppreciationRecord = {
   id: string;
-  unit: "AMIA" | "DRRM";
+  unit: "AMIA" | "AGRISTAT" | "DRRM";
   speakers?: AppreciationSpeaker[];
   speakerName: string;
   speakerGender: AppreciationGender;
@@ -37,6 +37,7 @@ const MAX_SPEAKERS = 100;
 
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 const blankAppreciation = asset("/appreciation-drrm-blank.jpg");
+const blankAgristatAppreciation = asset("/appreciation-agristat-blank.png");
 const blankAmiaAppreciation = asset("/AMIA%20Certificate%20-%20Blank.jpg");
 const bagongPilipinasLogo = asset("/bagong-pilipinas-logo.webp");
 const daCaragaLogo = asset("/da-caraga-logo.jpg");
@@ -174,7 +175,7 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
     const eventDestination = String(form.get("event-destination") ?? "").trim();
     const sameAsDestination = form.get("distribution-same") === "yes";
     const unit = String(form.get("unit") ?? "") as "AMIA" | "AGRISTAT" | "DRRM";
-    if (unit !== "AMIA" && unit !== "DRRM") { setError("AGRISTAT appreciation template on hold."); return; }
+    if (unit !== "AMIA" && unit !== "DRRM" && unit !== "AGRISTAT") { setError("Select a valid appreciation certificate template."); return; }
     const names = form.getAll("speaker-name").map((value) => String(value).trim());
     const genders = form.getAll("speaker-gender").map((value) => String(value) as AppreciationGender);
     const positions = form.getAll("speaker-position").map((value) => String(value).trim());
@@ -269,7 +270,7 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
         setRecords((current) => [...chunk, ...current]);
       }
       const speakerCount = imported.reduce((total, record) => total + recordSpeakers(record).length, 0);
-      const unitCounts = imported.reduce<Partial<Record<"AMIA" | "DRRM", number>>>((counts, record) => {
+      const unitCounts = imported.reduce<Partial<Record<"AMIA" | "AGRISTAT" | "DRRM", number>>>((counts, record) => {
         counts[record.unit] = (counts[record.unit] ?? 0) + 1;
         return counts;
       }, {});
@@ -311,8 +312,9 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
       papers = Array.from(pagesRef.current?.querySelectorAll<HTMLElement>(".appreciation-print-sheet") ?? []);
       if (!papers.length) throw new Error("The Appreciation certificate preview is unavailable.");
       originalPaperSizes = papers.map((paper): [string, string] => [paper.style.width, paper.style.maxWidth]);
-      const paperFormat = preview!.unit === "AMIA" ? "a4" : "letter";
-      const paperWidth = preview!.unit === "AMIA" ? "297mm" : "11in";
+      const isA4 = preview!.unit !== "DRRM";
+      const paperFormat = isA4 ? "a4" : "letter";
+      const paperWidth = isA4 ? "297mm" : "11in";
       papers.forEach((paper) => {
         paper.style.width = paperWidth;
         paper.style.maxWidth = "none";
@@ -366,7 +368,7 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
       await waitForBlank();
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       printPageStyle = document.createElement("style");
-      printPageStyle.textContent = preview!.unit === "AMIA"
+      printPageStyle.textContent = preview!.unit !== "DRRM"
         ? "@media print{@page{size:A4 landscape;margin:0}}"
         : "@media print{@page{size:11in 8.5in;margin:0}}";
       document.head.appendChild(printPageStyle);
@@ -382,7 +384,7 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
   if (preview) return <div className="preview-backdrop appreciation-preview-backdrop">
     <div className="preview-toolbar appreciation-preview-toolbar"><span>Appreciation certificate preview</span><button type="button" className="ghost-button" onClick={() => { setPreview(null); setError(""); }}>Close</button><button type="button" className="pdf-button" disabled={downloading} onClick={() => void downloadPdf()}>{downloading ? "Preparing PDF..." : "Download PDF"}</button><button type="button" className="pdf-button" disabled={printing} onClick={() => void printCertificate()}>{printing ? "Preparing print..." : "Print"}</button></div>
     {error && <p className="appreciation-error" role="alert">{error}</p>}
-    <div className="appreciation-preview-pages" ref={pagesRef}>{recordSpeakers(preview).map((speaker, index) => <section className={`appreciation-print-sheet${preview.unit === "AMIA" ? " appreciation-print-sheet-amia" : ""}`} key={`${preview.id}-${index}`} aria-label={`${preview.unit === "AMIA" ? "A4" : "Letter"} landscape Appreciation certificate for ${speaker.name}`}><AppreciationPaper record={preview} speaker={speaker} /></section>)}</div>
+    <div className="appreciation-preview-pages" ref={pagesRef}>{recordSpeakers(preview).map((speaker, index) => <section className={`appreciation-print-sheet${preview.unit === "AMIA" ? " appreciation-print-sheet-amia" : preview.unit === "AGRISTAT" ? " appreciation-print-sheet-agristat" : ""}`} key={`${preview.id}-${index}`} aria-label={`${preview.unit === "DRRM" ? "Letter" : "A4"} landscape Appreciation certificate for ${speaker.name}`}><AppreciationPaper record={preview} speaker={speaker} /></section>)}</div>
   </div>;
 
   if (view === "new") return <AppreciationForm onCancel={() => { setView("list"); setError(""); }} onSubmit={saveAppreciation} saving={saving} error={error} />;
@@ -395,7 +397,6 @@ export default function AppreciationCertificate({ user, focusRecordId, onFocusHa
     {error && <p className="appreciation-error" role="alert">{error}</p>}
     {importMessage && <p className="appreciation-success" role="status">{importMessage}</p>}
     {loading ? <p className="muted">Loading Appreciation certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No Appreciation certificates yet</h3><p>Add the speaker and event details manually or import the completed Appreciation_Importing_Template.xlsx workbook.</p><div className="appreciation-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add an Appreciation Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="appreciation-record-list"><div className="appreciation-record-head"><span>Unit</span><span>Resource Speaker(s)</span><span>Event&apos;s Title</span><span>Event Dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="appreciation-record-row" key={record.id}><span><span className="appreciation-unit-tag">{record.unit}</span></span><strong>{recordSpeakers(record).map((speaker) => speaker.name).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="appreciation-record-actions"><button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button><button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button><button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button></div></div>)}</div>}
-    <p className="appreciation-hold-note">AGRISTAT appreciation template on hold.</p>
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Appreciation Certificate Deletion?" description="Are you sure you want to delete this Appreciation Certificate? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;
@@ -411,10 +412,10 @@ function AppreciationForm({ onCancel, onSubmit, saving, error }: { onCancel: () 
   const updateSpeaker = (index: number, values: Partial<AppreciationSpeakerDraft>) => setSpeakers((current) => current.map((speaker, row) => row === index ? { ...speaker, ...values } : speaker));
 
   return <section className="content-section appreciation-section appreciation-form-section">
-    <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Appreciation</h2><p className="muted">Enter one or more resource speakers and the event details. AMIA certificates print on A4; DRRM certificates print on landscape Letter paper. Each speaker gets a separate certificate.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
+    <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Appreciation</h2><p className="muted">Enter one or more resource speakers and the event details. AGRISTAT and AMIA certificates print on A4; DRRM certificates print on landscape Letter paper. Each speaker gets a separate certificate.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     {error && <p className="appreciation-error" role="alert">{error}</p>}
     <form className="permit-form appreciation-form" onSubmit={onSubmit}>
-      <label className="wide-field">Certificate Template From<select name="unit" defaultValue="AMIA"><option value="AGRISTAT" disabled>FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select><small>AGRISTAT appreciation template on hold.</small></label>
+      <label className="wide-field">Certificate Template From<select name="unit" defaultValue="AMIA"><option value="AGRISTAT">FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select></label>
       <AppreciationSpeakersFieldset speakers={speakers} onChange={updateSpeaker} onAdd={() => setSpeakers((current) => [...current, { name: "", gender: "", position: "", office: "" }])} onRemove={(index) => setSpeakers((current) => current.filter((_, row) => row !== index))} />
       <label>Event&apos;s Title<input name="event-title" maxLength={240} required /></label>
       <label>Event&apos;s Destination<input name="event-destination" maxLength={240} value={eventDestination} onChange={(event) => setEventDestination(event.target.value)} required /></label>
@@ -526,6 +527,19 @@ function AppreciationPaper({ record, speaker }: { record: AppreciationRecord; sp
         <p>in appreciation of {possessive} invaluable expertise and insight on {possessive} field as a <strong>RESOURCE SPEAKER</strong> in the <strong><em>{record.eventTitle}</em></strong> conducted on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at {record.eventDestination}.</p>
         <p>Given this {ordinalDate(record.eventDateTo)} in at <strong>{countryLocation(record.distributionPlace)}</strong>.</p>
         <footer className="appreciation-signatory appreciation-signatory-amia"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+      </div>
+    </article>;
+  }
+
+  if (record.unit === "AGRISTAT") {
+    return <article className="appreciation-paper appreciation-paper-agristat">
+      <img className="appreciation-blank appreciation-blank-agristat" src={blankAgristatAppreciation} alt="" />
+      <div className="appreciation-speaker-name appreciation-speaker-name-agristat">{speaker.name}</div>
+      <div className="appreciation-speaker-role appreciation-speaker-role-agristat"><em>{speaker.position}</em>, {speaker.office}</div>
+      <div className="appreciation-body appreciation-body-agristat" ref={bodyRef}>
+        <p>For {objectPronoun} exemplary service, commitment, and invaluable shared insights as <strong>RESOURCE SPEAKER</strong> for <strong>{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at <strong>{record.eventDestination}</strong>.</p>
+        <p>Given this {ordinalDate(record.eventDateTo)} at <strong>{countryLocation(record.distributionPlace)}</strong>.</p>
+        <footer className="appreciation-signatory appreciation-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
       </div>
     </article>;
   }

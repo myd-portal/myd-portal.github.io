@@ -3,7 +3,7 @@
 import { isWithinImportTemplateDateRange } from "@/lib/import-template-rules";
 
 export type ImportedParticipationRecord = {
-  unit: "AMIA" | "DRRM";
+  unit: "AMIA" | "AGRISTAT" | "DRRM";
   participantNames: string[];
   participantGenders: ("female" | "male")[];
   eventTitle: string;
@@ -105,8 +105,7 @@ export function parseParticipationImportWorkbook(bytes: Uint8Array): ImportedPar
     if (![...values.values()].some((value) => value.trim())) return;
 
     const unitValue = valueFor(values, "unit").toUpperCase().replace(/^FOD-/, "");
-    if (unitValue === "AGRISTAT") throw new Error(`Row ${rowNumber}: AGRISTAT participation template on hold.`);
-    if (unitValue !== "AMIA" && unitValue !== "DRRM") throw new Error(`Row ${rowNumber}: Certificate Template From must be AMIA or DRRM.`);
+    if (unitValue !== "AMIA" && unitValue !== "DRRM" && unitValue !== "AGRISTAT") throw new Error(`Row ${rowNumber}: Certificate Template From must be AGRISTAT, AMIA, or DRRM.`);
     const unit = unitValue;
     const rawGender = valueFor(values, "gender").toLowerCase();
     const participantGender = rawGender === "f" || rawGender === "female" ? "female" : rawGender === "m" || rawGender === "male" ? "male" : "";

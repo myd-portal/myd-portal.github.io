@@ -9,7 +9,7 @@ export type ImportedAppreciationSpeaker = {
 };
 
 export type ImportedAppreciationRecord = {
-  unit: "AMIA" | "DRRM";
+  unit: "AMIA" | "AGRISTAT" | "DRRM";
   speakers: ImportedAppreciationSpeaker[];
   eventTitle: string;
   eventDateFrom: string;
@@ -109,9 +109,8 @@ export function parseAppreciationImportWorkbook(bytes: Uint8Array): ImportedAppr
     const rowNumber = index + 2;
     const values = readRow(row);
     if (![...values.values()].some((value) => value.trim())) return;
-    const unit = valueFor(values, "unit").toUpperCase();
-    if (unit === "AGRISTAT") throw new Error(`Row ${rowNumber}: AGRISTAT appreciation template on hold.`);
-    if (unit !== "DRRM" && unit !== "AMIA") throw new Error(`Row ${rowNumber}: Certificate Template From must be AMIA or DRRM.`);
+    const unit = valueFor(values, "unit").toUpperCase().replace(/^FOD-/, "");
+    if (unit !== "DRRM" && unit !== "AMIA" && unit !== "AGRISTAT") throw new Error(`Row ${rowNumber}: Certificate Template From must be AGRISTAT, AMIA, or DRRM.`);
     const rawGender = valueFor(values, "gender").trim().toLowerCase();
     const speakerGender = rawGender === "f" || rawGender === "female" ? "female" : rawGender === "m" || rawGender === "male" ? "male" : "";
     const speakerName = valueFor(values, "name");

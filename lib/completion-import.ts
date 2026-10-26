@@ -2,7 +2,7 @@ import { unzipSync } from "fflate";
 import { isWithinImportTemplateDateRange } from "@/lib/import-template-rules";
 
 export type ImportedCompletionRecord = {
-  unit: "AMIA" | "DRRM";
+  unit: "AMIA" | "AGRISTAT" | "DRRM";
   participantNames: string[];
   eventTitle: string;
   eventDateFrom: string;
@@ -101,9 +101,8 @@ export function parseCompletionImportWorkbook(bytes: Uint8Array): ImportedComple
     const values = readRow(row);
     if (![...values.values()].some((value) => value.trim())) return;
 
-    const unit = valueFor(values, "unit").toUpperCase();
-    if (unit === "AGRISTAT") throw new Error(`Row ${rowNumber}: AGRISTAT completion template on hold.`);
-    if (unit !== "DRRM" && unit !== "AMIA") throw new Error(`Row ${rowNumber}: Certificate Template From must be AMIA or DRRM.`);
+    const unit = valueFor(values, "unit").toUpperCase().replace(/^FOD-/, "");
+    if (unit !== "DRRM" && unit !== "AMIA" && unit !== "AGRISTAT") throw new Error(`Row ${rowNumber}: Certificate Template From must be AGRISTAT, AMIA, or DRRM.`);
     const eventTitle = valueFor(values, "title");
     const eventDestination = valueFor(values, "destination");
     const eventDateFrom = parseDate(valueFor(values, "datefrom"));

@@ -35,6 +35,7 @@ type ParticipationRecord = CertificateWorkflowFields & {
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const amiaBlankTemplate = `${basePath}/AMIA%20Certificate%20-%20Blank.jpg`;
+const agristatBlankTemplate = `${basePath}/participation-agristat-blank.png`;
 const drrmBlankTemplate = `${basePath}/drrm-participation-blank-but-with-logos.jpg`;
 const bagongPilipinasLogo = `${basePath}/bagong-pilipinas-logo.webp`;
 const daCaragaLogo = `${basePath}/da-caraga-logo.jpg`;
@@ -181,8 +182,8 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
     const eventDestination = String(form.get("event-destination") ?? "").trim();
     const sameAsDestination = form.get("distribution-same") === "yes";
     const unit = String(form.get("unit") ?? "") as ParticipationUnit;
-    if (unit !== "AMIA" && unit !== "DRRM") {
-      setError("AGRISTAT participation template on hold.");
+    if (unit !== "AMIA" && unit !== "DRRM" && unit !== "AGRISTAT") {
+      setError("Select a valid participation certificate template.");
       return;
     }
     const names = form.getAll("participant-name").map((value) => String(value).trim());
@@ -409,7 +410,6 @@ export default function ParticipationCertificate({ user, focusRecordId, onFocusH
     {error && <p className="participation-error" role="alert">{error}</p>}
     {importMessage && <p className="participation-success" role="status">{importMessage}</p>}
     {loading ? <p className="muted">Loading participation certificates...</p> : records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No participation certificates yet</h3><p>Add participation details manually or import the completed Participation_Importing_Template.xlsx workbook.</p><div className="participation-empty-actions"><button type="button" className="text-button plain-action" onClick={() => { setError(""); setView("new"); }}>Add a Participation Certificate</button><button type="button" className="text-button plain-action" disabled={importing} onClick={() => { setError(""); setImportMessage(""); importInputRef.current?.click(); }}>{importing ? "Importing..." : "Upload an excel file"}</button></div></div> : <div className="participation-record-list"><div className="participation-record-head"><span>Office</span><span>Participant(s)</span><span>Event</span><span>Event dates</span><span>Status</span><span></span></div>{records.map((record) => <div className="participation-record-row" key={record.id}><span><span className="participation-unit-tag">{record.unit}</span></span><strong>{participantNames(record).join(", ")}</strong><span>{record.eventTitle}</span><span>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</span><span><CertificateStatusBadge record={record} /></span><div className="participation-record-actions">{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="row-action" onClick={() => { setEditingRecord(record); setError(""); setView("edit"); }}>Edit</button>}<button type="button" className="row-action" onClick={() => { setError(""); setPreview(record); }}>View</button>{certificateWorkflowStatus(record.status) !== "Approved" && <button type="button" className="delete-button" disabled={deletingId !== null} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div></div>)}</div>}
-    <p className="participation-hold-note">AGRISTAT participation template on hold.</p>
   </section>
   <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Participation Certificate Deletion?" description="Are you sure you want to delete this Participation Certificate? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} />
   </>;
@@ -428,7 +428,7 @@ function ParticipationForm({ onCancel, onSubmit, saving, error }: { onCancel: ()
     <div className="section-heading"><div><p className="eyebrow">New record</p><h2>Create Certificate of Participation</h2><p className="muted">Enter participant and event details. Each participant gets a separate {unit === "DRRM" ? "Letter" : "A4"} landscape certificate.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     {error && <p className="participation-error" role="alert">{error}</p>}
     <form className="permit-form participation-form" onSubmit={onSubmit}>
-      <label className="wide-field">Certificate Template From<select name="unit" value={unit} onChange={(event) => setUnit(event.target.value as ParticipationUnit)}><option value="AGRISTAT" disabled>FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select><small>AGRISTAT participation template on hold.</small></label>
+      <label className="wide-field">Certificate Template From<select name="unit" value={unit} onChange={(event) => setUnit(event.target.value as ParticipationUnit)}><option value="AGRISTAT">FOD-AGRISTAT</option><option value="AMIA">FOD-AMIA</option><option value="DRRM">FOD-DRRM</option></select></label>
       <ParticipationParticipantsFieldset participants={participants} onChange={(index, values) => setParticipants((current) => current.map((person, personIndex) => personIndex === index ? { ...person, ...values } : person))} onAdd={() => setParticipants((current) => [...current, { name: "", gender: "" }])} onRemove={(index) => setParticipants((current) => current.filter((_, personIndex) => personIndex !== index))} />
       <label>Event&apos;s Title<input name="event-title" maxLength={240} required /></label>
       <label>Event&apos;s Destination<input name="event-destination" maxLength={240} value={eventDestination} onChange={(event) => setEventDestination(event.target.value)} required /></label>
@@ -470,6 +470,17 @@ function ParticipationParticipantsFieldset({ participants, onChange, onAdd, onRe
 
 function ParticipationPaper({ record, participant }: { record: ParticipationRecord; participant: ParticipantDetails }) {
   const possessive = participant.gender === "female" ? "her" : "his";
+  if (record.unit === "AGRISTAT") {
+    return <article className="participation-paper participation-paper-agristat">
+      <img className="participation-template participation-template-agristat" src={agristatBlankTemplate} alt="" />
+      <h1 className="participation-participant participation-participant-agristat">{participant.name}</h1>
+      <div className="participation-body participation-body-agristat">
+        <p>has actively participated in <strong>{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong> at <strong>{record.eventDestination}</strong>.</p>
+        <p>Given this {ordinalDay(record.distributionDate || record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
+      </div>
+      <footer className="participation-signatory participation-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+    </article>;
+  }
   if (record.unit === "DRRM") {
     return <article className="participation-paper participation-paper-drrm">
       <img className="participation-template participation-template-drrm" src={drrmBlankTemplate} alt="" />
