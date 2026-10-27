@@ -212,6 +212,10 @@
     width: auto;
   }
 
+  .user-master-list-table td:nth-child(n) {
+    width: auto;
+  }
+
   .user-master-list-table td::before {
     color: var(--muted);
     content: attr(data-label);
