@@ -39,6 +39,7 @@ type LeaveApplicationRecord = {
   filedDate: string;
   name: string;
   office: Office;
+  profileDivision?: string;
   position: string;
   salary: string;
   leaveType: LeaveType;
@@ -305,7 +306,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
     middle: typeof record.middleName === "string" ? record.middleName.trim() : parsedApplicant.middle,
   };
 
-  drawFitText(page, bold, record.office, 165.64, 878.38, 120, 9.5);
+  drawFitText(page, bold, record.profileDivision || record.office, 165.64, 878.38, 190, 9.5);
   drawFitText(page, bold, applicant.last, 367.41, 880.68, 103, 9.5);
   drawFitText(page, bold, applicant.first, 476.53, 880.68, 96, 9.5);
   drawFitText(page, bold, applicant.middle, 579.13, 880.68, 103.72, 9.5);
@@ -761,6 +762,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         middleName: normalizedMiddleName,
         lastName: normalizedLastName,
         office,
+        profileDivision: profileDefaults.division.trim(),
         position: position.trim(),
         salary: decimalSalary(salary),
         leaveType,
@@ -1069,7 +1071,22 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
     setPreviewRenderError("");
     setError("");
     try {
-      const bytes = await createLeaveApplicationPdf(record);
+      let pdfRecord = record;
+      if (!pdfRecord.profileDivision && record.ownerId === user.uid && profileDefaults.division.trim()) {
+        pdfRecord = { ...record, profileDivision: profileDefaults.division.trim() };
+      }
+      if (!pdfRecord.profileDivision && db) {
+        try {
+          const ownerProfile = await getDoc(doc(db, "users", record.ownerId));
+          if (ownerProfile.exists()) {
+            const profileDivision = accountDivision(ownerProfile.data());
+            if (profileDivision) pdfRecord = { ...record, profileDivision };
+          }
+        } catch {
+          // Keep the saved office value if the applicant profile is unavailable.
+        }
+      }
+      const bytes = await createLeaveApplicationPdf(pdfRecord);
       const blob = new Blob([new Uint8Array(bytes).buffer], { type: "application/pdf" });
       const nextUrl = URL.createObjectURL(blob);
       setPreviewRecord(record);
@@ -1124,7 +1141,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
       <div className="section-heading leave-application-heading"><div><p className="eyebrow">New record</p><h2>Create Leave Application</h2><p className="muted">Enter the details for the Civil Service Commission Leave Application form.</p></div><button type="button" className="ghost-button" onClick={() => { setView("list"); setError(""); }}>Cancel</button></div>
       <form className="leave-application-form" onSubmit={save}>
         <label>Date of Filing<input type="date" value={filedDate} onChange={(event) => setFiledDate(event.target.value)} required /></label>
-        <label>Monthly Salary<div className="leave-application-currency-field"><span aria-hidden="true">₱</span><CurrencyInput value={salary} onValueChange={setSalary} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" required /></div></label>
+        <label>Monthly Salary (Optional)<div className="leave-application-currency-field"><span aria-hidden="true">₱</span><CurrencyInput value={salary} onValueChange={setSalary} aria-label="Monthly salary amount in Philippine pesos" placeholder="0.00" /></div></label>
         <div className={`leave-application-leave-type-row leave-application-wide-field leave-application-leave-type-row-${leaveTypeFieldCount}`}>
           <label>Type of Leave<select value={leaveType} onChange={(event) => { const selected = event.target.value as LeaveType | ""; setLeaveType(selected); setLeaveDetails(""); setSpecifyAbroad(""); setSpecifyIllness(""); setStudyLeaveOtherPurpose(""); }} required><option value="" disabled>Select type of leave</option>{leaveTypes.map((option) => <option key={option}>{option}</option>)}</select></label>
           {showLeaveDetails && <label>Details of Leave<select value={leaveDetails} onChange={(event) => { const selected = event.target.value; setLeaveDetails(selected); if (selected !== "Abroad") setSpecifyAbroad(""); if (selected !== "Other Purpose") setStudyLeaveOtherPurpose(""); }} required><option value="" disabled>Select details of leave</option>{(leaveType === "Sick Leave" ? sickLeaveDetails : leaveType === "Study Leave" ? studyLeaveDetails : travelLeaveDetails).map((option) => <option key={option}>{option}</option>)}</select></label>}
