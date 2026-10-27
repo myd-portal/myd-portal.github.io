@@ -310,9 +310,9 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   drawFitText(page, bold, applicant.last, 367.41, 880.68, 103, 13.5);
   drawFitText(page, bold, applicant.first, 476.53, 880.68, 96, 13.5);
   drawFitText(page, bold, applicant.middle, 579.13, 880.68, 103.72, 13.5);
-  drawFitText(page, bold, fileDate(record.filedDate), 175.08, 852.47, 104, 9.5);
+  drawFitText(page, bold, fileDate(record.filedDate), 175.08, 852.47, 104, 13.5);
   drawFitText(page, bold, record.position, 365, 851.98, 161, 9.5);
-  drawFitText(page, bold, formatSalaryForDocument(record.salary), 611.04, 851.98, 78, 9.5);
+  drawFitText(page, bold, formatSalaryForDocument(record.salary), 611.04, 851.98, 78, 13.5);
 
   const leaveTypeRows: Record<Exclude<LeaveType, "Others">, number> = {
     "Vacation Leave": 778.86,
