@@ -48,7 +48,7 @@ type NtaRecord = {
   ownerOffice?: string;
   ownerDivision?: string;
   approvalWorkflow?: "fod";
-  approvalStage?: "initial" | "chief" | "approved";
+  approvalStage?: "owner-send" | "initial" | "chief" | "approved";
   initialSignerId?: string;
   chiefSignerId?: string;
   affixInitialSignature?: "Yes" | "No";
@@ -256,7 +256,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
     }));
     const recipientIds = [...schedulesByRecipient.keys()].filter((id) => id !== user.uid);
     const workflowFields = workflowScope && workflowAccounts?.head && workflowAccounts.chief
-      ? { approvalWorkflow: "fod" as const, approvalStage: "initial" as const, initialSignerId: workflowAccounts.head.userId, chiefSignerId: workflowAccounts.chief.userId, affixInitialSignature: "No" as const }
+      ? { approvalWorkflow: "fod" as const, approvalStage: "owner-send" as const, initialSignerId: workflowAccounts.head.userId, chiefSignerId: workflowAccounts.chief.userId, affixInitialSignature: "No" as const }
       : {};
     const common = { mode, subject: submittedSubject, activityTitle: submittedActivityTitle, organizer: submittedOrganizer, attachmentLink: attachmentLink.trim(), signatoryName: selectedSignatory.name, signatoryDesignation: selectedSignatory.position, signatoryAdminId: selectedSignatory.adminUserId, recipientIds, ownerId: user.uid, ownerOffice: workflowScope ? "Division" : office, ownerDivision: workflowScope ? "Field Operations Division" : division ?? "", ownerUnit: unit, ...workflowFields, createdAt: serverTimestamp() };
     try {
@@ -266,11 +266,9 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
       const firestore = db;
       const recordRef = doc(collection(firestore, "ntaRecords"));
       let savedData: Record<string, unknown> = data;
-      let routedInitialSignerId = workflowAccounts?.head?.userId;
       let savedRecipientIds = recipientIds;
       if (workflowScope) {
         const routed = await createFodNtaDocument(recordRef.id, data);
-        routedInitialSignerId = routed.initialSignerId;
         savedRecipientIds = routed.recipientIds;
         savedData = {
           ...data,
@@ -296,11 +294,6 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
         notificationBatch.set(notification.reference, notification.data);
         notificationCount += 1;
       });
-      if (workflowScope && routedInitialSignerId && routedInitialSignerId !== user.uid) {
-        const notification = makeDocumentNotification(firestore, { recipientId: routedInitialSignerId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: data.activityTitle, schedules: [], approvalStep: "initial" });
-        notificationBatch.set(notification.reference, notification.data);
-        notificationCount += 1;
-      }
       let notificationWarning: string | undefined;
       if (notificationCount) {
         try { await notificationBatch.commit(); }
@@ -528,11 +521,12 @@ function NtaEditor({ record, userId, office, division, unit, onCancel, onSaved, 
   </section>;
 }
 
-function NtaList({ records, ownerId, preparedByNames, fallbackPreparedBy, deletingId, copyingId, onNew, onEdit, onPreview, onCopy, onDelete }: { records: NtaRecord[]; ownerId: string; preparedByNames: Record<string, string>; fallbackPreparedBy: string; deletingId: string | null; copyingId: string | null; onNew: () => void; onEdit: (record: NtaRecord) => void; onPreview: (record: NtaRecord) => void; onCopy: (record: NtaRecord) => void; onDelete: (record: NtaRecord) => void }) {
+function NtaList({ records, ownerId, preparedByNames, fallbackPreparedBy, deletingId, copyingId, sendingId, onNew, onEdit, onPreview, onCopy, onDelete, onSend }: { records: NtaRecord[]; ownerId: string; preparedByNames: Record<string, string>; fallbackPreparedBy: string; deletingId: string | null; copyingId: string | null; sendingId: string | null; onNew: () => void; onEdit: (record: NtaRecord) => void; onPreview: (record: NtaRecord) => void; onCopy: (record: NtaRecord) => void; onDelete: (record: NtaRecord) => void; onSend: (record: NtaRecord) => void }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(records);
   return <section className="content-section"><div className="section-heading"><div><p className="eyebrow">Your records</p><h2>Notices to Attend</h2><p className="muted">{records.length} {records.length === 1 ? "notice" : "notices"} available to your Unit / Program / Project.</p></div><button className="primary-button" onClick={onNew}>Add</button></div>{records.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>No notices to attend yet</h3><p>Create an individual, group, or multiple personnel notice.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Add a Notice To Attend</button></div> : <div className="permit-table"><RecordPagination totalRecords={records.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Notice to Attend" /><div className="table-head nta-list-head"><span>Subject</span><span>Activity</span><span>Schedule</span><span>Attachment</span><span>Prepared By</span><span></span></div>{visibleRecords.map((record) => {
     const isOwner = record.ownerId === ownerId;
     const hasSignature = hasNtaSignature(record);
+    const canSend = isOwner && record.approvalWorkflow === "fod" && record.approvalStage === "owner-send";
     const schedules = record.mode === "individual"
       ? [[formatDateRange(record.dateFrom ?? "", record.dateTo ?? ""), record.timeFrom && record.timeTo ? `${formatTime(record.timeFrom)} – ${formatTime(record.timeTo)}` : ""].filter(Boolean).join(" · ")]
       : (record.batches ?? []).map((batch) => {
@@ -542,7 +536,7 @@ function NtaList({ records, ownerId, preparedByNames, fallbackPreparedBy, deleti
         const time = start || end ? `${start}${start && end ? " – " : ""}${end}` : "";
         return [date, time].filter(Boolean).join(" · ");
       }).filter(Boolean);
-    return <div className="table-row nta-list-row" key={record.id}><span data-label="Subject">{cleanNtaField(record.subject) || "—"}</span><span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span><span className="nta-list-schedules" data-label="Schedule">{schedules.length ? schedules.map((schedule, index) => <span key={`${record.id}-schedule-${index}`}>{schedule}</span>) : <span>—</span>}</span><span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" style={{ textDecoration: "none" }} href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span><span data-label="Prepared By">{preparedByNames[record.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="nta-list-actions">{isOwner && !hasSignature && <button type="button" className="row-action" onClick={() => onEdit(record)}>Edit</button>}<button type="button" className="row-action" onClick={() => onPreview(record)}>View</button>{!hasSignature && <button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(record)}>{copyingId === record.id ? "Copying..." : "Copy"}</button>}{isOwner && !hasSignature && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</span></div>;
+    return <div className="table-row nta-list-row" key={record.id}><span data-label="Subject">{cleanNtaField(record.subject) || "—"}</span><span data-label="Activity">{cleanNtaField(record.activityTitle) || "—"}</span><span className="nta-list-schedules" data-label="Schedule">{schedules.length ? schedules.map((schedule, index) => <span key={`${record.id}-schedule-${index}`}>{schedule}</span>) : <span>—</span>}</span><span data-label="Attachment">{safeAttachmentHref(record.attachmentLink) ? <a className="row-action" style={{ textDecoration: "none" }} href={safeAttachmentHref(record.attachmentLink) ?? undefined} target="_blank" rel="noopener noreferrer">View Attachment</a> : "—"}</span><span data-label="Prepared By">{preparedByNames[record.ownerId] || (isOwner ? fallbackPreparedBy : "") || "—"}</span><span className="nta-list-actions">{isOwner && !hasSignature && <button type="button" className="row-action" onClick={() => onEdit(record)}>Edit</button>}{canSend && <button type="button" className="row-action" disabled={sendingId !== null} onClick={() => onSend(record)}>{sendingId === record.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" onClick={() => onPreview(record)}>View</button>{!hasSignature && <button type="button" className="row-action" disabled={copyingId !== null || deletingId !== null} onClick={() => onCopy(record)}>{copyingId === record.id ? "Copying..." : "Copy"}</button>}{isOwner && !hasSignature && <button type="button" className="delete-button" disabled={deletingId !== null || copyingId !== null} onClick={() => onDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</span></div>;
   })}</div>}</section>;
 }
 
@@ -890,6 +884,7 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
   const [pendingDelete, setPendingDelete] = useState<NtaRecord | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
   const handledFocusIdRef = useRef<string | null>(null);
   const liveNtaRecords = useRef<{ userId: string; unit: string | null; owner: NtaRecord[] | null; shared: NtaRecord[] | null; recipient: NtaRecord[] | null } | null>(null);
   useEffect(() => {
@@ -1004,6 +999,28 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
       setDeletingId(null);
     }
   }
+  async function sendNtaForApproval(record: NtaRecord) {
+    if (!db || record.ownerId !== user.uid || record.approvalWorkflow !== "fod" || record.approvalStage !== "owner-send") return;
+    if (!record.initialSignerId) { setLoadError("This NTA has no assigned first signatory. Contact an administrator."); return; }
+    setSendingId(record.id);
+    setLoadError("");
+    try {
+      const firestore = db;
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, "ntaRecords", record.id), { approvalStage: "initial" });
+      const notification = makeDocumentNotification(firestore, { recipientId: record.initialSignerId, ownerId: user.uid, documentId: record.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: [], approvalStep: "initial" });
+      batch.set(notification.reference, notification.data);
+      await batch.commit();
+      setRecords((current) => current.map((item) => item.id === record.id ? { ...item, approvalStage: "initial" } : item));
+      setPreview((current) => current?.id === record.id ? { ...current, approvalStage: "initial" } : current);
+    } catch (cause) {
+      const code = (cause as { code?: string }).code;
+      setLoadError(code ? `Could not send the NTA for approval (${code}).` : "Could not send the NTA for approval.");
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   async function copyRecord(record: NtaRecord) {
     if (hasNtaSignature(record)) { setLoadError("A digitally initialized or signed NTA cannot be copied."); return; }
     if (!db || !unit) { setLoadError("Your Unit / Program / Project is still loading. Try copying again in a moment."); return; }
@@ -1023,7 +1040,7 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
       const copiedSignatoryDesignation = copiedSignatory.position;
       if (workflowScope) {
         if (!accounts.head || !accounts.chief) throw new Error("The active FOD Project Leader and Chief accounts must be set up before this NTA can be copied.");
-        workflowFields = { approvalWorkflow: "fod", approvalStage: "initial", initialSignerId: accounts.head.userId, chiefSignerId: accounts.chief.userId, affixInitialSignature: "No" };
+        workflowFields = { approvalWorkflow: "fod", approvalStage: "owner-send", initialSignerId: accounts.head.userId, chiefSignerId: accounts.chief.userId, affixInitialSignature: "No" };
       }
       const schedulesByRecipient = new Map<string, Array<{ dateFrom: string; dateTo: string; venue: string }>>();
       if (record.mode === "individual" && record.toUserId) schedulesByRecipient.set(record.toUserId, [{ dateFrom: record.dateFrom ?? "", dateTo: record.dateTo ?? record.dateFrom ?? "", venue: record.venue ?? "" }]);
@@ -1054,11 +1071,9 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
         : { ...common, batches: (record.batches ?? []).map((batch) => ({ ...batch, attendees: batch.attendees.map((attendee) => ({ ...attendee })) })) };
       const recordRef = doc(collection(firestore, "ntaRecords"));
       let savedData: Record<string, unknown> = data;
-      let routedInitialSignerId = accounts.head?.userId;
       let savedRecipientIds = recipientIds;
       if (workflowScope) {
         const routed = await createFodNtaDocument(recordRef.id, data);
-        routedInitialSignerId = routed.initialSignerId;
         savedRecipientIds = routed.recipientIds;
         savedData = {
           ...data,
@@ -1083,11 +1098,6 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
         notificationBatch.set(notification.reference, notification.data);
         notificationCount += 1;
       });
-      if (workflowScope && routedInitialSignerId && routedInitialSignerId !== user.uid) {
-        const notification = makeDocumentNotification(firestore, { recipientId: routedInitialSignerId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: [], approvalStep: "initial" });
-        notificationBatch.set(notification.reference, notification.data);
-        notificationCount += 1;
-      }
       let notificationFailed = false;
       if (notificationCount) {
         try { await notificationBatch.commit(); }
@@ -1106,7 +1116,7 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
     }
   }
   function closePreview() { setPreview(null); onPreviewClose?.(); }
-  return <>{loadError && <div className="error-message">{loadError}</div>}{editingRecord ? <NtaEditor record={editingRecord} userId={user.uid} office={office} division={division} unit={unit} onCancel={() => setEditingRecord(null)} onSaved={(updatedRecord) => { setRecords((current) => current.map((item) => item.id === updatedRecord.id ? updatedRecord : item)); setEditingRecord(null); }} onRemove={() => { if (editingRecord && !hasNtaSignature(editingRecord)) setPendingDelete(editingRecord); }} /> : view === "new" ? <NtaForm user={user} ownerRole={ownerRole} office={office} division={division} unit={unit} onSaved={(record, notificationWarning) => { setRecords((current) => prependNtaRecord(current, record)); setView("list"); setLoadError(notificationWarning ?? ""); }} onCancel={() => setView("list")} /> : <NtaList records={records} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} deletingId={deletingId} copyingId={copyingId} onNew={() => setView("new")} onEdit={(record) => { if (!hasNtaSignature(record)) setEditingRecord(record); }} onPreview={setPreview} onCopy={(record) => void copyRecord(record)} onDelete={(record) => { if (record.ownerId === user.uid && !hasNtaSignature(record)) setPendingDelete(record); }} />}{preview && <NtaPreview key={preview.id} record={preview} onClose={closePreview} readOnly={readOnlyPreview} />}<DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid && !hasNtaSignature(pendingDelete))} title="Confirm NTA Deletion?" description="Are you sure you want to delete this Notice to Attend? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} /></>;
+  return <>{loadError && <div className="error-message">{loadError}</div>}{editingRecord ? <NtaEditor record={editingRecord} userId={user.uid} office={office} division={division} unit={unit} onCancel={() => setEditingRecord(null)} onSaved={(updatedRecord) => { setRecords((current) => current.map((item) => item.id === updatedRecord.id ? updatedRecord : item)); setEditingRecord(null); }} onRemove={() => { if (editingRecord && !hasNtaSignature(editingRecord)) setPendingDelete(editingRecord); }} /> : view === "new" ? <NtaForm user={user} ownerRole={ownerRole} office={office} division={division} unit={unit} onSaved={(record, notificationWarning) => { setRecords((current) => prependNtaRecord(current, record)); setView("list"); setLoadError(notificationWarning ?? ""); }} onCancel={() => setView("list")} /> : <NtaList records={records} ownerId={user.uid} preparedByNames={preparedByNames} fallbackPreparedBy={user.displayName ?? ""} deletingId={deletingId} copyingId={copyingId} sendingId={sendingId} onNew={() => setView("new")} onEdit={(record) => { if (!hasNtaSignature(record)) setEditingRecord(record); }} onPreview={setPreview} onCopy={(record) => void copyRecord(record)} onDelete={(record) => { if (record.ownerId === user.uid && !hasNtaSignature(record)) setPendingDelete(record); }} onSend={(record) => void sendNtaForApproval(record)} />}{preview && <NtaPreview key={preview.id} record={preview} onClose={closePreview} readOnly={readOnlyPreview} />}<DeleteConfirmation open={Boolean(pendingDelete && pendingDelete.ownerId === user.uid && !hasNtaSignature(pendingDelete))} title="Confirm NTA Deletion?" description="Are you sure you want to delete this Notice to Attend? This action cannot be undone." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteRecord(pendingDelete); }} /></>;
 }
 
 export function NtaApproval({ user, stage, canReview, focusRecordId, onFocusHandled }: { user: User; stage: "initial" | "chief"; canReview: boolean; focusRecordId?: string; onFocusHandled?: () => void }) {

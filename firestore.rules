@@ -910,7 +910,7 @@ service cloud.firestore {
     }
     function validFodSpecialOrderWorkflow(data, ownerProfile) {
       return data.get("approvalWorkflow", "") == "fod"
-        && data.get("approvalStage", "") == "initial"
+        && data.get("approvalStage", "") == "owner-send"
         && data.get("ownerOffice", "") == "Division"
         && data.get("ownerDivision", "") == "Field Operations Division"
         && data.get("ownerUnit", "") is string
@@ -1012,7 +1012,7 @@ service cloud.firestore {
     function validFodNtaWorkflow(data) {
       let ownerProfile = get(currentUserPath()).data;
       return data.get("approvalWorkflow", "") == "fod"
-        && data.get("approvalStage", "") == "initial"
+        && data.get("approvalStage", "") == "owner-send"
         && data.get("ownerOffice", "") == "Division"
         && data.get("ownerDivision", "") == "Field Operations Division"
         && data.get("ownerUnit", "") is string
@@ -1031,6 +1031,14 @@ service cloud.firestore {
         && data.initialSignerId != data.chiefSignerId
         && data.get("affixInitialSignature", "") == "No"
         && !data.keys().hasAny(["affixInitialSignatureURL", "affixInitialSignatureName", "affixInitialSignatureAt", "affixSignature", "affixSignatureURL", "affixSignatureName", "affixSignatureAt"]);
+    }
+    function canSendFodApproval() {
+      return isVerifiedUser()
+        && resource.data.ownerId == request.auth.uid
+        && resource.data.get("approvalWorkflow", "") == "fod"
+        && resource.data.get("approvalStage", "") == "owner-send"
+        && request.resource.data.get("approvalStage", "") == "initial"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["approvalStage"]);
     }
     match /users/{userId} {
       // Approved users can read profiles for personnel pickers. A verified pending user can read only their own profile.
@@ -1746,6 +1754,7 @@ service cloud.firestore {
         && ownerUnitCanBeUpdated());
       allow update: if canAffixFodSoInitialSignature()
         || canAffixFodChiefSignature("affixChiefInitialSignature", "initialSignatureURL", "returned");
+      allow update: if canSendFodApproval();
       allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && resource.data.get("affixInitialSignature", "No") != "Yes"
         && resource.data.get("affixChiefInitialSignature", "No") != "Yes"
@@ -2189,6 +2198,7 @@ service cloud.firestore {
         && ownerUnitCanBeUpdated());
       allow update: if canAffixFodSoInitialSignature()
         || canAffixFodChiefSignature("affixSignature", "fullSignatureURL", "approved");
+      allow update: if canSendFodApproval();
       allow delete: if isSuperAdmin() || (isVerifiedUser() && resource.data.ownerId == request.auth.uid
         && resource.data.get("affixInitialSignature", "No") != "Yes"
         && resource.data.get("affixSignature", "No") != "Yes"
