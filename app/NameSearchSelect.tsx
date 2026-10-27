@@ -7,6 +7,7 @@ type NameSearchSelectProps = Omit<InputHTMLAttributes<HTMLInputElement>, "childr
   value: string;
   onChange: (value: string) => void;
   searchPlaceholder?: string;
+  optionNoun?: string;
 };
 
 type OptionProps = { value?: string | number; children?: ReactNode; disabled?: boolean };
@@ -28,6 +29,7 @@ export default function NameSearchSelect({
   value,
   onChange,
   searchPlaceholder = "Search names...",
+  optionNoun = "name",
   disabled = false,
   required = false,
   ...inputProps
@@ -58,8 +60,8 @@ export default function NameSearchSelect({
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    input.setCustomValidity(required && !value && search.trim() ? "Select a name from the suggestions." : "");
-  }, [required, search, value]);
+    input.setCustomValidity(required && !value && search.trim() ? `Select a ${optionNoun} from the suggestions.` : "");
+  }, [optionNoun, required, search, value]);
 
   function selectOption(option: NameOption) {
     if (option.disabled) return;
@@ -140,7 +142,7 @@ export default function NameSearchSelect({
     <button
       type="button"
       className="name-search-select-toggle"
-      aria-label={isOpen ? "Hide name suggestions" : "Show name suggestions"}
+      aria-label={isOpen ? `Hide ${optionNoun} suggestions` : `Show ${optionNoun} suggestions`}
       aria-expanded={isOpen}
       disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
@@ -166,7 +168,7 @@ export default function NameSearchSelect({
         onMouseEnter={() => setActiveIndex(index)}
         onClick={() => selectOption(option)}
       >{option.label}</div>)}
-      {filteredOptions.length === 0 && <div className="name-search-select-empty" role="status">No matching names.</div>}
+      {filteredOptions.length === 0 && <div className="name-search-select-empty" role="status">No matching {optionNoun}s.</div>}
     </div>}
   </div>;
 }

@@ -7,7 +7,7 @@ import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import NameSearchSelect from "./NameSearchSelect";
 import { loadPdfTools } from "@/lib/pdf-tools";
-import { filterPersonnelForDivisionRecipients, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
+import { filterPersonnelForDivisionRecipients, loadAccountUnits, loadPersonnel as loadAccountPersonnel, personnelDisplayName, type PersonnelEntry } from "@/lib/personnel";
 import { getDocumentNotificationReferences, makeDocumentNotification } from "@/lib/document-notifications";
 import DeleteConfirmation from "./DeleteConfirmation";
 import { divisionSignatory as getDivisionSignatory } from "@/lib/mytev";
@@ -55,13 +55,18 @@ function mergeSavedTravelOrders(current: TravelOrder[], savedOrders: TravelOrder
 }
 
 const officeStations = ["DA-RFO XIII", "DA-ILD Caraga"] as const;
-const chargeOptions = ["FOD-AGRISTAT", "FOD-AMIA", "FOD-DRRM"];
+const legacyChargeOptions = ["FOD-AGRISTAT", "FOD-AMIA", "FOD-DRRM"];
+const otherChargeOption = "__travel-order-other__";
 const travelTransportationOptions = ["Boat", "MCH", "Plane", "PUB", "PUV", "RP"] as const;
 const statuses: TravelOrderStatus[] = ["Pending", "Approved", "Disapproved"];
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 
 function travelOrderNumberKey(value: string) {
   return encodeURIComponent(value.trim().toUpperCase());
+}
+
+function travelOrderChargeKey(value: string) {
+  return value.trim().toLocaleLowerCase("en-PH");
 }
 
 function localDateValue() {
@@ -122,6 +127,8 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
   const [officeStation, setOfficeStation] = useState<(typeof officeStations)[number]>(initialOrder?.officeStation as (typeof officeStations)[number] ?? officeStations[0]);
   const [personnel, setPersonnel] = useState<PersonnelEntry[]>([]);
   const [personnelStatus, setPersonnelStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [accountUnits, setAccountUnits] = useState<string[]>([]);
+  const [accountUnitsStatus, setAccountUnitsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [departureDate, setDepartureDate] = useState(initialOrder?.departureDate ?? "");
   const [returnDate, setReturnDate] = useState(initialOrder?.returnDate ?? "");
   const [placeOfTravel, setPlaceOfTravel] = useState(initialOrder?.placeOfTravel ?? "");
@@ -130,7 +137,7 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
   const [perDiemsAllowed, setPerDiemsAllowed] = useState<"" | "Yes" | "No">(initialOrder?.perDiemsAllowed ?? "");
   const [assistantLaborersAllowed, setAssistantLaborersAllowed] = useState<"" | "Yes" | "No">(initialOrder?.assistantLaborersAllowed ?? "");
   const [chargeTo, setChargeTo] = useState(initialOrder?.chargeTo ?? "");
-  const [chargeToIsOther, setChargeToIsOther] = useState(() => Boolean(initialOrder?.chargeTo && !chargeOptions.includes(initialOrder.chargeTo)));
+  const [chargeToIsOther, setChargeToIsOther] = useState(() => Boolean(initialOrder?.chargeTo && !legacyChargeOptions.includes(initialOrder.chargeTo)));
   const [transportation, setTransportation] = useState<string[]>(() => {
     const selected = new Set((initialOrder?.transportation ?? "").split(/,\s*/).map((option) => option === "Plane (GS)" || option === "Plane (Credit)" ? "Plane" : option));
     return travelTransportationOptions.filter((option) => selected.has(option));
@@ -154,6 +161,33 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
     void loadPersonnel();
     return () => { cancelled = true; };
   }, [division]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUnits() {
+      try {
+        const entries = await loadAccountUnits();
+        if (!cancelled) {
+          setAccountUnits(entries);
+          setAccountUnitsStatus("ready");
+          const existingChargeTo = initialOrder?.chargeTo?.trim() ?? "";
+          if (existingChargeTo && entries.some((entry) => travelOrderChargeKey(entry) === travelOrderChargeKey(existingChargeTo))) {
+            setChargeToIsOther(false);
+          }
+        }
+      } catch {
+        if (!cancelled) setAccountUnitsStatus("error");
+      }
+    }
+    void loadUnits();
+    return () => { cancelled = true; };
+  }, [initialOrder?.chargeTo]);
+
+  const initialChargeTo = initialOrder?.chargeTo?.trim() ?? "";
+  const retainedChargeOption = initialChargeTo && !chargeToIsOther && !accountUnits.some((entry) => travelOrderChargeKey(entry) === travelOrderChargeKey(initialChargeTo))
+    ? [initialChargeTo]
+    : [];
+  const chargeUnitOptions = [...accountUnits, ...retainedChargeOption];
 
   function updatePerson(index: number, update: Partial<TravelOrderPerson>) {
     setPeople((current) => current.map((person, itemIndex) => itemIndex === index ? { ...person, ...update } : person));
@@ -257,7 +291,7 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
       <div className="travel-order-allowances wide-field">
         <label>Per Diems Allowed<select value={perDiemsAllowed} onChange={(event) => setPerDiemsAllowed(event.target.value as "" | "Yes" | "No")} required><option value="" disabled>Select Yes or No</option><option>Yes</option><option>No</option></select></label>
         <label>Assistant Laborers Allowed<select value={assistantLaborersAllowed} onChange={(event) => setAssistantLaborersAllowed(event.target.value as "" | "Yes" | "No")} required><option value="" disabled>Select Yes or No</option><option>Yes</option><option>No</option></select></label>
-        <label>Charge to{chargeToIsOther ? <><input list="travel-order-charge-options" aria-label="Charge to" value={chargeTo} onChange={(event) => setChargeTo(event.target.value)} placeholder="Enter appropriation" required /><datalist id="travel-order-charge-options">{chargeOptions.map((option) => <option key={option} value={option} />)}</datalist></> : <select value={chargeTo} onChange={(event) => { const value = event.target.value; setChargeToIsOther(value === "Others"); setChargeTo(value === "Others" ? "" : value); }} required><option value="" disabled>Select appropriation</option>{chargeOptions.map((option) => <option key={option}>{option}</option>)}<option value="Others">Others</option></select>}</label>
+        <label>Charge to{chargeToIsOther ? <><input list="travel-order-charge-options" aria-label="Charge to" value={chargeTo} onChange={(event) => setChargeTo(event.target.value)} placeholder="Enter appropriation" required /><datalist id="travel-order-charge-options">{accountUnits.map((option) => <option key={option} value={option} />)}</datalist></> : <NameSearchSelect aria-label="Charge to" value={chargeTo} onChange={(value) => { if (value === otherChargeOption) { setChargeToIsOther(true); setChargeTo(""); } else { setChargeToIsOther(false); setChargeTo(value); } }} searchPlaceholder="Search units..." optionNoun="unit" required disabled={accountUnitsStatus === "loading"}><option value="" disabled>{accountUnitsStatus === "loading" ? "Loading units..." : accountUnitsStatus === "error" ? "Unit list unavailable" : "Select a unit"}</option>{chargeUnitOptions.map((option) => <option key={option} value={option}>{option}</option>)}<option value={otherChargeOption}>Others</option></NameSearchSelect>}{accountUnitsStatus === "error" && <span className="travel-order-number-error" role="status">Unable to load units from user accounts. You can still select Others.</span>}</label>
       </div>
       <fieldset className="travel-order-transportation-field wide-field">
         <legend>Means of Transportation</legend>

@@ -64,8 +64,35 @@ export function filterPersonnelForDivisionRecipients(entries: PersonnelEntry[], 
 const personnelCacheDurationMs = 60_000;
 const cachedPersonnel = new Map<string, { entries: PersonnelEntry[]; expiresAt: number }>();
 const personnelRequests = new Map<string, Promise<PersonnelEntry[]>>();
+let cachedAccountUnits: { entries: string[]; expiresAt: number } | null = null;
+let accountUnitsRequest: Promise<string[]> | null = null;
 let cachedPermitAdminSignatories: { entries: PermitAdminSignatory[]; expiresAt: number } | null = null;
 let permitAdminSignatoriesRequest: Promise<PermitAdminSignatory[]> | null = null;
+
+export async function loadAccountUnits(): Promise<string[]> {
+  if (!db) throw new Error("Firebase is not configured.");
+  if (cachedAccountUnits && cachedAccountUnits.expiresAt > Date.now()) return cachedAccountUnits.entries;
+  if (accountUnitsRequest) return accountUnitsRequest;
+  const firestore = db;
+  const request = getDocs(collection(firestore, "users")).then((snapshot) => {
+    const units = new Map<string, string>();
+    snapshot.docs.forEach((item) => {
+      const data = item.data();
+      const unit = accountProfileSelection(data).unit || (typeof data.unit === "string" ? data.unit.trim() : "");
+      if (unit) {
+        const key = unit.toLocaleLowerCase("en-PH");
+        if (!units.has(key)) units.set(key, unit);
+      }
+    });
+    const entries = [...units.values()].sort((first, second) => first.localeCompare(second, "en", { sensitivity: "base" }));
+    cachedAccountUnits = { entries, expiresAt: Date.now() + personnelCacheDurationMs };
+    return entries;
+  }).finally(() => {
+    accountUnitsRequest = null;
+  });
+  accountUnitsRequest = request;
+  return request;
+}
 
 export async function loadPermitAdminSignatories(): Promise<PermitAdminSignatory[]> {
   if (!db) throw new Error("Firebase is not configured.");
