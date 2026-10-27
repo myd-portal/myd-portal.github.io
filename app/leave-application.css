@@ -31,8 +31,9 @@
 .leave-application-record-head{color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;padding:14px 8px;text-transform:uppercase}
 .leave-application-record{border-top:1px solid var(--line);font-size:12px;padding:14px 8px}
 .leave-application-record>span{min-width:0;overflow-wrap:anywhere}
-.leave-application-affix{display:block;min-width:0}
-.leave-application-status{align-items:start;display:grid;gap:4px;min-width:0}
+.leave-application-affix{align-self:start;display:block;min-width:0}
+.leave-application-affix select{display:block}
+.leave-application-status{align-items:start;align-self:start;display:grid;gap:4px;min-width:0}
 .leave-application-status select{background:#fff;border:1px solid var(--line);font-size:11px;font-weight:700;min-width:0;padding:7px 8px;width:100%}
 .leave-application-status-pending select{background:#fff5e8;color:#8e5712}
 .leave-application-status-approved select{background:#eaf5ed;color:#21603a}
