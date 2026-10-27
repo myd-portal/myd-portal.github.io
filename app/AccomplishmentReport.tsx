@@ -347,6 +347,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [updatingAffixSignatureId, setUpdatingAffixSignatureId] = useState<string | null>(null);
+  const [sendingReportId, setSendingReportId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
@@ -692,6 +693,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       return;
     }
     setUpdatingAffixSignatureId(report.id);
+    setSendingReportId(report.id);
     setMessage(null);
     try {
       const accountSnapshot = await getDocs(collection(db, "users"));
@@ -737,6 +739,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       setMessage({ kind: "error", text: cause instanceof Error ? `Could not send this report for approval. ${cause.message}` : "Could not send this report for approval. Try again." });
     } finally {
       setUpdatingAffixSignatureId(null);
+      setSendingReportId(null);
     }
   }
 
@@ -833,11 +836,12 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
           const approvalSignatureAvailable = approvalIsProjectLeader ? profile?.initialSignatureURL.trim() : profile?.fullSignatureURL.trim();
           const approvalSignatureLabel = approvalIsProjectLeader ? "Affix Initial Signature" : "Affix Full Signature";
           const ownerCanSign = report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full";
+          const ownerCanEdit = (report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full") && sendingReportId !== report.id;
           return <div className="table-row" key={report.id}>
             <strong>{reportMonth(report.month)}{mode === "approval" && <small className="ar-approval-owner">{report.startDay}-{report.endDay}</small>}</strong>
             {mode === "approval" ? <span>{report.preparedName}</span> : <span>{report.startDay}-{report.endDay}</span>}
             <label className="ar-record-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? approvalSignatureLabel : "Affix Full Signature"} for ${reportMonth(report.month)} ${report.startDay}-${report.endDay}`} value={mode === "approval" ? approvalSignatureValue === "Yes" ? "Yes" : "No" : report.affixSignature === "Yes" ? "Yes" : "No"} disabled={updatingAffixSignatureId === report.id || (mode === "owner" && !ownerCanSign)} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? updateApprovalSignature(report, event.target.value) : updateAffixSignature(report, event.target.value)); }}><option value="Yes" disabled={!approvalSignatureAvailable || (mode === "owner" && !profile?.fullSignatureURL.trim())}>Yes</option><option value="No">No</option></select></label>
-            <div className="ar-record-actions">{mode === "owner" && (isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>)}{mode === "owner" && profile && isFodMyAROwner(profile) && report.affixSignature === "Yes" && (report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full") && <button type="button" className="row-action" disabled={updatingAffixSignatureId === report.id} onClick={() => void sendReportForApproval(report)}>{updatingAffixSignatureId === report.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div>
+            <div className="ar-record-actions">{mode === "owner" && ownerCanEdit && (isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>)}{mode === "owner" && profile && isFodMyAROwner(profile) && report.affixSignature === "Yes" && ownerCanSign && <button type="button" className="row-action" disabled={updatingAffixSignatureId === report.id} onClick={() => void sendReportForApproval(report)}>{updatingAffixSignatureId === report.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div>
           </div>;
         })}
       </div>}
