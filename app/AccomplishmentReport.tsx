@@ -66,6 +66,13 @@ const arSignatoryOptions = [
       division,
     };
   }),
+  {
+    value: "division:acting-supervising-administrative-officer",
+    label: "Acting Supervising Administrative Officer",
+    name: divisionSignatory("Administrative and Finance Division").name,
+    position: "Acting Supervising Administrative Officer",
+    division: "Administrative and Finance Division",
+  },
   ...[
     { designation: "Regional Executive Director", name: "ENGR. RICARDO M. O\u00d1ATE JR." },
     { designation: "RTD for Operations", name: "REBECCA R. ATEGA" },
@@ -115,6 +122,9 @@ function defaultImmediateSupervisor(office: string, division: string, assignment
   const isAdmin = accountRole !== "regular";
   if (office === "Division") {
     if (division === "Field Operations Division") return "division:Field Operations Division";
+    if (accountRole === "admin" && division === "Administrative and Finance Division" && ["General Services Section", "Human Resource Section"].includes(assignment)) {
+      return "division:acting-supervising-administrative-officer";
+    }
     if (division === "Agribusiness and Marketing Assistance Division" || division === "Regional Agricultural Engineering Division") {
       return isAdmin ? "role:RTD for Operations" : `division:${division}`;
     }
@@ -216,6 +226,7 @@ function applyCurrentProfile(report: Report, profile: Profile | null): Report {
 }
 
 function supervisorSelectionForReport(report: Report) {
+  if (report.signatoryPosition === "Acting Supervising Administrative Officer") return "division:acting-supervising-administrative-officer";
   if (report.signatoryDivision) return `division:${report.signatoryDivision}`;
   if (["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(report.signatoryPosition ?? "")) {
     return `role:${report.signatoryPosition}`;
@@ -247,7 +258,7 @@ function AccomplishmentReportNotedSignatory({ report }: { report: Report }) {
     position: report.signatoryPosition || legacyNotedSignatory.position,
     division: report.signatoryName ? report.signatoryDivision ?? "" : legacyNotedSignatory.division,
   };
-  return <div className="ar-document-noted-signatory"><strong>{signatory.name.toLocaleUpperCase("en-PH")}</strong><span><em>{signatory.position}</em>{signatory.division ? `, ${signatory.division}` : ""}</span></div>;
+  return <div className="ar-document-noted-signatory"><strong>{signatory.name.toLocaleUpperCase("en-PH")}</strong><span><em>{signatory.position}</em>{signatory.division && (signatory.position === "Acting Supervising Administrative Officer" ? <><br />{signatory.division}</> : `, ${signatory.division}`)}</span></div>;
 }
 
 function AccomplishmentReportNotedAffixes({ report }: { report: Report }) {

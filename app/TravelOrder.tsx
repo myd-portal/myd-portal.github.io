@@ -130,6 +130,7 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
   const [perDiemsAllowed, setPerDiemsAllowed] = useState<"" | "Yes" | "No">(initialOrder?.perDiemsAllowed ?? "");
   const [assistantLaborersAllowed, setAssistantLaborersAllowed] = useState<"" | "Yes" | "No">(initialOrder?.assistantLaborersAllowed ?? "");
   const [chargeTo, setChargeTo] = useState(initialOrder?.chargeTo ?? "");
+  const [chargeToIsOther, setChargeToIsOther] = useState(() => Boolean(initialOrder?.chargeTo && !chargeOptions.includes(initialOrder.chargeTo)));
   const [transportation, setTransportation] = useState<string[]>(() => {
     const selected = new Set((initialOrder?.transportation ?? "").split(/,\s*/).map((option) => option === "Plane (GS)" || option === "Plane (Credit)" ? "Plane" : option));
     return travelTransportationOptions.filter((option) => selected.has(option));
@@ -166,6 +167,8 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
     if (!db) { onError("Firebase is not configured."); return; }
     if (!unit) { onError("Your Unit / Program / Project is still loading. Try saving again in a moment."); return; }
     if (!transportation.length) { onError("Select at least one means of transportation."); return; }
+    const normalizedChargeTo = chargeTo.trim();
+    if (!normalizedChargeTo) { onError("Select or enter an appropriation to charge this Travel Order to."); return; }
     const normalizedPeople = people.map((person) => ({ ...person, name: person.name.trim(), position: person.position.trim(), salary: normalizeCurrencyValue(person.salary) }));
     if (!normalizedPeople.length || normalizedPeople.some((person) => !person.userId)) {
       onError("Select a registered account for each person so every Travel Order can be assigned privately.");
@@ -183,7 +186,7 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
       objective: objective.trim(),
       perDiemsAllowed: perDiemsAllowed as "Yes" | "No",
       assistantLaborersAllowed: assistantLaborersAllowed as "Yes" | "No",
-      chargeTo,
+      chargeTo: normalizedChargeTo,
       transportation: travelTransportationOptions.filter((option) => transportation.includes(option)).join(", "),
       remarks: remarks.trim(),
       status: initialOrder?.status ?? "Pending" as const,
@@ -254,7 +257,7 @@ function TravelOrderForm({ user, office, division, unit, initialOrder, onSaved, 
       <div className="travel-order-allowances wide-field">
         <label>Per Diems Allowed<select value={perDiemsAllowed} onChange={(event) => setPerDiemsAllowed(event.target.value as "" | "Yes" | "No")} required><option value="" disabled>Select Yes or No</option><option>Yes</option><option>No</option></select></label>
         <label>Assistant Laborers Allowed<select value={assistantLaborersAllowed} onChange={(event) => setAssistantLaborersAllowed(event.target.value as "" | "Yes" | "No")} required><option value="" disabled>Select Yes or No</option><option>Yes</option><option>No</option></select></label>
-        <label>Charge to<select value={chargeTo} onChange={(event) => setChargeTo(event.target.value)} required><option value="" disabled>Select appropriation</option>{chargeOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label>Charge to{chargeToIsOther ? <><input list="travel-order-charge-options" aria-label="Charge to" value={chargeTo} onChange={(event) => setChargeTo(event.target.value)} placeholder="Enter appropriation" required /><datalist id="travel-order-charge-options">{chargeOptions.map((option) => <option key={option} value={option} />)}</datalist></> : <select value={chargeTo} onChange={(event) => { const value = event.target.value; setChargeToIsOther(value === "Others"); setChargeTo(value === "Others" ? "" : value); }} required><option value="" disabled>Select appropriation</option>{chargeOptions.map((option) => <option key={option}>{option}</option>)}<option value="Others">Others</option></select>}</label>
       </div>
       <fieldset className="travel-order-transportation-field wide-field">
         <legend>Means of Transportation</legend>
@@ -356,9 +359,11 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
   const recommendingSignatory = isAdministrativeFinanceRegularUser || isAdministrativeFinanceAdminUser
     ? getDivisionSignatory("Administrative and Finance Division")
     : { name: "REBECCA R. ATEGA", position: "RTD for Operations" };
-  const recommendingPosition = recommendingSignatory.position === "OIC"
-    ? "OIC, Administrative and Finance Division"
-    : recommendingSignatory.position;
+  const recommendingPosition = isAdministrativeFinanceAdminUser
+    ? "Acting Supervising Administrative Officer"
+    : recommendingSignatory.position === "OIC"
+      ? "OIC, Administrative and Finance Division"
+      : recommendingSignatory.position;
   return <article className="travel-order-paper">
     <div className="travel-order-frame" />
     <img className="travel-order-letterhead" src={asset("/Travel%20Order%20-%20header.jpg")} alt="Department of Agriculture Caraga Region letterhead" />
@@ -382,8 +387,12 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
         <TravelField label="Remarks or Special Instructions">{order.remarks}</TravelField>
       </div>
       <div className="travel-order-approvals">
-        <div><span>Recommending Approval:</span><strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong><em>{recommendingSignatory.position === "OIC" ? <>OIC, <span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingPosition}</em></div>
-        <div><span>Approved:</span><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></div>
+        <span>Recommending Approval:</span>
+        <span>Approved:</span>
+        <strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong>
+        <strong>ENGR. RICARDO M. OÑATE JR.</strong>
+        <em>{isAdministrativeFinanceAdminUser ? <>{recommendingPosition}<br /><span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingSignatory.position === "OIC" ? <>OIC, <span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingPosition}</em>
+        <em>Regional Executive Director</em>
       </div>
       <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr></tbody></table>
     </div>
