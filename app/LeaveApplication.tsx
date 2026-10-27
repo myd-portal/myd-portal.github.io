@@ -306,7 +306,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
     middle: typeof record.middleName === "string" ? record.middleName.trim() : parsedApplicant.middle,
   };
 
-  drawFitText(page, bold, record.profileDivision || record.office, 165.64, 878.38, 190, 13.5);
+  drawFitText(page, bold, record.profileDivision || record.office, 85.37, 878.38, 190, 13.5);
   drawFitText(page, bold, applicant.last, 367.41, 878.38, 103, 13.5);
   drawFitText(page, bold, applicant.first, 476.53, 878.38, 96, 13.5);
   drawFitText(page, bold, applicant.middle, 579.13, 878.38, 103.72, 13.5);
