@@ -653,37 +653,20 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
           affixSignatureURL: profile!.fullSignatureURL.trim(),
           affixSignatureName: profile!.name.trim(),
           affixSignatureAt: serverTimestamp(),
-          ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "project-leader" as const } : {}),
         }
       : {
           affixSignature: "No" as const,
-          affixSignatureURL: deleteField(),
-          affixSignatureName: deleteField(),
-          affixSignatureAt: deleteField(),
-          ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "owner-full" as const } : {}),
+          ...(report.approvalWorkflow === "fod-myar" ? {} : {
+            affixSignatureURL: deleteField(),
+            affixSignatureName: deleteField(),
+            affixSignatureAt: deleteField(),
+          }),
         };
     try {
-      if (report.approvalWorkflow === "fod-myar" && value === "Yes" && report.initialSignerId) {
-        const batch = writeBatch(db);
-        batch.update(doc(db, "accomplishmentReports", report.id), signatureFields);
-        batch.set(doc(collection(db, accomplishmentReportNotificationsCollection)), {
-          recipientId: report.initialSignerId,
-          ownerId: report.ownerId,
-          reportId: report.id,
-          unit: report.unit,
-          month: report.month,
-          cycle: report.cycle,
-          event: "project-leader-signature" satisfies AccomplishmentReportWorkflowEvent,
-          read: false,
-          createdAt: serverTimestamp(),
-        });
-        await batch.commit();
-      } else {
-        await updateDoc(doc(db, "accomplishmentReports", report.id), signatureFields);
-      }
+      await updateDoc(doc(db, "accomplishmentReports", report.id), signatureFields);
       let updatedReport: Report = value === "Yes"
-        ? { ...report, affixSignature: "Yes", affixSignatureURL: profile!.fullSignatureURL.trim(), affixSignatureName: profile!.name.trim(), affixSignatureAt: new Date(), ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "project-leader" as const } : {}) }
-        : { ...report, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined, ...(report.approvalWorkflow === "fod-myar" ? { approvalStage: "owner-full" as const } : {}) };
+        ? { ...report, affixSignature: "Yes", affixSignatureURL: profile!.fullSignatureURL.trim(), affixSignatureName: profile!.name.trim(), affixSignatureAt: new Date() }
+        : { ...report, affixSignature: "No", affixSignatureURL: undefined, affixSignatureName: undefined, affixSignatureAt: undefined };
       try {
         const savedReport = await getDoc(doc(db, "accomplishmentReports", report.id));
         if (savedReport.exists()) updatedReport = { id: report.id, ...savedReport.data() } as Report;
@@ -692,11 +675,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       }
       setReports((current) => current.map((item) => item.id === report.id ? updatedReport : item));
       setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
-      if (value === "Yes" && report.approvalWorkflow !== "fod-myar" && profile && isFodMyAROwner(profile)) {
-        await sendLegacyReportForApproval(updatedReport);
-        return;
-      }
-      setMessage({ kind: "success", text: value === "Yes" ? report.approvalWorkflow === "fod-myar" ? "Signature affixed to this report. The Project Leader was notified." : "Signature affixed to this report." : "Signature removed from this report." });
+      setMessage({ kind: "success", text: value === "Yes" ? profile && isFodMyAROwner(profile) ? "Full Signature saved. Click Send to route this report to the Project Leader." : "Signature affixed to this report." : "Signature removed from this report." });
     } catch (cause) {
       setMessage({ kind: "error", text: cause instanceof Error ? `Could not update the report signature. ${cause.message}` : "Could not update the report signature. Try again." });
     } finally {
@@ -704,16 +683,12 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
     }
   }
 
-  async function sendLegacyReportForApproval(report: Report) {
+  async function sendReportForApproval(report: Report) {
     if (!db || !profile || !isFodMyAROwner(profile) || report.ownerId !== user.uid) return;
     const existingWorkflow = report.approvalWorkflow === "fod-myar";
     if (existingWorkflow && report.approvalStage !== "owner-full") return;
     if (report.affixSignature !== "Yes") {
       setMessage({ kind: "error", text: "Affix your Full Signature before sending this report for approval." });
-      return;
-    }
-    if (existingWorkflow && (!profile.fullSignatureURL.trim() || !profile.name.trim())) {
-      setMessage({ kind: "error", text: "Upload your Full Signature in Profile before sending this report for approval." });
       return;
     }
     setUpdatingAffixSignatureId(report.id);
@@ -732,10 +707,6 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
       }
       const workflowFields: Record<string, unknown> = existingWorkflow ? {
         approvalStage: "project-leader",
-        affixSignature: "Yes",
-        affixSignatureURL: profile.fullSignatureURL.trim(),
-        affixSignatureName: profile.name.trim(),
-        affixSignatureAt: serverTimestamp(),
       } : {
         approvalWorkflow: "fod-myar",
         approvalStage: "project-leader",
@@ -758,7 +729,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
         createdAt: serverTimestamp(),
       });
       await batch.commit();
-      const updatedReport = { ...report, ...workflowFields, ...(existingWorkflow ? { affixSignatureAt: new Date() } : {}) } as Report;
+      const updatedReport = { ...report, ...workflowFields } as Report;
       setReports((current) => current.map((item) => item.id === report.id ? updatedReport : item));
       setSelectedReport((current) => current?.id === report.id ? updatedReport : current);
       setMessage({ kind: "success", text: "This report was sent to the Project Leader for an Initial Signature." });
@@ -866,7 +837,7 @@ export default function AccomplishmentReportModule({ user, focusMonth, focusCycl
             <strong>{reportMonth(report.month)}{mode === "approval" && <small className="ar-approval-owner">{report.startDay}-{report.endDay}</small>}</strong>
             {mode === "approval" ? <span>{report.preparedName}</span> : <span>{report.startDay}-{report.endDay}</span>}
             <label className="ar-record-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? approvalSignatureLabel : "Affix Full Signature"} for ${reportMonth(report.month)} ${report.startDay}-${report.endDay}`} value={mode === "approval" ? approvalSignatureValue === "Yes" ? "Yes" : "No" : report.affixSignature === "Yes" ? "Yes" : "No"} disabled={updatingAffixSignatureId === report.id || (mode === "owner" && !ownerCanSign)} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? updateApprovalSignature(report, event.target.value) : updateAffixSignature(report, event.target.value)); }}><option value="Yes" disabled={!approvalSignatureAvailable || (mode === "owner" && !profile?.fullSignatureURL.trim())}>Yes</option><option value="No">No</option></select></label>
-            <div className="ar-record-actions">{mode === "owner" && (isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>)}{mode === "owner" && profile && isFodMyAROwner(profile) && report.affixSignature === "Yes" && (report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full") && <button type="button" className="row-action" disabled={updatingAffixSignatureId === report.id} onClick={() => void sendLegacyReportForApproval(report)}>{updatingAffixSignatureId === report.id ? "Sending..." : "Send for Approval"}</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div>
+            <div className="ar-record-actions">{mode === "owner" && (isReportEditingLocked(report, today) ? <span className="row-action ar-record-closed" title={`Editing closed on ${reportEditDeadlineLabel(report)}.`}>Closed</span> : <button type="button" className="row-action" onClick={() => editActivities(report)}>Edit</button>)}{mode === "owner" && profile && isFodMyAROwner(profile) && report.affixSignature === "Yes" && (report.approvalWorkflow !== "fod-myar" || report.approvalStage === "owner-full") && <button type="button" className="row-action" disabled={updatingAffixSignatureId === report.id} onClick={() => void sendReportForApproval(report)}>{updatingAffixSignatureId === report.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" onClick={() => setSelectedReport(report)}>View</button></div>
           </div>;
         })}
       </div>}

@@ -860,9 +860,10 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
     } finally { setUpdatingId(null); }
   }
 
-  async function startLegacyLeaveApprovalWorkflow(record: LeaveApplicationRecord) {
+  async function sendLeaveApplicationForApproval(record: LeaveApplicationRecord) {
     if (!db) { setError("Firebase is not configured."); return; }
-    if (!isFodLeaveOwner(profileDefaults) || record.ownerId !== user.uid || record.approvalWorkflow === "fod-myleave") {
+    const existingWorkflow = record.approvalWorkflow === "fod-myleave";
+    if (!isFodLeaveOwner(profileDefaults) || record.ownerId !== user.uid || (existingWorkflow && record.approvalStage !== "owner-full")) {
       setError("Only the applicant can send an eligible Field Operations Division Leave Application into this approval workflow.");
       return;
     }
@@ -886,8 +887,14 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         setError("The Field Operations Division Project Leader and Chief accounts are not both configured. Contact an administrator before sending this application.");
         return;
       }
+      if (existingWorkflow && (record.initialSignerId !== projectLeader.id || record.chiefSignerId !== chief.id)) {
+        setError("This application has an outdated approval route. Contact an administrator to correct its assigned signers.");
+        return;
+      }
 
-      const workflowFields = {
+      const workflowFields = existingWorkflow ? {
+        approvalStage: "project-leader" as const,
+      } : {
         approvalWorkflow: "fod-myleave" as const,
         approvalStage: "project-leader" as const,
         initialSignerId: projectLeader.id,
@@ -936,31 +943,12 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
           affixSignatureURL: profileDefaults.fullSignatureURL.trim(),
           affixSignatureName: profileDefaults.name.trim(),
           affixSignatureAt: serverTimestamp(),
-          ...(record.approvalWorkflow === "fod-myleave" ? { approvalStage: "project-leader" as const } : {}),
         }
       : { affixSignature: "No" as const };
     try {
-      if (record.approvalWorkflow === "fod-myleave" && value === "Yes" && record.initialSignerId) {
-        const batch = writeBatch(db);
-        batch.update(doc(db, "leaveApplications", record.id), signatureFields);
-        const notification = makeDocumentNotification(db, {
-          recipientId: record.initialSignerId,
-          ownerId: record.ownerId,
-          documentId: record.id,
-          documentType: "Leave Application",
-          approvalStep: "initial",
-          applicantName: record.name,
-          leaveType: record.leaveType,
-          inclusiveDateFrom: record.inclusiveDateFrom,
-          inclusiveDateTo: record.inclusiveDateTo,
-        });
-        batch.set(notification.reference, notification.data);
-        await batch.commit();
-      } else {
-        await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
-      }
+      await updateDoc(doc(db, "leaveApplications", record.id), signatureFields);
       let updatedRecord: LeaveApplicationRecord = value === "Yes"
-        ? { ...record, affixSignature: "Yes", affixSignatureURL: profileDefaults.fullSignatureURL.trim(), affixSignatureName: profileDefaults.name.trim(), affixSignatureAt: new Date(), ...(record.approvalWorkflow === "fod-myleave" ? { approvalStage: "project-leader" as const } : {}) }
+        ? { ...record, affixSignature: "Yes", affixSignatureURL: profileDefaults.fullSignatureURL.trim(), affixSignatureName: profileDefaults.name.trim(), affixSignatureAt: new Date() }
         : { ...record, affixSignature: "No" };
       try {
         const savedRecord = await getDoc(doc(db, "leaveApplications", record.id));
@@ -970,10 +958,8 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
       }
       setRecords((current) => current.map((item) => item.id === record.id ? updatedRecord : item));
       setMessage(value === "Yes"
-        ? record.approvalWorkflow === "fod-myleave"
-          ? "Your Full Signature is saved. The application was sent to the Project Leader."
-          : isFodLeaveOwner(profileDefaults)
-            ? "Full Signature saved. Click Send for Approval to route this older application."
+        ? isFodLeaveOwner(profileDefaults)
+          ? "Full Signature saved. Click Send to route this application to the Project Leader."
             : "Signature affixed to this Leave Application."
         : "Signature removed from this Leave Application.");
     } catch (cause) {
@@ -1176,8 +1162,8 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         {visibleRecords.map((record) => <article className="leave-application-record" key={record.id}>
           <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><span className="leave-application-record-type">{mode === "approval" && <strong>{record.name}<br /></strong>}{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatInclusiveDateRange(record.inclusiveDateFrom, record.inclusiveDateTo)}</span>
           <label className="leave-application-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Affix Initial Signature" : "Affix Full Signature" : "Affix Full Signature"} for Leave Application filed ${formatDate(record.filedDate)}`} title={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL : profileDefaults.fullSignatureURL) ? undefined : `Upload your ${profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Initial" : "Full"} Signature in Profile to enable Yes.` : profileDefaults.fullSignatureURL ? undefined : "Upload your Full Signature in Profile to enable Yes."} value={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? record.affixInitialSignature : record.affixChiefSignature) === "Yes" ? "Yes" : "No" : record.affixSignature === "Yes" ? "Yes" : "No"} disabled={affixUpdatingId === record.id || updatingId === record.id || deletingId !== null || (mode === "owner" && record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "owner-full")} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? changeApprovalSignature(record, event.target.value) : changeAffixSignature(record, event.target.value)); }}><option value="Yes" disabled={mode === "approval" ? !(profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL.trim() : profileDefaults.fullSignatureURL.trim()) : !profileDefaults.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label>
-          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={mode === "approval" || record.status !== "Pending" || (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "returned") || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}{record.approvalWorkflow === "fod-myleave" && <small>{record.approvalStage === "owner-full" ? "Awaiting applicant Full Signature" : record.approvalStage === "project-leader" ? "Awaiting Project Leader Initial Signature" : record.approvalStage === "chief" ? "Awaiting Chief Full Signature" : "Signatures complete"}</small>}</label>
-          <div className="leave-application-actions"><button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{mode === "owner" && isFodLeaveOwner(profileDefaults) && !record.approvalWorkflow && record.status !== "Disapproved" && record.affixSignature === "Yes" && <button type="button" className="row-action" disabled={affixUpdatingId === record.id || deletingId !== null} onClick={() => void startLegacyLeaveApprovalWorkflow(record)}>{affixUpdatingId === record.id ? "Sending..." : "Send for Approval"}</button>}{mode === "owner" && record.status === "Pending" && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
+          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={mode === "approval" || record.status !== "Pending" || (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "returned") || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}{record.approvalWorkflow === "fod-myleave" && <small>{record.approvalStage === "owner-full" ? record.affixSignature === "Yes" ? "Ready to Send" : "Awaiting applicant Full Signature" : record.approvalStage === "project-leader" ? "Awaiting Project Leader Initial Signature" : record.approvalStage === "chief" ? "Awaiting Chief Full Signature" : "Signatures complete"}</small>}</label>
+          <div className="leave-application-actions">{mode === "owner" && isFodLeaveOwner(profileDefaults) && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && record.status !== "Disapproved" && record.affixSignature === "Yes" && <button type="button" className="row-action" disabled={affixUpdatingId === record.id || deletingId !== null} onClick={() => void sendLeaveApplicationForApproval(record)}>{affixUpdatingId === record.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{mode === "owner" && record.status === "Pending" && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
         </article>)}
       </div>}
     </>}

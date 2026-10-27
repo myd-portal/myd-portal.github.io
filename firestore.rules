@@ -167,15 +167,27 @@ service cloud.firestore {
         && data.get("affixChiefSignature", "No") == "No";
     }
     function isFodMyARWorkflowSignatureUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.get("approvalWorkflow", "") == "fod-myar"
-        && (isFodSignatureTransition("owner-full", "ownerId", "", "affixSignature", "fullSignatureURL", "project-leader", false)
+        && (isFodSignatureTransition("owner-full", "ownerId", "", "affixSignature", "fullSignatureURL", "owner-full", true)
+          || (resource.data.get("approvalStage", "") == "owner-full"
+            && resource.data.ownerId == request.auth.uid
+            && resource.data.get("affixSignature", "") == "Yes"
+            && request.resource.data.get("approvalStage", "") == "project-leader"
+            && changed.hasOnly(["approvalStage"]))
           || isFodSignatureTransition("project-leader", "initialSignerId", "AGRISTAT/DRRM/AMIA Project Leader", "affixInitialSignature", "initialSignatureURL", "chief", false)
           || isFodSignatureTransition("chief", "chiefSignerId", "Chief", "affixChiefSignature", "fullSignatureURL", "returned", false));
     }
     function isFodLeaveWorkflowSignatureUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
       return resource.data.get("approvalWorkflow", "") == "fod-myleave"
         && resource.data.status == "Pending"
-        && (isFodSignatureTransition("owner-full", "ownerId", "", "affixSignature", "fullSignatureURL", "project-leader", true)
+        && (isFodSignatureTransition("owner-full", "ownerId", "", "affixSignature", "fullSignatureURL", "owner-full", true)
+          || (resource.data.get("approvalStage", "") == "owner-full"
+            && resource.data.ownerId == request.auth.uid
+            && resource.data.get("affixSignature", "") == "Yes"
+            && request.resource.data.get("approvalStage", "") == "project-leader"
+            && changed.hasOnly(["approvalStage"]))
           || isFodSignatureTransition("project-leader", "initialSignerId", "AGRISTAT/DRRM/AMIA Project Leader", "affixInitialSignature", "initialSignatureURL", "chief", true)
           || isFodSignatureTransition("chief", "chiefSignerId", "Chief", "affixChiefSignature", "fullSignatureURL", "returned", true));
     }
