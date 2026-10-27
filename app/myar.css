@@ -65,7 +65,7 @@
 .ar-document-prepared strong{font-weight:700}
 .ar-document-prepared em{font-style:italic;font-weight:400}
 .ar-document-noted{font-size:1.05em;margin-top:1.3em}
-.ar-document-noted>p{margin:0 0 .5cqi}
+.ar-document-noted>p{margin:0 0 2.6em}
 .ar-document-noted-approval{display:grid;gap:.3cqi;justify-items:start;max-width:100%;width:68cqi}
 .ar-document-noted-affixes{display:grid;gap:.2cqi;width:100%}
 .ar-document-noted-affix-row{align-items:end;display:grid;gap:.75cqi;min-width:0}
