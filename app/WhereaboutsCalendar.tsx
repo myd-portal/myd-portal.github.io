@@ -735,9 +735,19 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     const key = entry.type === "Leave Application" ? entry.id : JSON.stringify([entry.type, entry.date, entry.purpose, entry.destination, entry.unit]);
     const existing = selectedPeopleByDetails.get(key);
     if (existing) {
-      if (!entry.personKeys.length || !entry.personKeys.some((personKey) => existing.personKeys.includes(personKey))) {
+      if (!entry.personKeys.length) {
         existing.names.push(...entry.names);
-        existing.personKeys.push(...entry.personKeys);
+      } else {
+        entry.personKeys.forEach((personKey, index) => {
+          const existingIndex = existing.personKeys.indexOf(personKey);
+          const incomingName = entry.names[index] ?? "";
+          if (existingIndex < 0) {
+            existing.personKeys.push(personKey);
+            existing.names.push(incomingName);
+          } else if (incomingName.includes("(TO No.") && !existing.names[existingIndex]?.includes("(TO No.")) {
+            existing.names[existingIndex] = incomingName;
+          }
+        });
       }
       existing.statuses = [...new Set([...existing.statuses, ...entry.statuses])];
     } else {
