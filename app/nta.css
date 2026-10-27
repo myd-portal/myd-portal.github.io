@@ -117,9 +117,12 @@
 .nta-document-content.nta-group-notice .nta-fixed-copy .nta-issued-date{margin-top:4.4cqi}
 .nta-document-content.nta-group-notice .nta-signatory{margin-top:6.4cqi}
 
-.nta-list-head,.nta-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) minmax(110px,.75fr) minmax(0,1fr) 150px}
+.nta-list-head,.nta-list-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) minmax(110px,.75fr) minmax(0,1fr) minmax(220px,1.7fr)}
 .nta-list-row>span:first-child{font-weight:400}
+.nta-list-row>[data-label="Prepared By"]{min-width:0;overflow-wrap:anywhere}
+.nta-list-actions{flex-wrap:wrap;min-width:0}
 @media(max-width:720px){.nta-list-row{grid-template-columns:1fr}.nta-list-row>span:not(.nta-list-actions){grid-column:1}.nta-list-row>.nta-list-actions{grid-column:1}}
+@media(min-width:721px) and (max-width:1100px){.nta-list-head{display:none}.nta-list-row{align-items:start;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}.nta-list-row>[data-label]{min-width:0;overflow-wrap:anywhere}.nta-list-row>[data-label]::before{color:var(--muted);content:attr(data-label);display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;margin-bottom:4px;text-transform:uppercase}.nta-list-row>.nta-list-actions{grid-column:1/-1;justify-content:flex-start;white-space:normal}}
 
 .nta-form-section .nta-schedule-fields,.nta-form-section .nta-venue-fields{display:grid;gap:18px 22px;grid-column:1/-1;min-width:0}
 .nta-form-section .nta-schedule-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
