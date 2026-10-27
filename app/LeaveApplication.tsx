@@ -306,10 +306,10 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
     middle: typeof record.middleName === "string" ? record.middleName.trim() : parsedApplicant.middle,
   };
 
-  drawFitText(page, bold, record.profileDivision || record.office, 165.64, 878.38, 190, 12.5);
-  drawFitText(page, bold, applicant.last, 367.41, 880.68, 103, 12.5);
-  drawFitText(page, bold, applicant.first, 476.53, 880.68, 96, 12.5);
-  drawFitText(page, bold, applicant.middle, 579.13, 880.68, 103.72, 12.5);
+  drawFitText(page, bold, record.profileDivision || record.office, 165.64, 878.38, 190, 13.5);
+  drawFitText(page, bold, applicant.last, 367.41, 880.68, 103, 13.5);
+  drawFitText(page, bold, applicant.first, 476.53, 880.68, 96, 13.5);
+  drawFitText(page, bold, applicant.middle, 579.13, 880.68, 103.72, 13.5);
   drawFitText(page, bold, fileDate(record.filedDate), 175.08, 852.47, 104, 9.5);
   drawFitText(page, bold, record.position, 365, 851.98, 161, 9.5);
   drawFitText(page, bold, formatSalaryForDocument(record.salary), 611.04, 851.98, 78, 9.5);
