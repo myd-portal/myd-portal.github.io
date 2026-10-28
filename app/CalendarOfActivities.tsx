@@ -106,7 +106,7 @@ const checkedRoleByUnit: Record<Unit, string> = {
   "Field Operations Division": "Field Operations Division",
 };
 const fixedCalendarOfActivitiesSignatories = [
-  { label: "Checked:", name: "GERLIE B. ANTIPASO", position: "DRRM Alternate Focal Person / Agriculturist II" },
+  { label: "Reviewed:", name: "GERLIE B. ANTIPASO", position: "DRRM Alternate Focal Person / Agriculturist II" },
   { label: "Noted:", name: "MELODY C. GUIMARY", position: "Chief, Field Operations Division" },
   { label: "Approved:", name: "REBECCA R. ATEGA", position: "RTD for Operations" },
 ];
@@ -243,7 +243,7 @@ function CalendarOfActivitiesPaper({ plan, activities, pageNumber, pageCount }: 
     <footer className={`calendar-of-activities-paper-footer${preparedURL || checkedURL || notedURL ? " has-affixed-signature" : ""}`}>
       {isLastPage && <>
         <div className={`calendar-of-activities-paper-signatory${preparedURL ? " is-affixed" : ""}`}><span>Prepared:</span><CalendarPaperSignature url={preparedURL} name={preparedSigner} at={preparedAt} label="preparer" /><strong>{plan.preparedName}</strong><em>{plan.preparedPosition}</em></div>
-        <div className={`calendar-of-activities-paper-signatory${checkedURL ? " is-affixed" : ""}`}><span>Checked:</span><CalendarPaperSignature url={checkedURL} name={plan.affixCheckedSignatureName} at={plan.affixCheckedSignatureAt} label="Project Leader" />{plan.checkedBy ? <><strong>{plan.checkedBy.name.toLocaleUpperCase("en-PH")}</strong><em>{plan.checkedBy.designation} / {plan.checkedBy.position}</em></> : <><strong>{fixedCalendarOfActivitiesSignatories[0].name}</strong><em>{`${checkedRoleByUnit[plan.unit]}${plan.unit === "Field Operations Division" ? "" : " / Agriculturist II"}`}</em></>}</div>
+        <div className={`calendar-of-activities-paper-signatory${checkedURL ? " is-affixed" : ""}`}><span>Reviewed:</span><CalendarPaperSignature url={checkedURL} name={plan.affixCheckedSignatureName} at={plan.affixCheckedSignatureAt} label="Project Leader" />{plan.checkedBy ? <><strong>{plan.checkedBy.name.toLocaleUpperCase("en-PH")}</strong><em>{plan.checkedBy.designation} / {plan.checkedBy.position}</em></> : <><strong>{fixedCalendarOfActivitiesSignatories[0].name}</strong><em>{`${checkedRoleByUnit[plan.unit]}${plan.unit === "Field Operations Division" ? "" : " / Agriculturist II"}`}</em></>}</div>
         <div className={`calendar-of-activities-paper-signatory${notedURL ? " is-affixed" : ""}`}><span>Noted:</span><CalendarPaperSignature url={notedURL} name={plan.affixNotedSignatureName} at={plan.affixNotedSignatureAt} label="Field Operations Chief" />{plan.notedBy ? <><strong>{plan.notedBy.name.toLocaleUpperCase("en-PH")}</strong><div className="calendar-of-activities-paper-signatory-title"><em>{plan.notedBy.designation}</em>{plan.notedBy.designation === "Chief" && plan.notedBy.assignment === "Field Operations Division" ? ", " : " / "}{plan.notedBy.assignment}</div></> : <><strong>{fixedCalendarOfActivitiesSignatories[1].name}</strong><em>{fixedCalendarOfActivitiesSignatories[1].position}</em></>}</div>
         <div className="calendar-of-activities-paper-signatory"><span>Approved:</span>{plan.approvedBy ? <><strong>{plan.approvedBy.name.toLocaleUpperCase("en-PH")}</strong><div className="calendar-of-activities-paper-signatory-title"><em>{plan.approvedBy.designation}</em></div></> : <><strong>{fixedCalendarOfActivitiesSignatories[2].name}</strong><em>{fixedCalendarOfActivitiesSignatories[2].position}</em></>}</div>
       </>}
