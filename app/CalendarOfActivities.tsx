@@ -236,7 +236,7 @@ function CalendarOfActivitiesPaper({ plan, activities, pageNumber, pageCount }: 
       <div><p>Republic of the Philippines</p><strong>DEPARTMENT OF AGRICULTURE</strong><span>Caraga Region</span><small>Capitol Site, Butuan City 8600</small><small>Tel. No.: (085) 817-9581; (085) 818-6366</small></div>
     </header>
     <div className="calendar-of-activities-paper-rule" />
-    <div className="calendar-of-activities-paper-title"><h1>CALENDAR OF ACTIVITIES</h1><p className="calendar-of-activities-paper-unit">{unitDescription[plan.unit]}</p><p className="calendar-of-activities-paper-month">{formatMonth(plan.month)}</p></div>
+    <div className="calendar-of-activities-paper-title"><h1>TRAVEL PLAN</h1><p className="calendar-of-activities-paper-unit">{unitDescription[plan.unit]}</p><p className="calendar-of-activities-paper-month">{formatMonth(plan.month)}</p></div>
     <table className="calendar-of-activities-paper-table"><thead><tr><th>Date</th><th>Activity</th><th>Location</th><th>Responsible Personnel</th></tr></thead><tbody>
       {chronologicalActivities.map((activity, index) => <tr key={`${activity.dateFrom}-${activity.activity}-${index}`}><td className="calendar-of-activities-paper-date">{formatDateRange(activity.dateFrom, activity.dateTo)}</td><td>{activity.activity}</td><td>{activity.location}</td><td><div className="calendar-of-activities-paper-responsible">{activity.responsiblePeople.map((person, personIndex) => <span key={person.userId}>{person.userId === allPersonnelOptionId || person.name.trim().toLocaleLowerCase("en-PH") === "all personnel" ? person.name : `${personIndex + 1}) ${person.name}`}</span>)}</div></td></tr>)}
     </tbody></table>
@@ -259,7 +259,7 @@ function CalendarOfActivitiesPreview({ plan, onClose, readOnly = false }: { plan
   const pages = activityPages(plan.activities);
 
   async function waitForImages() {
-    if (!pagesRef.current) throw new Error("The Calendar of Activities preview is unavailable.");
+    if (!pagesRef.current) throw new Error("The Travel Plan preview is unavailable.");
     await Promise.all(Array.from(pagesRef.current.querySelectorAll("img")).map(async (image) => {
       if (!image.complete) await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve();
@@ -284,9 +284,9 @@ function CalendarOfActivitiesPreview({ plan, onClose, readOnly = false }: { plan
         if (index) pdf.addPage("a4", "landscape");
         pdf.addImage(canvas.toDataURL("image/jpeg", .97), "JPEG", 0, 0, 297, 210);
       }
-      pdf.save(`calendar-of-activities-${plan.month}.pdf`);
+      pdf.save(`travel-plan-${plan.month}.pdf`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to create the Calendar of Activities PDF.");
+      setError(cause instanceof Error ? cause.message : "Unable to create the Travel Plan PDF.");
     } finally { setDownloading(false); }
   }
 
@@ -302,7 +302,7 @@ function CalendarOfActivitiesPreview({ plan, onClose, readOnly = false }: { plan
       document.head.appendChild(printPageStyle);
       window.print();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to prepare the Calendar of Activities for printing.");
+      setError(cause instanceof Error ? cause.message : "Unable to prepare the Travel Plan for printing.");
     } finally {
       printPageStyle?.remove();
       setPrinting(false);
@@ -360,8 +360,8 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
     event.preventDefault();
     const firestore = db;
     if (!firestore) { onError("Firebase is not configured."); return; }
-    if (!month) { onError("Select the calendar month and year."); return; }
-    if (activities.length > maximumActivities) { onError(`A calendar can contain up to ${maximumActivities} activities.`); return; }
+    if (!month) { onError("Select the Travel Plan month and year."); return; }
+    if (activities.length > maximumActivities) { onError(`A Travel Plan can contain up to ${maximumActivities} activities.`); return; }
     if (activities.some((activity) => !activity.dateFrom || !activity.dateTo || !activity.activity.trim() || !activity.location.trim() || !activity.responsiblePeople.length)) {
       onError("Complete every activity row and select at least one responsible person for each activity.");
       return;
@@ -492,8 +492,8 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
         } catch (cause) {
           const code = (cause as { code?: string }).code;
           onError(code
-            ? `Calendar saved, but activity notifications could not be sent (${code}).`
-            : "Calendar saved, but activity notifications could not be sent.");
+            ? `Travel Plan saved, but activity notifications could not be sent (${code}).`
+            : "Travel Plan saved, but activity notifications could not be sent.");
         }
       }
     } catch (cause) {
@@ -502,18 +502,18 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
         if (planUpdateCommitted) onSaved({ ...plan, activities: rows, ...signatories });
         onError(planUpdateCommitted
           ? `Activity details were saved, but some responsible-person notifications could not be updated${code ? ` (${code})` : ""}. Save again to retry the notifications.`
-          : code ? `Could not update the Calendar of Activities (${code}).` : "Could not update the Calendar of Activities.");
+          : code ? `Could not update the Travel Plan (${code}).` : "Could not update the Travel Plan.");
         setSaving(false);
         return;
       }
       const code = (cause as { code?: string }).code;
       const detail = code ? ` (${code})` : "";
-      onError(`Could not create the Calendar of Activities record${detail}.`);
+      onError(`Could not create the Travel Plan record${detail}.`);
     } finally { setSaving(false); }
   }
 
   return <section className="content-section form-section calendar-of-activities-form-section">
-    <div className="section-heading"><div><p className="eyebrow">{plan ? "Edit record" : "New record"}</p><h2>{plan ? "Edit Calendar of Activities" : "Calendar of Activities"}</h2><p className="muted">{plan ? `Update the date, activity, location, or responsible people for this calendar. The original preparer remains ${plan.preparedName}, ${plan.preparedPosition}.` : `Add one or more activities for ${unitLabel(profile.unit)}. Selected colleagues receive an in-app notification with each activity’s dates, activity, and location. Choose All Personnel to notify regular personnel in this unit and admins in your Division.`}</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
+    <div className="section-heading"><div><p className="eyebrow">{plan ? "Edit record" : "New record"}</p><h2>{plan ? "Edit Travel Plan" : "Travel Plan"}</h2><p className="muted">{plan ? `Update the date, activity, location, or responsible people for this Travel Plan. The original preparer remains ${plan.preparedName}, ${plan.preparedPosition}.` : `Add one or more activities for ${unitLabel(profile.unit)}. Selected colleagues receive an in-app notification with each activity’s dates, activity, and location. Choose All Personnel to notify regular personnel in this unit and admins in your Division.`}</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
     <form className="permit-form travel-order-form calendar-of-activities-form" onSubmit={save}>
       <div className="calendar-of-activities-meta wide-field"><label>Month and Year<input type="month" value={month} onChange={(event) => updateMonth(event.target.value)} disabled={Boolean(plan)} required /></label></div>
       <div className="calendar-of-activities-rows wide-field"><div className="calendar-of-activities-rows-heading"><strong>Activities</strong><span>Set one responsible person or add several for each row.</span></div>
@@ -536,7 +536,7 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
           {activities.length > 1 && <button type="button" className="remove-participant remove-action" onClick={() => setActivities((current) => current.filter((_, row) => row !== index))}>Remove activity</button>}
         </fieldset>)}
         <button type="button" className="text-button plain-action add-item-text-button" disabled={activities.length >= maximumActivities} onClick={() => setActivities((current) => current.length < maximumActivities ? [...current, emptyActivity()] : current)}>+ Add another activity</button>
-        {activities.length >= maximumActivities && <small className="calendar-of-activities-limit-note">A calendar can contain up to {maximumActivities} activities.</small>}
+        {activities.length >= maximumActivities && <small className="calendar-of-activities-limit-note">A Travel Plan can contain up to {maximumActivities} activities.</small>}
       </div>
       <div className="calendar-of-activities-signatories wide-field">
         {fodWorkflow ? <><div className="name-search-field"><span>Checked By</span><div className="calendar-of-activities-routed-signatory">{projectLeaderAccount ? projectLeaderAccount.name : "Matching Field Operations Project Leader not found"}</div></div><div className="name-search-field"><span>Noted By</span><div className="calendar-of-activities-routed-signatory">{chiefAccount ? chiefAccount.name : "Field Operations Chief not found"}</div></div></> : <><div className="name-search-field"><span>Checked By</span><NameSearchSelect aria-label="Checked By" value={checkedById} onChange={(selectedId) => setCheckedById(selectedId)} required disabled={saving || !adminAccounts.length}><option value="">Select a Designated Personnel</option>{adminAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</NameSearchSelect></div>
@@ -550,10 +550,10 @@ function CalendarOfActivitiesForm({ user, profile, accounts, allPersonnelRecipie
 
 function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView, onDelete, onStatusChange, onAffixSignatureChange, fullSignatureAvailable, deletingId, updatingStatusId, updatingAffixSignatureId, adminRecordsOnly = false, divisionAdminRecordsOnly = false, approvalTasksOnly = false }: { plans: CalendarOfActivities[]; currentUserId: string; onNew: () => void; onEdit: (plan: CalendarOfActivities) => void; onView: (plan: CalendarOfActivities) => void; onDelete: (plan: CalendarOfActivities) => void; onStatusChange: (plan: CalendarOfActivities, status: CalendarOfActivitiesStatus) => void; onAffixSignatureChange: (plan: CalendarOfActivities, value: "Yes" | "No") => void; fullSignatureAvailable: boolean; deletingId: string | null; updatingStatusId: string | null; updatingAffixSignatureId: string | null; adminRecordsOnly?: boolean; divisionAdminRecordsOnly?: boolean; approvalTasksOnly?: boolean }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(plans);
-  const heading = adminRecordsOnly ? "Calendar of Activities Records" : approvalTasksOnly ? "Calendar of Activities Approval" : "Calendar of Activities";
+  const heading = adminRecordsOnly ? "Travel Plan Records" : approvalTasksOnly ? "Travel Plan Approval" : "Travel Plan";
   return <section className="content-section calendar-of-activities-list-section">
-    <div className="section-heading"><div><p className="eyebrow">{adminRecordsOnly ? divisionAdminRecordsOnly ? "Division records" : "Approved records" : approvalTasksOnly ? "Admin Panel" : "Calendar records and signature tasks"}</p><h2>{heading}</h2><p className="muted">{adminRecordsOnly ? divisionAdminRecordsOnly ? `${plans.length} calendar ${plans.length === 1 ? "record" : "records"} for your Division.` : `${plans.length} approved calendar ${plans.length === 1 ? "record" : "records"}.` : approvalTasksOnly ? `${plans.length === 1 ? "1 calendar is" : `${plans.length} calendars are`} awaiting your signature.` : `${plans.length} calendar ${plans.length === 1 ? "record" : "records"} available to your account.`}</p></div>{!adminRecordsOnly && !approvalTasksOnly && <button type="button" className="primary-button" onClick={onNew}>Add</button>}</div>
-    {plans.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>{adminRecordsOnly ? divisionAdminRecordsOnly ? "No calendar records for your Division yet" : "No approved records yet" : approvalTasksOnly ? "No calendars awaiting your signature" : "No calendars of activities yet"}</h3>{approvalTasksOnly ? <p>Calendars assigned to you will appear here when they reach your signature step.</p> : !adminRecordsOnly && <><p>Create a monthly calendar and notify responsible colleagues in your Unit / Program / Project.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Add a Calendar of Activities</button></>}</div> : <div className="permit-table calendar-of-activities-list">
+    <div className="section-heading"><div><p className="eyebrow">{adminRecordsOnly ? divisionAdminRecordsOnly ? "Division records" : "Approved records" : approvalTasksOnly ? "Admin Panel" : "Travel Plan records and signature tasks"}</p><h2>{heading}</h2><p className="muted">{adminRecordsOnly ? divisionAdminRecordsOnly ? `${plans.length} travel plan ${plans.length === 1 ? "record" : "records"} for your Division.` : `${plans.length} approved travel plan ${plans.length === 1 ? "record" : "records"}.` : approvalTasksOnly ? `${plans.length === 1 ? "1 Travel Plan is" : `${plans.length} Travel Plans are`} awaiting your signature.` : `${plans.length} travel plan ${plans.length === 1 ? "record" : "records"} available to your account.`}</p></div>{!adminRecordsOnly && !approvalTasksOnly && <button type="button" className="primary-button" onClick={onNew}>Add</button>}</div>
+    {plans.length === 0 ? <div className="empty-state"><span className="empty-number">00</span><h3>{adminRecordsOnly ? divisionAdminRecordsOnly ? "No Travel Plan records for your Division yet" : "No approved records yet" : approvalTasksOnly ? "No Travel Plans awaiting your signature" : "No travel plans yet"}</h3>{approvalTasksOnly ? <p>Travel Plans assigned to you will appear here when they reach your signature step.</p> : !adminRecordsOnly && <><p>Create a monthly Travel Plan and notify responsible colleagues in your Unit / Program / Project.</p><button className="text-button plain-action document-create-action" onClick={onNew}>Add a Travel Plan</button></>}</div> : <div className="permit-table calendar-of-activities-list">
       <div className="table-head calendar-of-activities-list-head"><span>Month and Year</span><span>Activities</span><span>Affix Signature</span><span>Status</span></div>
       {visibleRecords.map((plan) => {
         const status = calendarOfActivitiesStatus(plan);
@@ -586,7 +586,7 @@ function CalendarOfActivitiesList({ plans, currentUserId, onNew, onEdit, onView,
           <span className="travel-order-row-actions calendar-of-activities-row-actions">{adminRecordsOnly ? <button type="button" className="row-action" onClick={() => onView(plan)}>View</button> : <>{status === "Pending" && canEditWorkflow && plan.ownerId === currentUserId && <button type="button" className="row-action" disabled={updatingStatusId !== null || deletingId !== null} onClick={() => onEdit(plan)}>Edit</button>}<button type="button" className="row-action" disabled={deletingId !== null} onClick={() => onView(plan)}>View</button>{plan.ownerId === currentUserId && status === "Pending" && canEditWorkflow && <button type="button" className="delete-button" disabled={updatingStatusId !== null || deletingId !== null} onClick={() => onDelete(plan)}>{deletingId === plan.id ? "Deleting…" : "Delete"}</button>}</>}</span>
         </div>;
       })}
-      <RecordPagination totalRecords={plans.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Calendar of Activities Records" />
+      <RecordPagination totalRecords={plans.length} currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} label="Travel Plan Records" />
     </div>}
   </section>;
 }
@@ -630,9 +630,9 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
               getDocs(collection(firestore, calendarOfActivitiesCollection)),
               getDocs(collection(firestore, "users")),
             ]);
-            if (!profileSnapshot.exists()) throw new Error("Set your Division in Profile to view your Calendar of Activities Records.");
+            if (!profileSnapshot.exists()) throw new Error("Set your Division in Profile to view your Travel Plan Records.");
             const division = accountProfileSelection(profileSnapshot.data()).division;
-            if (!division) throw new Error("Set your Division in Profile to view your Calendar of Activities Records.");
+            if (!division) throw new Error("Set your Division in Profile to view your Travel Plan Records.");
             const accountsById = new Map<string, Record<string, unknown>>(accountsSnapshot.docs.map((item): [string, Record<string, unknown>] => [item.id, item.data()]));
             rows = plansSnapshot.docs.flatMap((item) => {
               const planData = item.data();
@@ -650,12 +650,12 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
           return;
         }
         const profileSnapshot = await getDoc(doc(firestore, "users", user.uid));
-        if (!profileSnapshot.exists()) throw new Error("Complete your name, position, Office, Division, and Unit / Program / Project in Profile before creating a calendar.");
+        if (!profileSnapshot.exists()) throw new Error("Complete your name, position, Office, Division, and Unit / Program / Project in Profile before creating a Travel Plan.");
         const profileData = profileSnapshot.data();
         const selection = accountProfileSelection(profileData);
         const { office, division } = selection;
         const unit = selection.unit || selection.division;
-        if (!office || !division || !unit) throw new Error("Set your Office, Division, and Unit / Program / Project in Profile to view its Calendar of Activities.");
+        if (!office || !division || !unit) throw new Error("Set your Office, Division, and Unit / Program / Project in Profile to view its Travel Plan.");
         const loadedProfile: Profile = { name: typeof profileData.name === "string" ? profileData.name : "", position: typeof profileData.position === "string" ? profileData.position : "", designation: accountDesignation(profileData.designation), office, division, unit, rawAccountRole: typeof profileData.accountRole === "string" ? profileData.accountRole : "", rawOffice: typeof profileData.office === "string" ? profileData.office : "", rawDivision: typeof profileData.division === "string" ? profileData.division : "", rawUnit: typeof profileData.unit === "string" ? profileData.unit : "", fullSignatureURL: typeof profileData.fullSignatureURL === "string" ? profileData.fullSignatureURL : "" };
         if (!cancelled) setProfile(loadedProfile);
         if (mode === "approval") {
@@ -779,7 +779,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
       } catch (cause) {
         if (!cancelled) {
           const code = (cause as { code?: string }).code;
-          setError(cause instanceof Error && !code ? cause.message : code ? `Could not load Calendar of Activities records (${code}).` : "Could not load Calendar of Activities records.");
+          setError(cause instanceof Error && !code ? cause.message : code ? `Could not load Travel Plan records (${code}).` : "Could not load Travel Plan records.");
         }
       } finally { if (!cancelled) setLoading(false); }
     }
@@ -800,11 +800,11 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
   async function updateCalendarOfActivitiesStatus(plan: CalendarOfActivities, status: CalendarOfActivitiesStatus) {
     const currentStatus = calendarOfActivitiesStatus(plan);
     if (currentStatus !== "Pending") {
-      if (status !== currentStatus) setError("Approved or disapproved Calendars of Activities cannot change status.");
+      if (status !== currentStatus) setError("Approved or disapproved Travel Plans cannot change status.");
       return;
     }
     if (plan.approvalWorkflow === "fod-calendar" && (plan.approvalStage !== "returned" || plan.ownerId !== user.uid)) {
-      setError("The creator can update this Calendar’s status after the Chief’s full signature is complete.");
+      setError("The creator can update this Travel Plan’s status after the Chief’s full signature is complete.");
       return;
     }
     if (!db || updatingStatusId || currentStatus === status) return;
@@ -849,7 +849,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
       setPlans((current) => current.map((item) => item.id === plan.id ? { ...item, status } : item));
     } catch (cause) {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not update the Calendar of Activities status (${code}).` : "Could not update the Calendar of Activities status.");
+      setError(code ? `Could not update the Travel Plan status (${code}).` : "Could not update the Travel Plan status.");
     } finally { setUpdatingStatusId(null); }
   }
 
@@ -871,7 +871,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
     if (currentValue === value) return;
     const signatureURL = profile.fullSignatureURL.trim();
     if (value === "Yes" && !signatureURL) {
-      setError("Upload your Full Signature in Profile before affixing it to a Calendar of Activities.");
+      setError("Upload your Full Signature in Profile before affixing it to a Travel Plan.");
       return;
     }
     setUpdatingAffixSignatureId(plan.id);
@@ -883,7 +883,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
         const suffix = actor === "owner" ? "Initial" : actor === "project-leader" ? "Checked" : "Noted";
         const recipientId = actor === "owner" ? plan.initialSignerId : actor === "project-leader" ? plan.chiefSignerId : plan.ownerId;
         if (value === "Yes" && !recipientId) {
-          setError("Could not determine the next Calendar of Activities signer.");
+          setError("Could not determine the next Travel Plan signer.");
           return;
         }
         const signatureFields = value === "Yes"
@@ -893,7 +893,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
           await updateDoc(planRef, signatureFields);
         } catch (cause) {
           const code = (cause as { code?: string }).code;
-          setError(code ? `Could not save the Calendar of Activities signature to its record (${code}).` : "Could not save the Calendar of Activities signature to its record.");
+          setError(code ? `Could not save the Travel Plan signature to its record (${code}).` : "Could not save the Travel Plan signature to its record.");
           return;
         }
         let affixedAt: unknown = value === "Yes" ? new Date() : undefined;
@@ -927,7 +927,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
             });
           } catch (cause) {
             const code = (cause as { code?: string }).code;
-            setError(code ? `Signature saved, but the next Calendar of Activities signer could not be notified (${code}).` : "Signature saved, but the next Calendar of Activities signer could not be notified.");
+            setError(code ? `Signature saved, but the next Travel Plan signer could not be notified (${code}).` : "Signature saved, but the next Travel Plan signer could not be notified.");
             return;
           }
         }
@@ -940,7 +940,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
         await updateDoc(planRef, signatureFields);
       } catch (cause) {
         const code = (cause as { code?: string }).code;
-        setError(code ? `Could not save the Calendar of Activities signature to its record (${code}).` : "Could not save the Calendar of Activities signature to its record.");
+        setError(code ? `Could not save the Travel Plan signature to its record (${code}).` : "Could not save the Travel Plan signature to its record.");
         return;
       }
       let affixedAt: unknown = value === "Yes" ? new Date() : undefined;
@@ -956,7 +956,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
       setPlans((current) => current.map((item) => item.id === plan.id ? { ...item, ...signatureUpdate } : item));
     } catch (cause) {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not update the Calendar of Activities signature choice (${code}).` : "Could not update the Calendar of Activities signature choice.");
+      setError(code ? `Could not update the Travel Plan signature choice (${code}).` : "Could not update the Travel Plan signature choice.");
     } finally { setUpdatingAffixSignatureId(null); }
   }
 
@@ -964,17 +964,17 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
     const firestore = db;
     if (!firestore) return;
     if (calendarOfActivitiesStatus(plan) !== "Pending") {
-      setError("Approved or disapproved Calendars of Activities cannot be deleted.");
+      setError("Approved or disapproved Travel Plans cannot be deleted.");
       setPendingDelete(null);
       return;
     }
     if (plan.ownerId !== user.uid) {
-      setError("Only the original preparer can delete this Calendar of Activities.");
+      setError("Only the original preparer can delete this Travel Plan.");
       setPendingDelete(null);
       return;
     }
     if (plan.approvalWorkflow === "fod-calendar" && plan.approvalStage !== "owner-initial") {
-      setError("This Calendar can no longer be deleted after the signature route has started.");
+      setError("This Travel Plan can no longer be deleted after the signature route has started.");
       setPendingDelete(null);
       return;
     }
@@ -991,7 +991,7 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
       setPendingDelete(null);
     } catch (cause) {
       const code = (cause as { code?: string }).code;
-      setError(code ? `Could not delete the Calendar of Activities (${code}).` : "Could not delete the Calendar of Activities.");
+      setError(code ? `Could not delete the Travel Plan (${code}).` : "Could not delete the Travel Plan.");
       setPendingDelete(null);
     } finally { setDeletingId(null); }
   }
@@ -1005,8 +1005,8 @@ export default function CalendarOfActivitiesModule({ user, role = "regular", mod
 
   return <>
     {error && <div className="error-message calendar-of-activities-error" role="alert">{error}</div>}
-    {loading ? <section className="content-section"><p className="muted">Loading Calendar of Activities records…</p></section> : mode !== "approved-records" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Calendar of Activities.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} allPersonnelRecipients={allPersonnelRecipients} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={visiblePlans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Calendar of Activities."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} onAffixSignatureChange={(plan, value) => void updateCalendarAffixSignature(plan, value)} fullSignatureAvailable={Boolean(profile?.fullSignatureURL.trim())} deletingId={deletingId} updatingStatusId={updatingStatusId} updatingAffixSignatureId={updatingAffixSignatureId} adminRecordsOnly={mode === "approved-records"} divisionAdminRecordsOnly={mode === "approved-records" && role === "admin"} approvalTasksOnly={mode === "approval"} />}
-    <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Calendar of Activities Deletion?" description="Are you sure you want to delete this Calendar of Activities? This action cannot be undone, and its activity notifications will also be removed." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteCalendarOfActivities(pendingDelete); }} />
+    {loading ? <section className="content-section"><p className="muted">Loading Travel Plan records…</p></section> : mode !== "approved-records" && !profile ? <section className="content-section calendar-of-activities-profile-notice"><h2>Profile details needed</h2><p>Set your Office, Division, and Unit / Program / Project in Profile to view your office’s Travel Plan.</p></section> : mode === "prepared" && (view === "new" || (view === "edit" && editingPlan)) ? <CalendarOfActivitiesForm key={view === "edit" ? editingPlan!.id : "new"} user={user} profile={profile!} accounts={accounts} allPersonnelRecipients={allPersonnelRecipients} adminAccounts={adminAccounts} plan={view === "edit" ? editingPlan! : undefined} onSaved={(plan) => { if (view === "edit") setPlans((current) => current.map((item) => item.id === plan.id ? plan : item)); else setPlans((current) => [plan, ...current]); setEditingPlan(null); setView("list"); }} onCancel={() => { setEditingPlan(null); setView("list"); }} onError={setError} /> : <CalendarOfActivitiesList plans={visiblePlans} currentUserId={user.uid} onNew={() => { if (!profile?.name.trim() || !profile.position.trim()) { setError("Complete your name and position in Profile before preparing a new Travel Plan."); return; } setError(""); setEditingPlan(null); setView("new"); }} onEdit={(plan) => { setError(""); setEditingPlan(plan); setView("edit"); }} onView={setPreview} onDelete={setPendingDelete} onStatusChange={(plan, status) => void updateCalendarOfActivitiesStatus(plan, status)} onAffixSignatureChange={(plan, value) => void updateCalendarAffixSignature(plan, value)} fullSignatureAvailable={Boolean(profile?.fullSignatureURL.trim())} deletingId={deletingId} updatingStatusId={updatingStatusId} updatingAffixSignatureId={updatingAffixSignatureId} adminRecordsOnly={mode === "approved-records"} divisionAdminRecordsOnly={mode === "approved-records" && role === "admin"} approvalTasksOnly={mode === "approval"} />}
+    <DeleteConfirmation open={Boolean(pendingDelete)} title="Confirm Travel Plan Deletion?" description="Are you sure you want to delete this Travel Plan? This action cannot be undone, and its activity notifications will also be removed." busy={Boolean(pendingDelete && deletingId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => { if (pendingDelete) void deleteCalendarOfActivities(pendingDelete); }} />
     {preview && <CalendarOfActivitiesPreview plan={preview} onClose={closePreview} readOnly={readOnlyPreview} />}
   </>;
 }
