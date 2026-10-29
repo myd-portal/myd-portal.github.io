@@ -519,7 +519,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
           return <div className="mytev-personnel-entry" key={entry.key}>
           <div className="name-search-field"><span>Add a Personnel for this TEV</span><NameSearchSelect aria-label={`Personnel for this TEV ${index + 1}`} value={entry.userId} onChange={(userId) => updateSelectedPersonnel(index, userId)} disabled={saving}>
             <option value="">Select a personnel</option>
-            {personnel.filter((person) => person.userId === entry.userId || !selectedPersonnelEntries.some((selectedEntry, selectedIndex) => selectedIndex !== index && selectedEntry.userId === person.userId)).map((person) => <option key={person.userId} value={person.userId} disabled={!person.profileComplete}>{person.profile.name}, {person.profile.position || "Position not set"} - {person.profile.unit || "Unit not set"}{person.profileComplete ? "" : " - Complete Profile first"}</option>)}
+            {personnel.filter((person) => person.userId === entry.userId || !selectedPersonnelEntries.some((selectedEntry, selectedIndex) => selectedIndex !== index && selectedEntry.userId === person.userId)).map((person) => <option key={person.userId} value={person.userId} disabled={!person.profileComplete}>{person.profile.name}</option>)}
           </NameSearchSelect></div>
           <button type="button" className="mytev-remove-personnel remove-action" aria-label={`Remove personnel ${index + 1}`} disabled={saving} onClick={() => removePersonnelSlot(index)}>Remove</button>
           {entry.userId && <div className="mytev-personnel-references"><TravelReferenceEditor
