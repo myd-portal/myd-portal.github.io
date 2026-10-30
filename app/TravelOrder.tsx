@@ -370,7 +370,7 @@ function TravelOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy,
           <div><strong>Complete your Travel Order</strong><p>Update each personnel row independently. Date and TO No. are optional.</p></div>
           <div className="travel-order-approval-person-rows">{groupApprovalPeople.map(({ pageOrder, person, personIndex, index }) => <div className="travel-order-approval-person-row" key={`${pageOrder.id}-approval-${personIndex}`}>
             <label>Date<input type="date" value={approvalDates[index] ?? ""} onChange={(event) => updateApprovalDate(index, event.target.value)} disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
-            <label>TO No.<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} placeholder="Optional" disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
+            <label>TO No.<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
             <strong>{person.name}</strong>
             {pageOrder.status === "Pending" ? <button type="button" className="primary-button" disabled={updatingId !== null || deletingId !== null} onClick={() => void updateApprovedPerson(pageOrder, personIndex, groupOrders)}>{updatingId === pageOrder.id ? "Updating..." : "Update"}</button> : <span className="travel-order-approval-complete">Approved</span>}
           </div>)}</div>
