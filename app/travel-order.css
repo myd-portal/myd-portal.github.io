@@ -40,16 +40,13 @@
 .travel-order-approval-editor{background:#f7faf6;border:1px solid var(--line);display:grid;gap:14px;margin:0 8px 14px;padding:16px}
 .travel-order-approval-editor>div:first-child strong{color:var(--ink);font-size:13px}
 .travel-order-approval-editor>div:first-child p{color:var(--muted);font-size:12px;margin:4px 0 0}
-.travel-order-approval-scope{display:flex;flex-wrap:wrap;gap:8px}
-.travel-order-approval-scope button{background:#fff;border:1px solid var(--line);color:var(--ink);cursor:pointer;font:inherit;font-size:12px;min-height:36px;padding:8px 12px}
-.travel-order-approval-scope button.active{background:#eaf3ec;border-color:#9fc9ac;color:#27613b;font-weight:700}
-.travel-order-approval-person-row{align-items:end;display:grid;gap:12px;grid-template-columns:minmax(150px,.8fr) minmax(200px,1.2fr) auto}
+.travel-order-approval-person-rows{display:grid;gap:8px}
+.travel-order-approval-person-row{align-items:end;border-bottom:1px solid var(--line);display:grid;gap:12px;grid-template-columns:minmax(130px,.9fr) minmax(130px,.9fr) minmax(180px,1.3fr) auto;padding:10px 0}
 .travel-order-approval-person-row>label{min-width:0}
 .travel-order-approval-person-row input{font-size:13px}
 .travel-order-approval-person-row>.primary-button{min-height:42px;white-space:nowrap}
-.travel-order-number-fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))}
-.travel-order-number-fields label{min-width:0}
-.travel-order-number-fields input{font-size:13px}
+.travel-order-approval-person-row>strong{align-self:center;overflow-wrap:anywhere}
+.travel-order-approval-complete{align-self:center;color:#27613b;font-size:12px;font-weight:700;justify-self:start}
 .travel-order-number-error{color:#a23d2d;font-size:12px;margin:0}
 .travel-order-number-actions{align-items:center;display:flex;gap:10px;justify-content:flex-end}
 .travel-order-status{align-items:start;display:grid;gap:3px}

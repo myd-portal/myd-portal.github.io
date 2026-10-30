@@ -316,10 +316,8 @@ function TravelOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy,
   const pageSize = 5;
   const [currentPage, setCurrentPage] = useState(0);
   const [approvalOrderId, setApprovalOrderId] = useState<string | null>(null);
-  const [approvalScope, setApprovalScope] = useState<"person" | "all">("all");
-  const [approvalDate, setApprovalDate] = useState("");
+  const [approvalDates, setApprovalDates] = useState<string[]>([]);
   const [approvalNumbers, setApprovalNumbers] = useState<string[]>([]);
-  const [approvalError, setApprovalError] = useState("");
   const sortedOrders = [...orders].sort((left, right) =>
     (right.departureDate ?? "").localeCompare(left.departureDate ?? "")
     || (right.returnDate ?? "").localeCompare(left.returnDate ?? "")
@@ -338,32 +336,20 @@ function TravelOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy,
 
   function updateApprovalNumber(index: number, value: string) {
     setApprovalNumbers((current) => current.map((number, itemIndex) => itemIndex === index ? value : number));
-    setApprovalError("");
   }
 
-  async function confirmApproval(event: FormEvent<HTMLFormElement>, order: TravelOrder, pageOrders: TravelOrder[]) {
-    event.preventDefault();
-    const allApprovalPeople = travelOrderApprovalPeople(pageOrders);
-    const targetOrders = approvalScope === "all"
-      ? pageOrders.filter((pageOrder) => pageOrder.status === "Pending")
-      : pageOrders.filter((pageOrder) => pageOrder.id === order.id && pageOrder.status === "Pending");
-    const targetIds = new Set(targetOrders.map((pageOrder) => pageOrder.id));
-    const approvalPeople = allApprovalPeople.filter(({ pageOrder }) => targetIds.has(pageOrder.id));
-    if (!approvalDate) {
-      setApprovalError("Enter the Travel Order date before approving.");
-      return;
-    }
-    const numbers = approvalPeople.map(({ index }) => (approvalNumbers[index] ?? "").trim());
-    if (numbers.length !== approvalPeople.length || numbers.some((number) => !number)) {
-      setApprovalError("Enter a TO No. for this Travel Order before approving.");
-      return;
-    }
-    if (new Set(numbers.map((number) => number.toUpperCase())).size !== numbers.length) {
-      setApprovalError("Each person must have a different TO No.");
-      return;
-    }
-    setApprovalError("");
-    if (await onStatusChange(order, "Approved", approvalDate, numbers, targetOrders)) setApprovalOrderId(null);
+  function updateApprovalDate(index: number, value: string) {
+    setApprovalDates((current) => current.map((date, itemIndex) => itemIndex === index ? value : date));
+  }
+
+  async function updateApprovedPerson(pageOrder: TravelOrder, personIndex: number, groupOrders: TravelOrder[]) {
+    if (pageOrder.status !== "Pending") return;
+    const groupApprovalPeople = travelOrderApprovalPeople(groupOrders);
+    const pagePeople = groupApprovalPeople.filter(({ pageOrder: candidate }) => candidate.id === pageOrder.id);
+    const numbers = pagePeople.map(({ index }) => (approvalNumbers[index] ?? "").trim());
+    const dateIndex = pagePeople.find(({ personIndex: index }) => index === personIndex)?.index ?? pagePeople[0]?.index ?? 0;
+    const date = approvalDates[dateIndex] ?? "";
+    await onStatusChange(pageOrder, "Approved", date, numbers, [pageOrder]);
   }
 
   return <section className="content-section travel-order-list-section">
@@ -377,23 +363,25 @@ function TravelOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy,
           ? [...(ownerOrderGroups.get(travelOrderGroupKey(order)) ?? [order])].sort((left, right) => (left.travelOrderPersonIndex ?? Number.MAX_SAFE_INTEGER) - (right.travelOrderPersonIndex ?? Number.MAX_SAFE_INTEGER) || left.id.localeCompare(right.id))
           : [order];
         const groupApprovalPeople = travelOrderApprovalPeople(groupOrders);
-        const selectedApprovalPeople = groupApprovalPeople.filter(({ pageOrder }) => pageOrder.id === order.id);
         const isRecipient = isAssignedTravelOrderRecipient(order, ownerId);
         const canUpdateStatus = isOwner || isRecipient;
         const canApprove = isOwner || (isRecipient && canRecipientApproveTravelOrder(order));
         return <div className="travel-order-row-group" key={order.id}>
         <div className="table-row travel-order-list-row">
           <strong data-label="Travel dates">{formatTravelDateRange(order.departureDate, order.returnDate) || (order.status === "Pending" ? "Pending approval" : "—")}</strong><span data-label="Place of Travel">{order.placeOfTravel || "—"}</span><span data-label="Purpose" className="travel-order-list-purpose">{order.purpose || "—"}</span><span data-label="Prepared By">{preparedByNames[order.preparedById ?? order.ownerId] || ((order.preparedById ?? order.ownerId) === ownerId ? fallbackPreparedBy : "") || "—"}</span>
-          {canUpdateStatus ? <label data-label="Status" className={`travel-order-status travel-order-status-${order.status.toLowerCase()}`}><span className="sr-only">Status</span><select className="status-select" data-status={order.status} aria-label={`Status for ${order.people[0]?.name || "Travel Order"}`} value={order.status} disabled={order.status !== "Pending" || updatingId === order.id || deletingId !== null || copyingId !== null} onChange={(event) => { const nextStatus = event.target.value as TravelOrderStatus; if (nextStatus === "Approved") { if (!canApprove) return; setApprovalOrderId(order.id); setApprovalScope(isOwner && groupOrders.length > 1 && groupOrders.every((pageOrder) => pageOrder.people.length === 1) ? "all" : "person"); setApprovalDate(order.date || localDateValue()); setApprovalNumbers(travelOrderApprovalPeople(groupOrders).map(({ person }) => person.toNumber ?? "")); setApprovalError(""); } else { setApprovalOrderId(null); void onStatusChange(order, nextStatus); } }}>{statuses.map((status) => <option key={status} disabled={status === "Approved" && !canApprove}>{status}</option>)}</select>{updatingId === order.id && <small>Saving...</small>}</label> : <span data-label="Status" className={`travel-order-status travel-order-status-${order.status.toLowerCase()}`}><span className="travel-order-status-value">{order.status}</span></span>}
+          {canUpdateStatus ? <label data-label="Status" className={`travel-order-status travel-order-status-${order.status.toLowerCase()}`}><span className="sr-only">Status</span><select className="status-select" data-status={order.status} aria-label={`Status for ${order.people[0]?.name || "Travel Order"}`} value={order.status} disabled={order.status !== "Pending" || updatingId === order.id || deletingId !== null || copyingId !== null} onChange={(event) => { const nextStatus = event.target.value as TravelOrderStatus; if (nextStatus === "Approved") { if (!canApprove) return; const approvalPeople = travelOrderApprovalPeople(groupOrders); setApprovalOrderId(order.id); setApprovalDates(approvalPeople.map(({ pageOrder }) => pageOrder.date || localDateValue())); setApprovalNumbers(approvalPeople.map(({ person }) => person.toNumber ?? "")); } else { setApprovalOrderId(null); void onStatusChange(order, nextStatus); } }}>{statuses.map((status) => <option key={status} disabled={status === "Approved" && !canApprove}>{status}</option>)}</select>{updatingId === order.id && <small>Saving...</small>}</label> : <span data-label="Status" className={`travel-order-status travel-order-status-${order.status.toLowerCase()}`}><span className="travel-order-status-value">{order.status}</span></span>}
           <span className="travel-order-row-actions">{isOwner && order.status === "Pending" && <button type="button" className="row-action" disabled={updatingId !== null || deletingId !== null || copyingId !== null} onClick={() => onEdit(order)}>Edit</button>}<button type="button" className="row-action" disabled={deletingId !== null} onClick={() => onPreview(isOwner ? { ...order, previewPageOrders: groupOrders } : order)}>View</button><button type="button" className="row-action" disabled={updatingId !== null || deletingId !== null || copyingId !== null || approvalOrderId !== null} onClick={() => onCopy(order)}>{copyingId === order.id ? "Copying..." : "Copy"}</button>{isOwner && order.status === "Pending" && <button type="button" className="delete-button" disabled={updatingId !== null || deletingId !== null || copyingId !== null} onClick={() => onDelete(order)}>{deletingId === order.id ? "Deleting..." : "Delete"}</button>}</span>
         </div>
-        {approvalOrderId === order.id && <form className="travel-order-approval-editor" onSubmit={(event) => confirmApproval(event, order, groupOrders)}>
-          <div><strong>Complete your Travel Order</strong><p>Approve this person only, or approve everyone included in this Travel Order.</p></div>
-          {isOwner && groupOrders.length > 1 && groupOrders.every((pageOrder) => pageOrder.people.length === 1) && <div className="travel-order-approval-scope" role="group" aria-label="Approval scope"><button type="button" className={approvalScope === "person" ? "active" : ""} aria-pressed={approvalScope === "person"} onClick={() => { setApprovalScope("person"); setApprovalError(""); }}>This person</button><button type="button" className={approvalScope === "all" ? "active" : ""} aria-pressed={approvalScope === "all"} onClick={() => { setApprovalScope("all"); setApprovalError(""); }}>All personnel</button></div>}
-          {approvalScope === "all" ? <><label>Date<input type="date" value={approvalDate} onChange={(event) => { setApprovalDate(event.target.value); setApprovalError(""); }} required /></label><div className="travel-order-number-fields">{groupApprovalPeople.map(({ pageOrder, person, index }) => <label key={`${pageOrder.id}-to-number-${index}`}>{person.name}<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} placeholder={pageOrder.status === "Approved" ? "Already approved" : "TO No."} disabled={pageOrder.status !== "Pending"} required={pageOrder.status === "Pending"} /></label>)}</div></> : <div className="travel-order-approval-person-row"><label>Date<input type="date" value={approvalDate} onChange={(event) => { setApprovalDate(event.target.value); setApprovalError(""); }} required /></label>{selectedApprovalPeople.map(({ pageOrder, person, index }) => <label key={`${pageOrder.id}-to-number-${index}`}>{person.name} — TO No.<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} placeholder="TO No." required /></label>)}<button className="primary-button" disabled={updatingId === order.id || deletingId !== null}>{updatingId === order.id ? "Approving..." : "Confirm Approval"}</button></div>}
-          {approvalError && <p className="travel-order-number-error" role="alert">{approvalError}</p>}
-          <div className="travel-order-number-actions"><button type="button" className="ghost-button" disabled={updatingId === order.id || deletingId !== null} onClick={() => { setApprovalOrderId(null); setApprovalError(""); }}>Cancel</button>{approvalScope === "all" && <button className="primary-button" disabled={updatingId === order.id || deletingId !== null}>{updatingId === order.id ? "Approving..." : "Confirm Approval for All"}</button>}</div>
-        </form>}
+        {approvalOrderId === order.id && <div className="travel-order-approval-editor">
+          <div><strong>Complete your Travel Order</strong><p>Update each personnel row independently. Date and TO No. are optional.</p></div>
+          <div className="travel-order-approval-person-rows">{groupApprovalPeople.map(({ pageOrder, person, personIndex, index }) => <div className="travel-order-approval-person-row" key={`${pageOrder.id}-approval-${personIndex}`}>
+            <label>Date<input type="date" value={approvalDates[index] ?? ""} onChange={(event) => updateApprovalDate(index, event.target.value)} disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
+            <label>TO No.<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} placeholder="Optional" disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
+            <strong>{person.name}</strong>
+            {pageOrder.status === "Pending" ? <button type="button" className="primary-button" disabled={updatingId !== null || deletingId !== null} onClick={() => void updateApprovedPerson(pageOrder, personIndex, groupOrders)}>{updatingId === pageOrder.id ? "Updating..." : "Update"}</button> : <span className="travel-order-approval-complete">Approved</span>}
+          </div>)}</div>
+          <div className="travel-order-number-actions"><button type="button" className="ghost-button" disabled={updatingId !== null || deletingId !== null} onClick={() => setApprovalOrderId(null)}>Close</button></div>
+        </div>}
         </div>;
       })}
     </div>}
@@ -778,10 +766,6 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
     setError("");
     try {
       if (status === "Approved") {
-        if (!date) {
-          setError("Enter the Travel Order date before approving.");
-          return false;
-        }
         const targetOrders = isOwner ? (pageOrders?.length ? pageOrders : [order]) : [order];
         const uniqueTargetOrders = [...new Map(targetOrders.map((targetOrder) => [targetOrder.id, targetOrder])).values()];
         const groupKey = travelOrderGroupKey(order);
@@ -791,12 +775,13 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
           return false;
         }
         const approvalPeople = travelOrderApprovalPeople(uniqueTargetOrders);
-        const numbers = (toNumbers ?? []).map((number) => number.trim());
-        if (numbers.length !== approvalPeople.length || numbers.some((number) => !number)) {
-          setError("Enter a TO No. for this Travel Order before approving.");
+        if (toNumbers && toNumbers.length !== approvalPeople.length) {
+          setError("The TO No. fields do not match this Travel Order.");
           return false;
         }
-        const normalizedNumbers = numbers.map((number) => number.toUpperCase());
+        const numbers = approvalPeople.map((entry, index) => (toNumbers?.[index] ?? entry.person.toNumber ?? "").trim());
+        const numberEntries = numbers.map((number, index) => ({ number, index })).filter(({ number }) => Boolean(number));
+        const normalizedNumbers = numberEntries.map(({ number }) => number.toUpperCase());
         if (new Set(normalizedNumbers).size !== normalizedNumbers.length) {
           setError("Each person must have a different TO No.");
           return false;
@@ -807,13 +792,22 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
           order: targetOrder,
           people: targetOrder.people.map((person) => ({ ...person, toNumber: numbers[personIndex++] })),
         }));
-        const numberTravelOrderIds = approvalPeople.map(({ pageOrder }) => pageOrder.id);
+        const requestedNumberEntries = numberEntries.map(({ number, index }) => ({ key: travelOrderNumberKey(number), travelOrderId: approvalPeople[index].pageOrder.id }));
+        const existingNumberEntries = [...new Map(approvalPeople.map(({ person, pageOrder }) => ({ number: person.toNumber?.trim() ?? "", travelOrderId: pageOrder.id }))
+          .filter(({ number }) => Boolean(number))
+          .map(({ number, travelOrderId }) => {
+            const key = travelOrderNumberKey(number);
+            return [key, { key, travelOrderId }] as const;
+          })).values()];
         const travelOrderRefs = approvalRecords.map(({ order: targetOrder }) => doc(firestore, "travelOrders", targetOrder.id));
-        const numberRefs = normalizedNumbers.map((number) => doc(firestore, "travelOrderNumbers", travelOrderNumberKey(number)));
+        const numberRefsByKey = new Map([...requestedNumberEntries, ...existingNumberEntries].map(({ key }) => [key, doc(firestore, "travelOrderNumbers", key)]));
+        const numberKeys = [...numberRefsByKey.keys()];
+        const numberRefs = numberKeys.map((key) => numberRefsByKey.get(key)!);
         await runTransaction(firestore, async (transaction) => {
           const snapshots = await Promise.all([...travelOrderRefs, ...numberRefs].map((reference) => transaction.get(reference)));
           const orderSnapshots = snapshots.slice(0, travelOrderRefs.length);
           const registeredNumberSnapshots = snapshots.slice(travelOrderRefs.length);
+          const registeredNumbersByKey = new Map(numberKeys.map((key, index) => [key, registeredNumberSnapshots[index]]));
           if (orderSnapshots.some((snapshot) => !snapshot.exists())) throw new Error("A Travel Order in this group is no longer available.");
           const currentOrders = orderSnapshots.map((snapshot) => ({ id: snapshot.id, ...(snapshot.data() ?? {}) } as TravelOrder));
           if (currentOrders.some((currentOrder) => (isOwner && currentOrder.ownerId !== user.uid)
@@ -822,18 +816,27 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
             || normalizeWorkflowStatus(currentOrder.status) !== "Pending")) {
             throw new Error("A Travel Order in this group is no longer pending approval.");
           }
-          if (registeredNumberSnapshots.some((snapshot, index) => snapshot.exists()
-            && (snapshot.data().ownerId !== user.uid || snapshot.data().travelOrderId !== numberTravelOrderIds[index]))) {
+          if (requestedNumberEntries.some(({ key, travelOrderId }) => {
+            const snapshot = registeredNumbersByKey.get(key);
+            return snapshot?.exists() && (snapshot.data().ownerId !== user.uid || snapshot.data().travelOrderId !== travelOrderId);
+          })) {
             throw new Error("This TO No. is already assigned to another Travel Order.");
           }
           approvalRecords.forEach(({ people }, index) => {
-            transaction.update(travelOrderRefs[index], { status, date, people, updatedAt: serverTimestamp() });
+            transaction.update(travelOrderRefs[index], { status, date: date?.trim() ?? "", people, updatedAt: serverTimestamp() });
           });
-          registeredNumberSnapshots.forEach((snapshot, index) => {
-            if (!snapshot.exists()) transaction.set(numberRefs[index], { ownerId: user.uid, travelOrderId: numberTravelOrderIds[index] });
+          existingNumberEntries.forEach(({ key, travelOrderId }) => {
+            const snapshot = registeredNumbersByKey.get(key);
+            if (!requestedNumberEntries.some((entry) => entry.key === key) && snapshot?.exists()
+              && snapshot.data().ownerId === user.uid && snapshot.data().travelOrderId === travelOrderId) {
+              transaction.delete(numberRefsByKey.get(key)!);
+            }
+          });
+          requestedNumberEntries.forEach(({ key, travelOrderId }) => {
+            if (!registeredNumbersByKey.get(key)?.exists()) transaction.set(numberRefsByKey.get(key)!, { ownerId: user.uid, travelOrderId });
           });
         });
-        const updatedOrders = new Map(approvalRecords.map(({ order: targetOrder, people }) => [targetOrder.id, { ...targetOrder, status, date, people }]));
+        const updatedOrders = new Map(approvalRecords.map(({ order: targetOrder, people }) => [targetOrder.id, { ...targetOrder, status, date: date?.trim() ?? "", people }]));
         setOrders((current) => current.map((item) => updatedOrders.get(item.id) ?? item));
       } else {
         await updateDoc(doc(firestore, "travelOrders", order.id), { status, updatedAt: serverTimestamp() });
