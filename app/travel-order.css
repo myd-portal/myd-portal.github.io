@@ -40,6 +40,13 @@
 .travel-order-approval-editor{background:#f7faf6;border:1px solid var(--line);display:grid;gap:14px;margin:0 8px 14px;padding:16px}
 .travel-order-approval-editor>div:first-child strong{color:var(--ink);font-size:13px}
 .travel-order-approval-editor>div:first-child p{color:var(--muted);font-size:12px;margin:4px 0 0}
+.travel-order-approval-scope{display:flex;flex-wrap:wrap;gap:8px}
+.travel-order-approval-scope button{background:#fff;border:1px solid var(--line);color:var(--ink);cursor:pointer;font:inherit;font-size:12px;min-height:36px;padding:8px 12px}
+.travel-order-approval-scope button.active{background:#eaf3ec;border-color:#9fc9ac;color:#27613b;font-weight:700}
+.travel-order-approval-person-row{align-items:end;display:grid;gap:12px;grid-template-columns:minmax(150px,.8fr) minmax(200px,1.2fr) auto}
+.travel-order-approval-person-row>label{min-width:0}
+.travel-order-approval-person-row input{font-size:13px}
+.travel-order-approval-person-row>.primary-button{min-height:42px;white-space:nowrap}
 .travel-order-number-fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))}
 .travel-order-number-fields label{min-width:0}
 .travel-order-number-fields input{font-size:13px}
@@ -106,6 +113,8 @@
   .travel-order-pagination{align-items:flex-start;flex-direction:column;margin-inline:0}
   .travel-order-pagination-controls{flex-wrap:wrap;gap:8px}
   .travel-order-approval-editor{margin:0 0 12px;padding:14px}
+  .travel-order-approval-person-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .travel-order-approval-person-row>.primary-button{grid-column:1/-1;justify-self:end}
   .travel-order-preview-backdrop{padding:12px}
 }
 @media(max-width:480px){
@@ -115,6 +124,8 @@
   .travel-order-date-range>div{gap:6px;grid-template-columns:minmax(0,1fr)}
   .travel-order-date-range>div>span{text-align:center}
   .travel-order-preview-backdrop{padding:8px}
+  .travel-order-approval-person-row{grid-template-columns:minmax(0,1fr)}
+  .travel-order-approval-person-row>.primary-button{justify-self:stretch}
   .travel-order-preview-pages{gap:14px}
   .travel-order-paper{width:min(94vw,210mm)}
 }
