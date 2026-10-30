@@ -11,6 +11,7 @@ import { isPermitAdmin } from "./PermitSlipAdmin";
 import { LEGACY_PENDING_STATUS, normalizeWorkflowStatus } from "./workflow-status";
 import { assignApprovedPermitNumbers, displayPermitNumber } from "./permit-number";
 import { accountDivisionOptions, accountOffice, accountOfficeOptions, accountProfileSelection, divisionsForOffice, executiveOfficeDivisionOptions, unitsForOfficeDivision } from "@/lib/account-profile";
+import { accountMiddleInitial, formatAccountName, normalizeAccountSuffix, parseAccountName } from "@/lib/person-name";
 import "./whereabouts-calendar.css";
 
 type CalendarTravelOrder = {
@@ -45,6 +46,7 @@ type ApprovedLeaveApplication = {
   firstName?: string;
   middleInitial?: string;
   lastName?: string;
+  suffix?: string;
   name?: string;
   office: string;
   leaveType: string;
@@ -231,38 +233,18 @@ function displayUnit(value?: string) {
 
 function leaveApplicantName(leave: ApprovedLeaveApplication) {
   if (leave.firstName && leave.lastName) {
-    return [leave.firstName.trim(), leave.middleInitial?.trim(), leave.lastName.trim()].filter(Boolean).join(" ");
+    return formatAccountName(leave.firstName, leave.middleInitial, leave.lastName, leave.suffix);
   }
   const storedName = leave.name?.trim() ?? "";
   if (!storedName) return "";
-  const comma = storedName.indexOf(",");
-  const last = comma < 0 ? "" : storedName.slice(0, comma).trim();
-  const given = (comma < 0 ? storedName : storedName.slice(comma + 1)).trim().split(/\s+/).filter(Boolean);
-  if (!given.length) return storedName;
-  const first = given[0];
-  const parsedLast = last || (given.length > 1 ? given[given.length - 1] : "");
-  const middleName = last ? given.slice(1).join(" ") : given.slice(1, -1).join(" ");
-  const initialSource = middleName.split(/\s+/)[0]?.replace(/\.+$/, "");
-  const initial = initialSource ? `${Array.from(initialSource)[0].toLocaleUpperCase()}.` : "";
-  return [first, initial, parsedLast].filter(Boolean).join(" ");
+  const parsed = parseAccountName(storedName);
+  return formatAccountName(parsed.firstName, parsed.middleName, parsed.lastName, normalizeAccountSuffix(leave.suffix) || parsed.suffix);
 }
 
-function middleInitial(value: string) {
-  const first = value.trim().split(/\s+/)[0]?.replace(/\.+$/, "");
-  const initial = first ? Array.from(first)[0] : "";
-  return initial ? `${initial.toLocaleUpperCase()}.` : "";
-}
+function middleInitial(value: string) { return accountMiddleInitial(value); }
 
 function parseLeaveName(value: string) {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  const comma = trimmed.indexOf(",");
-  if (comma >= 0) {
-    const lastName = trimmed.slice(0, comma).trim();
-    const given = trimmed.slice(comma + 1).trim().split(" ").filter(Boolean);
-    return { firstName: given[0] ?? "", middleName: given.slice(1).join(" "), lastName };
-  }
-  const parts = trimmed.split(" ").filter(Boolean);
-  return { firstName: parts[0] ?? "", middleName: parts.slice(1, -1).join(" "), lastName: parts.length > 1 ? parts[parts.length - 1] : "" };
+  return parseAccountName(value);
 }
 
 function leaveApplicationPurpose(leave: ApprovedLeaveApplication) {
@@ -327,8 +309,10 @@ function normalizePersonnelName(value: string) {
 }
 
 function personnelNameParts(value: string) {
-  const parts = normalizePersonnelName(value).split(" ").filter(Boolean);
-  return { first: parts[0] ?? "", last: parts[parts.length - 1] ?? "" };
+  const name = parseAccountName(value);
+  const first = normalizePersonnelName(name.firstName).split(" ").filter(Boolean)[0] ?? "";
+  const last = normalizePersonnelName(name.lastName).split(" ").filter(Boolean).at(-1) ?? "";
+  return { first, last };
 }
 
 function personnelIdentityKey(name: string, userId: string | undefined, accounts: ReadonlyMap<string, { name: string }>) {
@@ -544,7 +528,8 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
         const firstName = typeof data.firstName === "string" ? data.firstName : parsedName.firstName;
         const middleName = typeof data.middleName === "string" ? data.middleName : parsedName.middleName;
         const lastName = typeof data.lastName === "string" ? data.lastName : parsedName.lastName;
-        return [{ leaveApplicationId: item.id, ownerId: user.uid, status: data.status, firstName, middleInitial: middleInitial(middleName), lastName, office: data.office, leaveType: data.leaveType, inclusiveDateFrom: data.inclusiveDateFrom, inclusiveDateTo: data.inclusiveDateTo }];
+        const suffix = normalizeAccountSuffix(data.suffix) || parsedName.suffix;
+        return [{ leaveApplicationId: item.id, ownerId: user.uid, status: data.status, firstName, middleInitial: middleInitial(middleName), lastName, suffix, office: data.office, leaveType: data.leaveType, inclusiveDateFrom: data.inclusiveDateFrom, inclusiveDateTo: data.inclusiveDateTo }];
       });
       void (async () => {
         for (let index = 0; index < activeLeaveRecords.length; index += 10) {

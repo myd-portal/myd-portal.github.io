@@ -238,6 +238,10 @@
     gap: 12px;
   }
 
+  .user-master-list-table td.user-master-list-actions::before {
+    flex-basis: 100%;
+  }
+
   .user-master-list-actions .row-action,
   .user-master-list-actions .delete-button {
     margin: 0;
@@ -245,15 +249,17 @@
 }
 
 @media (max-width: 720px) {
+  .user-master-list-section .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .user-master-list-edit-form {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .user-master-list-section .section-heading {
-    align-items: flex-start;
-  }
-
   .user-master-list-count {
+    align-self: flex-start;
     font-size: 10px;
     padding: 6px 8px;
   }
@@ -264,5 +270,12 @@
 
   .user-master-list-results {
     padding-top: 8px;
+    text-align: left;
+  }
+
+  .user-master-list-actions .row-action,
+  .user-master-list-actions .delete-button {
+    min-height: 40px;
+    padding: 8px 6px;
   }
 }

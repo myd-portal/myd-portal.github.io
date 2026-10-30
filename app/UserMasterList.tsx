@@ -144,7 +144,7 @@ export default function UserMasterList({ user }: { user: User }) {
     {error && <p className="user-master-list-message is-error" role="alert">{error}</p>}
     <form className="permit-form user-master-list-edit-form" onSubmit={(event) => void saveAccount(event)}>
       <label>Role<select value={editValues.accountRole} onChange={(event) => setEditValues({ ...editValues, accountRole: event.target.value as AccountRole })} required>{roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-      <label>Account Status<select value={editValues.accountStatus} onChange={(event) => setEditValues({ ...editValues, accountStatus: event.target.value as AccountStatus })} required>{(["Pending", "Approved", "Disapproved"] as AccountStatus[]).map((status) => <option key={status}>{status}</option>)}</select></label>
+      <label>Account Status<select className="status-select" data-status={editValues.accountStatus} value={editValues.accountStatus} onChange={(event) => setEditValues({ ...editValues, accountStatus: event.target.value as AccountStatus })} required>{(["Pending", "Approved", "Disapproved"] as AccountStatus[]).map((status) => <option key={status}>{status}</option>)}</select></label>
       <div className="form-actions"><button type="submit" className="primary-button" disabled={busyId === editing.id}>{busyId === editing.id ? "Saving..." : "Save changes"}</button></div>
     </form>
   </section> : <section className="content-section user-master-list-section">

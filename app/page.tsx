@@ -62,6 +62,7 @@ import { documentRemindersCollection, type DocumentReminder } from "@/lib/docume
 import { safeAttachmentHref } from "@/lib/attachment-link";
 import { loadPdfTools } from "@/lib/pdf-tools";
 import { loadUnitSharedRecords } from "@/lib/unit-shared-records";
+import { accountSuffixOptions, formatAccountName, normalizeAccountSuffix, parseAccountName } from "@/lib/person-name";
 import { canAccessCleaningTaskNavigation, canViewCleaningTaskLanding } from "./CleaningTask";
 
 const NtaModule = dynamic(() => import("./Nta"));
@@ -441,6 +442,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [suffix, setSuffix] = useState("");
   const [gender, setGender] = useState("");
   const [position, setPosition] = useState("");
   const [customPosition, setCustomPosition] = useState(false);
@@ -463,6 +465,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
     const normalizedFirstName = clean(firstName);
     const normalizedMiddleName = clean(middleName);
     const normalizedLastName = clean(lastName);
+    const normalizedSuffix = normalizeAccountSuffix(suffix);
     const normalizedPosition = clean(position);
     const normalizedOffice = clean(office);
     const normalizedDivision = clean(division);
@@ -479,7 +482,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
       return;
     }
     if ([normalizedFirstName, normalizedMiddleName, normalizedLastName].some((namePart) => namePart.length > 60)
-      || [normalizedFirstName, normalizedMiddleName, normalizedLastName].filter(Boolean).join(" ").length > 120
+      || [normalizedFirstName, normalizedMiddleName, normalizedLastName, normalizedSuffix].filter(Boolean).join(" ").length > 120
       || normalizedPosition.length > 120
       || normalizedDesignation.length > 120) {
       setMessage({ kind: "error", text: "Check the length of your name, position, and designation, then try again." });
@@ -507,7 +510,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
       // receives its email_verified claim. Refresh it before Firestore rules
       // evaluate the profile completion write.
       await user.getIdToken(true);
-      const name = [normalizedFirstName, normalizedMiddleName, normalizedLastName].filter(Boolean).join(" ");
+      const name = formatAccountName(normalizedFirstName, normalizedMiddleName, normalizedLastName, normalizedSuffix);
       const isRootSuperAdmin = user.email?.trim().toLowerCase() === SUPERADMIN_EMAIL;
       await updateProfile(user, { displayName: name });
       await setDoc(doc(db, "users", user.uid), {
@@ -515,6 +518,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
         firstName: normalizedFirstName,
         middleName: normalizedMiddleName,
         lastName: normalizedLastName,
+        suffix: normalizedSuffix,
         gender,
         position: normalizedPosition,
         office: normalizedOffice,
@@ -553,6 +557,7 @@ function RegistrationDetails({ user, onSubmitted }: { user: User; onSubmitted: (
           <label>First Name<input autoComplete="given-name" maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} required disabled={busy} /></label>
           <label>Middle Name<input autoComplete="additional-name" maxLength={60} value={middleName} onChange={(event) => setMiddleName(event.target.value)} disabled={busy} /></label>
           <label>Last Name<input autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} required disabled={busy} /></label>
+          <label>Suffix<select value={suffix} onChange={(event) => setSuffix(event.target.value)} disabled={busy}><option value="">None</option>{accountSuffixOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
         </div>
         <div className="registration-demographic-fields">
           <label>Gender<select autoComplete="sex" value={gender} onChange={(event) => setGender(event.target.value)} required disabled={busy}><option value="">Select gender</option><option value="Female">Female</option><option value="Male">Male</option></select></label>
@@ -2241,6 +2246,7 @@ export default function Home() {
   const [profileRevision, setProfileRevision] = useState(0);
   const [profileMiddleName, setProfileMiddleName] = useState("");
   const [profileLastName, setProfileLastName] = useState("");
+  const [profileSuffix, setProfileSuffix] = useState("");
   const [profileGender, setProfileGender] = useState("");
   const [profilePosition, setProfilePosition] = useState("");
   const [profilePositionIsCustom, setProfilePositionIsCustom] = useState(false);
@@ -2408,6 +2414,7 @@ export default function Home() {
           setProfileFirstName(profile.firstName);
           setProfileMiddleName(typeof profile.middleName === "string" ? profile.middleName : "");
           setProfileLastName(profile.lastName);
+          setProfileSuffix(normalizeAccountSuffix(profile.suffix) || parseAccountName(typeof profile.name === "string" ? profile.name : "").suffix);
         } else if (typeof profile.name === "string") applyProfileName(profile.name);
         if (typeof profile.gender === "string") setProfileGender(profile.gender);
         if (typeof profile.position === "string") {
@@ -2433,11 +2440,14 @@ export default function Home() {
   // Best-effort split of a stored full name such as "James E. Rosales".
   function applyProfileName(fullName: string) {
     const parts = fullName.trim().split(/\s+/).filter(Boolean);
-    const last = parts.length > 1 ? parts.pop() ?? "" : "";
-    const middle = parts.length > 1 && /^[A-Za-z]\.?$/.test(parts[parts.length - 1]) ? parts.pop() ?? "" : "";
+    const suffix = normalizeAccountSuffix(parts.at(-1));
+    if (suffix) parts.pop();
+    const lastName = parts.length > 1 ? parts.pop() ?? "" : "";
+    const middleName = parts.length > 1 && /^[A-Za-z]\.?$/.test(parts.at(-1) ?? "") ? parts.pop() ?? "" : "";
     setProfileFirstName(parts.join(" "));
-    setProfileMiddleName(middle);
-    setProfileLastName(last);
+    setProfileMiddleName(middleName);
+    setProfileLastName(lastName);
+    setProfileSuffix(suffix || parseAccountName(fullName).suffix);
   }
 
   async function saveChanges(event: FormEvent<HTMLFormElement>) {
@@ -2447,19 +2457,23 @@ export default function Home() {
     const firstName = clean(profileFirstName);
     const middleName = clean(profileMiddleName);
     const lastName = clean(profileLastName);
+    const suffix = normalizeAccountSuffix(profileSuffix);
     const gender = profileGender;
     const office = clean(profileOffice);
     const division = clean(profileDivision);
     const unit = clean(profileUnit);
     const address = clean(profileAddress);
     const taxIdentificationNo = formatTaxIdentificationNo(profileTaxIdentificationNo);
-    const middleInitial = middleName ? `${middleName.charAt(0).toUpperCase()}.` : "";
-    const name = [firstName, middleInitial, lastName].filter(Boolean).join(" ");
+    const name = formatAccountName(firstName, middleName, lastName, suffix);
     const position = profilePosition.trim().replace(/\s+/g, " ");
     const designation = clean(accountDesignation(profileDesignation));
     const wantsPasswordChange = changePassword.length > 0 || confirmNewPassword.length > 0;
     if (!firstName || !lastName) {
       setProfileMessage({ kind: "error", text: "Enter your first and last name." });
+      return;
+    }
+    if (name.length > 120) {
+      setProfileMessage({ kind: "error", text: "Shorten your name to 120 characters or fewer." });
       return;
     }
     if (!isSuperAdmin) {
@@ -2517,8 +2531,8 @@ export default function Home() {
     let accountNameSaved = false;
     try {
       const profileUpdates = isSuperAdmin
-        ? { name, firstName, middleName, lastName }
-        : { name, firstName, middleName, lastName, gender, position, designation, office, division, unit, profileFieldsVersion: 4, assignment: deleteField(), projectProgram: deleteField(), address, taxIdentificationNo };
+        ? { name, firstName, middleName, lastName, suffix }
+        : { name, firstName, middleName, lastName, suffix, gender, position, designation, office, division, unit, profileFieldsVersion: 4, assignment: deleteField(), projectProgram: deleteField(), address, taxIdentificationNo };
       await setDoc(doc(db, "users", user.uid), profileUpdates, { merge: true });
       profileDataSaved = true;
       setProfileRevision((revision) => revision + 1);
@@ -2528,6 +2542,7 @@ export default function Home() {
       setProfileFirstName(firstName);
       setProfileMiddleName(middleName);
       setProfileLastName(lastName);
+      setProfileSuffix(suffix);
       if (!isSuperAdmin) {
         setProfilePosition(position);
         setProfileDesignation(designation);
@@ -3535,20 +3550,25 @@ export default function Home() {
     <ProfileSignatureUpload user={user} label="Full Signature" fieldName="fullSignatureURL" signatureURL={profileFullSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileFullSignatureURL} />
     {(accountRole !== "regular" || ["Chief", "OIC"].includes(profileDesignation)) && <ProfileSignatureUpload user={user} label="Initial Signature" fieldName="initialSignatureURL" signatureURL={profileInitialSignatureURL} disabled={profileLoading || profileSaving} onUploaded={setProfileInitialSignatureURL} />}
   </div>}
-  <label>First Name<input autoComplete="given-name" maxLength={60} value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
-  <label>Middle Name<input autoComplete="additional-name" maxLength={60} value={profileMiddleName} onChange={(event) => setProfileMiddleName(event.target.value)} disabled={profileLoading || profileSaving} /></label>
-  <label>Last Name<input autoComplete="family-name" maxLength={60} value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
+  <div className="profile-name-fields">
+    <label>First Name<input autoComplete="given-name" maxLength={60} value={profileFirstName} onChange={(event) => setProfileFirstName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
+    <label>Middle Name<input autoComplete="additional-name" maxLength={60} value={profileMiddleName} onChange={(event) => setProfileMiddleName(event.target.value)} disabled={profileLoading || profileSaving} /></label>
+    <label>Last Name<input autoComplete="family-name" maxLength={60} value={profileLastName} onChange={(event) => setProfileLastName(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
+    <label>Suffix<select value={profileSuffix} onChange={(event) => setProfileSuffix(event.target.value)} disabled={profileLoading || profileSaving}><option value="">None</option>{accountSuffixOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+  </div>
   {!isSuperAdmin && <>
-  <label>Gender<select value={profileGender} onChange={(event) => setProfileGender(event.target.value)} required disabled={profileLoading || profileSaving}><option value="" disabled>Select gender</option><option value="Male">Male</option><option value="Female">Female</option></select></label>
-  <label>Position{profilePositionIsCustom ? <div className="password-field"><input autoComplete="organization-title" maxLength={120} list="profile-position-options" value={profilePosition} onChange={(event) => { const nextPosition = event.target.value; setProfilePosition(nextPosition); if (accountPositionOptions.some((option) => option === nextPosition)) setProfilePositionIsCustom(false); }} placeholder="Enter your Position" disabled={profileLoading || profileSaving} /><datalist id="profile-position-options">{accountPositionOptions.map((option) => <option key={option} value={option} />)}</datalist><button type="button" className="password-toggle plain-action position-list-toggle" aria-label="Choose a Position from the list" disabled={profileLoading || profileSaving} onClick={() => { setProfilePosition(""); setProfilePositionIsCustom(false); }}>List</button></div> : <select autoComplete="organization-title" value={profilePosition} onChange={(event) => { const nextPosition = event.target.value; if (nextPosition === "__other__") { setProfilePosition(""); setProfilePositionIsCustom(true); } else setProfilePosition(nextPosition); }} disabled={profileLoading || profileSaving}><option value="">Select your Position</option>{accountPositionOptions.map((option) => <option key={option} value={option}>{option}</option>)}<option value="__other__">Others</option></select>}</label>
-  <div className="profile-designation-field"><label htmlFor="profile-designation-toggle">Designation</label><DesignationPicker value={profileDesignation} onChange={setProfileDesignation} disabled={profileLoading || profileSaving} /></div>
-<label>Office<select value={profileOffice} onChange={(event) => { const nextOffice = event.target.value; setProfileOffice(nextOffice); setProfileDivision(""); setProfileUnit(""); }} required disabled={profileLoading || profileSaving}><option value="" disabled>Select your Office</option>{accountOfficeOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-<label>Division<select value={profileDivision} onChange={(event) => { setProfileDivision(event.target.value); setProfileUnit(""); }} required disabled={profileLoading || profileSaving || !profileOffice}><option value="" disabled>{profileOffice ? "Select your Division" : "Select an Office first"}</option>{divisionsForOffice(profileOffice).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-<label>Unit / Program / Project<select value={profileUnit} onChange={(event) => setProfileUnit(event.target.value)} required disabled={profileLoading || profileSaving || !profileDivision}><option value="" disabled>{profileDivision ? "Select your Unit / Program / Project" : "Select a Division first"}</option>{unitsForOfficeDivision(profileOffice, profileDivision).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-  <div className="profile-contact-row">
-  <label>Tax Identification No.<input type="text" inputMode="numeric" autoComplete="off" maxLength={11} value={profileTaxIdentificationNo} onChange={(event) => updateTaxIdentificationNo(event, setProfileTaxIdentificationNo)} onKeyDown={(event) => handleTaxIdentificationNoKeyDown(event, setProfileTaxIdentificationNo)} required disabled={profileLoading || profileSaving} /></label>
-  <label>Address<input autoComplete="street-address" maxLength={200} value={profileAddress} onChange={(event) => setProfileAddress(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
-  <label>Email<input type="email" value={user.email ?? ""} readOnly /></label>
+  <div className="profile-demographic-fields">
+    <label>Gender<select value={profileGender} onChange={(event) => setProfileGender(event.target.value)} required disabled={profileLoading || profileSaving}><option value="" disabled>Select gender</option><option value="Male">Male</option><option value="Female">Female</option></select></label>
+    <label>Tax Identification No.<input type="text" inputMode="numeric" autoComplete="off" maxLength={11} value={profileTaxIdentificationNo} onChange={(event) => updateTaxIdentificationNo(event, setProfileTaxIdentificationNo)} onKeyDown={(event) => handleTaxIdentificationNoKeyDown(event, setProfileTaxIdentificationNo)} required disabled={profileLoading || profileSaving} /></label>
+    <label>Address<input autoComplete="street-address" maxLength={200} value={profileAddress} onChange={(event) => setProfileAddress(event.target.value)} required disabled={profileLoading || profileSaving} /></label>
+    <label>Email<input type="email" value={user.email ?? ""} readOnly /></label>
+  </div>
+  <div className="profile-work-fields">
+    <label>Position{profilePositionIsCustom ? <div className="password-field"><input autoComplete="organization-title" maxLength={120} list="profile-position-options" value={profilePosition} onChange={(event) => { const nextPosition = event.target.value; setProfilePosition(nextPosition); if (accountPositionOptions.some((option) => option === nextPosition)) setProfilePositionIsCustom(false); }} placeholder="Enter your Position" disabled={profileLoading || profileSaving} /><datalist id="profile-position-options">{accountPositionOptions.map((option) => <option key={option} value={option} />)}</datalist><button type="button" className="password-toggle plain-action position-list-toggle" aria-label="Choose a Position from the list" disabled={profileLoading || profileSaving} onClick={() => { setProfilePosition(""); setProfilePositionIsCustom(false); }}>List</button></div> : <select autoComplete="organization-title" value={profilePosition} onChange={(event) => { const nextPosition = event.target.value; if (nextPosition === "__other__") { setProfilePosition(""); setProfilePositionIsCustom(true); } else setProfilePosition(nextPosition); }} disabled={profileLoading || profileSaving}><option value="">Select your Position</option>{accountPositionOptions.map((option) => <option key={option} value={option}>{option}</option>)}<option value="__other__">Others</option></select>}</label>
+    <div className="profile-designation-field"><label htmlFor="profile-designation-toggle">Designation</label><DesignationPicker value={profileDesignation} onChange={setProfileDesignation} disabled={profileLoading || profileSaving} /></div>
+    <label>Office<select value={profileOffice} onChange={(event) => { const nextOffice = event.target.value; setProfileOffice(nextOffice); setProfileDivision(""); setProfileUnit(""); }} required disabled={profileLoading || profileSaving}><option value="" disabled>Select your Office</option>{accountOfficeOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+    <label>Division<select value={profileDivision} onChange={(event) => { setProfileDivision(event.target.value); setProfileUnit(""); }} required disabled={profileLoading || profileSaving || !profileOffice}><option value="" disabled>{profileOffice ? "Select your Division" : "Select an Office first"}</option>{divisionsForOffice(profileOffice).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+    <label>Unit / Program / Project<select value={profileUnit} onChange={(event) => setProfileUnit(event.target.value)} required disabled={profileLoading || profileSaving || !profileDivision}><option value="" disabled>{profileDivision ? "Select your Unit / Program / Project" : "Select a Division first"}</option>{unitsForOfficeDivision(profileOffice, profileDivision).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
   </div>
   <div className="profile-security-fields">
   <label>Change Password<div className="password-field"><input type={showChangePassword ? "text" : "password"} autoComplete="new-password" value={changePassword} onChange={(event) => setChangePassword(event.target.value)} /><button type="button" className="password-toggle" aria-label={showChangePassword ? "Hide new password" : "Show new password"} onClick={() => setShowChangePassword((show) => !show)}>{showChangePassword ? "Hide" : "Show"}</button></div></label>

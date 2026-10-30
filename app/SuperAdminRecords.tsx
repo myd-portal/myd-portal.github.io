@@ -20,6 +20,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase";
 import { accountProfileSelection } from "@/lib/account-profile";
 import { matchesAdminSearch } from "@/lib/admin-search";
+import { accountSuffixOptions, formatAccountName, normalizeAccountSuffix, parseAccountName } from "@/lib/person-name";
 import { tevDivisions } from "@/lib/mytev";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -30,7 +31,7 @@ export type SuperAdminRecordsKind = "users-profile" | "users-nta" | "users-so" |
 
 type RecordBase = { id: string; [key: string]: unknown };
 type ProfileRecord = RecordBase & {
-  name?: string; firstName?: string; middleName?: string; lastName?: string; address?: string;
+  name?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; address?: string;
   position?: string; designation?: string; office?: string; division?: string; unit?: string;
   taxIdentificationNo?: string; email?: string;
   assignment?: string; projectProgram?: string; profileFieldsVersion?: number; isRootSuperAdmin?: boolean;
@@ -155,11 +156,12 @@ function AdminEditForm({ title, busy, error, message, className, onCancel, onSub
 }
 
 function accountNameParts(account: ProfileRecord) {
-  const existingName = text(account.name).trim().split(/\s+/).filter(Boolean);
-  const firstName = text(account.firstName) || existingName[0] || "";
-  const lastName = text(account.lastName) || existingName.at(-1) || "";
-  const middleName = text(account.middleName) || (existingName.length > 2 ? existingName.slice(1, -1).join(" ") : "");
-  return { firstName, middleName, lastName };
+  const parsedName = parseAccountName(text(account.name));
+  const firstName = text(account.firstName) || parsedName.firstName;
+  const middleName = text(account.middleName) || parsedName.middleName;
+  const lastName = text(account.lastName) || parsedName.lastName;
+  const suffix = normalizeAccountSuffix(account.suffix) || parsedName.suffix;
+  return { firstName, middleName, lastName, suffix };
 }
 
 async function deleteWithNotifications(collectionName: string, record: RecordBase & { ownerId?: string }) {
@@ -180,7 +182,7 @@ function UserProfilesManager({ user }: { user: User }) {
   const [busyId, setBusyId] = useState("");
   const [resettingId, setResettingId] = useState("");
   const [message, setMessage] = useState("");
-  const [values, setValues] = useState({ firstName: "", middleName: "", lastName: "", taxIdentificationNo: "", address: "", position: "", designation: "", office: "", division: "", unit: "" });
+  const [values, setValues] = useState({ firstName: "", middleName: "", lastName: "", suffix: "", taxIdentificationNo: "", address: "", position: "", designation: "", office: "", division: "", unit: "" });
   const [emailAddress, setEmailAddress] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const emailRequestId = useRef(0);
@@ -189,7 +191,7 @@ function UserProfilesManager({ user }: { user: User }) {
   function edit(record: ProfileRecord) {
     const names = accountNameParts(record);
     const scope = accountProfileSelection(record);
-    setValues({ firstName: names.firstName, middleName: names.middleName, lastName: names.lastName, taxIdentificationNo: text(record.taxIdentificationNo), address: text(record.address), position: text(record.position), designation: text(record.designation), office: scope.office, division: scope.division, unit: scope.unit });
+    setValues({ firstName: names.firstName, middleName: names.middleName, lastName: names.lastName, suffix: names.suffix, taxIdentificationNo: text(record.taxIdentificationNo), address: text(record.address), position: text(record.position), designation: text(record.designation), office: scope.office, division: scope.division, unit: scope.unit });
     const requestId = ++emailRequestId.current;
     const functionClient = functions;
     setEmailAddress(text(record.email));
@@ -225,15 +227,16 @@ function UserProfilesManager({ user }: { user: User }) {
     const firstName = values.firstName.trim();
     const middleName = values.middleName.trim();
     const lastName = values.lastName.trim();
+    const suffix = normalizeAccountSuffix(values.suffix);
     const office = values.office.trim();
     const division = values.division.trim();
     const unit = values.unit.trim();
     if (!firstName || !lastName || !office || !division || !unit) { setError("Enter the first name, last name, office, division, and unit."); return; }
-    const middleInitial = middleName ? `${middleName.charAt(0).toLocaleUpperCase("en")}.` : "";
-    const name = [firstName, middleInitial, lastName].filter(Boolean).join(" ");
+    const name = formatAccountName(firstName, middleName, lastName, suffix);
+    if (name.length > 120) { setError("Shorten the user's name to 120 characters or fewer."); return; }
     setBusyId(editing.id); setError(""); setMessage("");
     try {
-      await updateDoc(doc(db, "users", editing.id), { name, firstName, middleName, lastName, taxIdentificationNo: values.taxIdentificationNo.trim() || deleteField(), address: values.address.trim(), position: values.position.trim(), designation: values.designation.trim(), office, division, unit, profileFieldsVersion: 4 });
+      await updateDoc(doc(db, "users", editing.id), { name, firstName, middleName, lastName, suffix, taxIdentificationNo: values.taxIdentificationNo.trim() || deleteField(), address: values.address.trim(), position: values.position.trim(), designation: values.designation.trim(), office, division, unit, profileFieldsVersion: 4 });
       setMessage(`${name} updated.`);
       emailRequestId.current += 1;
       setEditing(null);
@@ -290,10 +293,13 @@ function UserProfilesManager({ user }: { user: User }) {
       ]} />
     </AdminFrame>}
     {editing && <AdminEditForm title="Edit User Profile" busy={busyId === editing.id} error={error} message={message} className="super-admin-profile-edit-form" onCancel={cancelEdit} onSubmit={(event) => void save(event)}>
-      <label className="wide-field">Name<input value={[values.firstName.trim(), values.middleName.trim() ? `${values.middleName.trim().charAt(0).toLocaleUpperCase("en")}.` : "", values.lastName.trim()].filter(Boolean).join(" ")} readOnly /></label>
-      <label>First Name<input maxLength={60} value={values.firstName} onChange={(event) => setValues({ ...values, firstName: event.target.value })} required /></label>
-      <label>Middle Name<input maxLength={60} value={values.middleName} onChange={(event) => setValues({ ...values, middleName: event.target.value })} /></label>
-      <label>Last Name<input maxLength={60} value={values.lastName} onChange={(event) => setValues({ ...values, lastName: event.target.value })} required /></label>
+      <label className="wide-field">Name<input value={formatAccountName(values.firstName, values.middleName, values.lastName, values.suffix)} readOnly /></label>
+      <div className="super-admin-profile-name-row wide-field">
+        <label>First Name<input maxLength={60} value={values.firstName} onChange={(event) => setValues({ ...values, firstName: event.target.value })} required /></label>
+        <label>Middle Name<input maxLength={60} value={values.middleName} onChange={(event) => setValues({ ...values, middleName: event.target.value })} /></label>
+        <label>Last Name<input maxLength={60} value={values.lastName} onChange={(event) => setValues({ ...values, lastName: event.target.value })} required /></label>
+        <label>Suffix<select value={values.suffix} onChange={(event) => setValues({ ...values, suffix: event.target.value })}><option value="">None</option>{accountSuffixOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+      </div>
       <label>TIN<input maxLength={30} value={values.taxIdentificationNo} onChange={(event) => setValues({ ...values, taxIdentificationNo: event.target.value })} /></label>
       <label>Address<textarea rows={2} maxLength={200} value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} /></label>
       <label>Email Address<input type="email" value={emailAddress} placeholder={emailLoading ? "Loading email address..." : "Email address unavailable"} readOnly /></label>
@@ -610,7 +616,7 @@ function TravelOrdersManager() {
       <label>Charge To<input value={values.chargeTo} onChange={(event) => setValues({ ...values, chargeTo: event.target.value })} /></label>
       <label className="wide-field">Remarks<textarea rows={2} value={values.remarks} onChange={(event) => setValues({ ...values, remarks: event.target.value })} /></label>
       <label>TO Number<input value={values.toNumber} onChange={(event) => setValues({ ...values, toNumber: event.target.value })} /></label>
-      <label>Status<select value={values.status} onChange={(event) => setValues({ ...values, status: event.target.value })}>{["Pending", "Processing", "Approved", "Disapproved"].map((status) => <option key={status}>{status}</option>)}</select></label>
+      <label>Status<select className="status-select" data-status={values.status} value={values.status} onChange={(event) => setValues({ ...values, status: event.target.value })}>{["Pending", "Processing", "Approved", "Disapproved"].map((status) => <option key={status}>{status}</option>)}</select></label>
     </AdminEditForm>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this Travel Order?" description={`Delete the Travel Order for ${text(pendingDelete?.people?.[0]?.name) || "this traveler"}? Linked document notifications and its TO Number registration will also be removed.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
   </>;
@@ -687,7 +693,7 @@ function AppearancesManager() {
         <label>Signatory Name<input value={values.signatoryName} onChange={(event) => setValues({ ...values, signatoryName: event.target.value })} /></label>
         <label>Designation<input value={values.designation} onChange={(event) => setValues({ ...values, designation: event.target.value })} /></label>
       </div>
-      <label className="wide-field">Status<select value={values.status} onChange={(event) => setValues({ ...values, status: event.target.value })}>{["Pending", "Approved", "Disapproved"].map((status) => <option key={status}>{status}</option>)}</select></label>
+      <label className="wide-field">Status<select className="status-select" data-status={values.status} value={values.status} onChange={(event) => setValues({ ...values, status: event.target.value })}>{["Pending", "Approved", "Disapproved"].map((status) => <option key={status}>{status}</option>)}</select></label>
     </AdminEditForm>}
     <DeleteConfirmation open={Boolean(pendingDelete)} title="Delete this Appearance certificate?" description={`Delete “${text(pendingDelete?.eventTitle) || "this Appearance certificate"}”? Linked document notifications will also be removed.`} busy={Boolean(pendingDelete && busyId === pendingDelete.id)} onCancel={() => setPendingDelete(null)} onConfirm={() => void remove()} />
   </>;

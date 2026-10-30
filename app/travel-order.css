@@ -112,6 +112,8 @@
   .travel-order-allowances{grid-template-columns:1fr}
   .travel-order-transportation-options{column-gap:14px;row-gap:4px}
   .travel-order-transportation-option{min-height:36px}
+  .travel-order-date-range>div{gap:6px;grid-template-columns:minmax(0,1fr)}
+  .travel-order-date-range>div>span{text-align:center}
   .travel-order-preview-backdrop{padding:8px}
   .travel-order-preview-pages{gap:14px}
   .travel-order-paper{width:min(94vw,210mm)}

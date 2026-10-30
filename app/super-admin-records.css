@@ -98,6 +98,17 @@
   min-width: 0;
 }
 
+.super-admin-profile-name-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.super-admin-profile-name-row > label {
+  min-width: 0;
+}
+
 .super-admin-nta-edit-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -274,7 +285,16 @@
 @media (max-width: 720px) {
   .super-admin-records-section .section-heading,
   .super-admin-edit-section .section-heading {
-    align-items: flex-start;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .super-admin-edit-section .section-heading > .ghost-button {
+    align-self: flex-start;
+  }
+
+  .super-admin-records-count {
+    align-self: flex-start;
   }
 
   .super-admin-records-count {
@@ -290,6 +310,10 @@
 
   .super-admin-profile-division-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .super-admin-profile-name-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .super-admin-nta-signatory-row {
@@ -311,6 +335,16 @@
 
   .super-admin-attendee-row {
     align-items: stretch;
+  }
+
+  .super-admin-records-actions::before {
+    flex-basis: 100%;
+  }
+
+  .super-admin-records-actions .row-action,
+  .super-admin-records-actions .delete-button {
+    min-height: 40px;
+    padding: 8px 6px;
   }
 }
 

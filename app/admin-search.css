@@ -26,3 +26,9 @@
   padding-top: 8px;
   text-align: right;
 }
+
+@media (max-width: 720px) {
+  .admin-list-results {
+    text-align: left;
+  }
+}

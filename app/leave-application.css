@@ -14,7 +14,7 @@
 .leave-application-leave-type-row-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .leave-application-leave-type-row>label{min-width:0}
 .leave-application-leave-type-row select,.leave-application-leave-type-row textarea{height:48px;min-height:48px}
-.leave-application-date-division-row{align-items:end;display:grid;gap:18px;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);min-width:0}
+.leave-application-date-division-row{align-items:end;display:grid;gap:18px;grid-template-columns:minmax(0,2fr) minmax(0,1fr);min-width:0}
 .leave-application-date-division-row>label{min-width:0}
 .leave-application-currency-field{align-items:stretch;display:flex;min-width:0}
 .leave-application-currency-field>span{align-items:center;background:#f7faf6;border:1px solid var(--line);border-right:0;color:var(--muted);display:flex;font-size:14px;padding:0 14px}
@@ -72,8 +72,9 @@
   .leave-application-form{grid-template-columns:minmax(0,1fr);gap:16px}
   .leave-application-wide-field,.leave-application-form-actions{grid-column:auto}
   .leave-application-leave-type-row,.leave-application-leave-type-row-1,.leave-application-leave-type-row-2,.leave-application-leave-type-row-3{grid-template-columns:minmax(0,1fr)}
-  .leave-application-date-range{gap:7px;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
-  .leave-application-date-range input{padding:12px 8px}
+  .leave-application-date-range{gap:7px;grid-template-columns:minmax(0,1fr)}
+  .leave-application-date-range>span{padding:0;text-align:center}
+  .leave-application-date-range input{font-size:13px;padding:12px 8px}
   .leave-application-form-actions{flex-direction:column-reverse}
   .leave-application-form-actions button{width:100%}
 }

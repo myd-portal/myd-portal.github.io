@@ -11,6 +11,7 @@ import { accountAssignment, accountDivision, accountOffice } from "@/lib/account
 import { formatCurrencyAmount, normalizeCurrencyValue } from "@/lib/currency";
 import { tevDivisions, type TevDivision } from "@/lib/mytev";
 import { makeDocumentNotification } from "@/lib/document-notifications";
+import { accountMiddleInitial, formatAccountName, normalizeAccountSuffix, parseAccountName } from "@/lib/person-name";
 import CurrencyInput from "./CurrencyInput";
 import DeleteConfirmation from "./DeleteConfirmation";
 import RecordPagination, { useRecordPagination } from "./RecordPagination";
@@ -47,6 +48,7 @@ type LeaveApplicationRecord = {
   firstName?: string;
   middleName?: string;
   lastName?: string;
+  suffix?: string;
   specifyAbroad?: string;
   specifyIllness?: string;
   studyLeaveOtherPurpose?: string;
@@ -142,18 +144,14 @@ function signatureTime(value: unknown) {
   return millis ? `${new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(millis))} +0800` : "";
 }
 
-function middleInitial(value: string) {
-  const first = value.trim().split(/\s+/)[0]?.replace(/\.+$/, "");
-  const initial = first ? Array.from(first)[0] : "";
-  return initial ? `${initial.toLocaleUpperCase()}.` : "";
-}
+function middleInitial(value: string) { return accountMiddleInitial(value); }
 
-function fullName(record: Pick<LeaveApplicationRecord, "name" | "firstName" | "middleName" | "lastName">) {
+function fullName(record: Pick<LeaveApplicationRecord, "name" | "firstName" | "middleName" | "lastName" | "suffix">) {
   const parsed = parseName(record.name);
   const first = record.firstName?.trim() || parsed.first;
   const middle = middleInitial(typeof record.middleName === "string" ? record.middleName : parsed.middle);
   const last = record.lastName?.trim() || parsed.last;
-  return [first, middle, last].filter(Boolean).join(" ");
+  return formatAccountName(first, middle, last, normalizeAccountSuffix(record.suffix) || parsed.suffix);
 }
 
 function leaveCalendarData(record: LeaveApplicationRecord, ownerId: string, status: LeaveStatus = record.status) {
@@ -165,6 +163,7 @@ function leaveCalendarData(record: LeaveApplicationRecord, ownerId: string, stat
     firstName: record.firstName?.trim() || parsed.first,
     middleInitial: middleInitial(typeof record.middleName === "string" ? record.middleName : parsed.middle),
     lastName: record.lastName?.trim() || parsed.last,
+    suffix: normalizeAccountSuffix(record.suffix) || parsed.suffix,
     office: record.office,
     leaveType: record.leaveType,
     inclusiveDateFrom: record.inclusiveDateFrom,
@@ -178,15 +177,8 @@ function leaveTypeLabel(record: Pick<LeaveApplicationRecord, "leaveType" | "leav
 }
 
 function parseName(value: string) {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  const comma = trimmed.indexOf(",");
-  if (comma >= 0) {
-    const last = trimmed.slice(0, comma).trim();
-    const given = trimmed.slice(comma + 1).trim().split(" ").filter(Boolean);
-    return { last, first: given[0] ?? "", middle: given.slice(1).join(" ") };
-  }
-  const parts = trimmed.split(" ").filter(Boolean);
-  return { last: parts.length > 1 ? parts[parts.length - 1] : "", first: parts[0] ?? "", middle: parts.slice(1, -1).join(" ") };
+  const parsed = parseAccountName(value);
+  return { first: parsed.firstName, middle: parsed.middleName, last: parsed.lastName, suffix: parsed.suffix };
 }
 
 function normalizeNamePart(value: string) {
@@ -311,10 +303,11 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
   const parsedApplicant = parseName(record.name);
+  const applicantSuffix = normalizeAccountSuffix(record.suffix) || parsedApplicant.suffix;
   const applicant = {
-    last: record.lastName?.trim() || parsedApplicant.last,
+    last: [record.lastName?.trim() || parsedApplicant.last, applicantSuffix].filter(Boolean).join(" "),
     first: record.firstName?.trim() || parsedApplicant.first,
-    middle: typeof record.middleName === "string" ? record.middleName.trim() : parsedApplicant.middle,
+    middle: middleInitial(typeof record.middleName === "string" ? record.middleName : parsedApplicant.middle),
   };
 
   drawFitText(page, bold, record.profileDivision || record.office, 85.37, 878.38, 190, 13.5);
@@ -472,7 +465,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const handledFocusIdRef = useRef<string | null>(null);
 
-  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; fullSignatureURL: string; initialSignatureURL: string; accountRole: string; designation: string; division: string; unit: string; applicant?: { first: string; middle: string; last: string } }>({ name: user.displayName ?? "", office: "", position: "", fullSignatureURL: "", initialSignatureURL: "", accountRole: "", designation: "", division: "", unit: "" });
+  const [profileDefaults, setProfileDefaults] = useState<{ name: string; office: Office | ""; position: string; fullSignatureURL: string; initialSignatureURL: string; accountRole: string; designation: string; division: string; unit: string; suffix: string; applicant?: { first: string; middle: string; last: string; suffix: string } }>({ name: user.displayName ?? "", office: "", position: "", fullSignatureURL: "", initialSignatureURL: "", accountRole: "", designation: "", division: "", unit: "", suffix: "" });
   const [signatoryOptions, setSignatoryOptions] = useState<LeaveAdminSignatory[]>([]);
   const [signatoryAccountsLoaded, setSignatoryAccountsLoaded] = useState(false);
   const [selectedSignatoryUserId, setSelectedSignatoryUserId] = useState("");
@@ -564,9 +557,11 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         if (!active || !snapshot.exists()) return;
         const profile = snapshot.data();
         const normalizedOffice = officeFromProfile(accountOffice(profile));
+        const parsedName = parseName(typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "");
         const applicant = typeof profile.firstName === "string" && typeof profile.lastName === "string"
-          ? { first: profile.firstName, middle: typeof profile.middleName === "string" ? profile.middleName : "", last: profile.lastName }
-          : parseName(typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "");
+          ? { first: profile.firstName, middle: typeof profile.middleName === "string" ? profile.middleName : "", last: profile.lastName, suffix: normalizeAccountSuffix(profile.suffix) || parsedName.suffix }
+          : parsedName;
+        const suffix = normalizeAccountSuffix(profile.suffix) || applicant.suffix;
         const defaults = {
           name: typeof profile.name === "string" && profile.name.trim() ? profile.name : user.displayName ?? "",
           position: typeof profile.position === "string" ? profile.position : "",
@@ -577,6 +572,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
           designation: typeof profile.designation === "string" ? profile.designation : "",
           division: accountDivision(profile),
           unit: accountAssignment(profile),
+          suffix,
           applicant,
         };
         setProfileDefaults(defaults);
@@ -768,10 +764,11 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
       const leaveData = {
         ownerId: user.uid,
         filedDate,
-        name: `${normalizedLastName}, ${normalizedFirstName}${normalizedMiddleName ? ` ${normalizedMiddleName}` : ""}`,
+        name: formatAccountName(normalizedFirstName, normalizedMiddleName, normalizedLastName, profileDefaults.suffix),
         firstName: normalizedFirstName,
         middleName: normalizedMiddleName,
         lastName: normalizedLastName,
+        suffix: normalizeAccountSuffix(profileDefaults.suffix),
         office,
         profileDivision: profileDefaults.division.trim(),
         position: position.trim(),
@@ -1162,7 +1159,7 @@ export default function LeaveApplicationModule({ user, mode = "owner", focusReco
         {visibleRecords.map((record) => <article className="leave-application-record" key={record.id}>
           <span className="leave-application-record-date">{formatDate(record.filedDate)}</span><span className="leave-application-record-type">{mode === "approval" && <strong>{record.name}<br /></strong>}{leaveTypeLabel(record)}</span><span className="leave-application-record-dates">{formatInclusiveDateRange(record.inclusiveDateFrom, record.inclusiveDateTo)}</span>
           <label className="leave-application-affix"><select className="affix-signature-select" aria-label={`${mode === "approval" ? profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Affix Initial Signature" : "Affix Full Signature" : "Affix Full Signature"} for Leave Application filed ${formatDate(record.filedDate)}`} title={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL : profileDefaults.fullSignatureURL) ? undefined : `Upload your ${profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? "Initial" : "Full"} Signature in Profile to enable Yes.` : profileDefaults.fullSignatureURL ? undefined : "Upload your Full Signature in Profile to enable Yes."} value={mode === "approval" ? (profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? record.affixInitialSignature : record.affixChiefSignature) === "Yes" ? "Yes" : "No" : record.affixSignature === "Yes" ? "Yes" : "No"} disabled={affixUpdatingId === record.id || updatingId === record.id || deletingId !== null || (mode === "owner" && record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "owner-full")} onChange={(event) => { if (event.target.value === "Yes" || event.target.value === "No") void (mode === "approval" ? changeApprovalSignature(record, event.target.value) : changeAffixSignature(record, event.target.value)); }}><option value="Yes" disabled={mode === "approval" ? !(profileDefaults.designation === "AGRISTAT/DRRM/AMIA Project Leader" ? profileDefaults.initialSignatureURL.trim() : profileDefaults.fullSignatureURL.trim()) : !profileDefaults.fullSignatureURL.trim()}>Yes</option><option value="No">No</option></select></label>
-          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={mode === "approval" || record.status !== "Pending" || (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "returned") || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}{record.approvalWorkflow === "fod-myleave" && <small>{record.approvalStage === "owner-full" ? record.affixSignature === "Yes" ? "Ready to Send" : "Awaiting applicant Full Signature" : record.approvalStage === "project-leader" ? "Awaiting Project Leader Initial Signature" : record.approvalStage === "chief" ? "Awaiting Chief Full Signature" : "Signatures complete"}</small>}</label>
+          <label className={`leave-application-status leave-application-status-${record.status.toLowerCase()}`}><select className="status-select" data-status={record.status} aria-label={`Status for Leave Application filed ${formatDate(record.filedDate)}`} value={record.status} disabled={mode === "approval" || record.status !== "Pending" || (record.approvalWorkflow === "fod-myleave" && record.approvalStage !== "returned") || updatingId === record.id || affixUpdatingId === record.id || deletingId !== null} onChange={(event) => void changeStatus(record, event.target.value as LeaveStatus)}>{leaveStatuses.map((status) => <option key={status}>{status}</option>)}</select>{updatingId === record.id && <small>Saving...</small>}{record.approvalWorkflow === "fod-myleave" && <small>{record.approvalStage === "owner-full" ? record.affixSignature === "Yes" ? "Ready to Send" : "Awaiting applicant Full Signature" : record.approvalStage === "project-leader" ? "Awaiting Project Leader Initial Signature" : record.approvalStage === "chief" ? "Awaiting Chief Full Signature" : "Signatures complete"}</small>}</label>
           <div className="leave-application-actions">{mode === "owner" && isFodLeaveOwner(profileDefaults) && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && record.status !== "Disapproved" && record.affixSignature === "Yes" && <button type="button" className="row-action" disabled={affixUpdatingId === record.id || deletingId !== null} onClick={() => void sendLeaveApplicationForApproval(record)}>{affixUpdatingId === record.id ? "Sending..." : "Send"}</button>}<button type="button" className="row-action" disabled={deletingId !== null || previewLoadingId !== null} onClick={() => void openPreview(record)}>{previewLoadingId === record.id ? "Preparing..." : "View"}</button>{mode === "owner" && record.status === "Pending" && (record.approvalWorkflow !== "fod-myleave" || record.approvalStage === "owner-full") && <button type="button" className="delete-button" disabled={deletingId !== null || affixUpdatingId === record.id} onClick={() => setPendingDelete(record)}>{deletingId === record.id ? "Deleting..." : "Delete"}</button>}</div>
         </article>)}
       </div>}

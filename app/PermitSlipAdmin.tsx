@@ -340,7 +340,8 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
              {canManagePermits ? (
                <>
                  <select
-                   className={`permit-admin-status permit-admin-status-${status.toLowerCase()}`}
+                   className={`status-select permit-admin-status permit-admin-status-${status.toLowerCase()}`}
+                   data-status={status}
                    value={status}
                    disabled={savingKey === key || status !== "Pending"}
                    title={status !== "Pending" ? `${status} Permit Slips cannot be changed.` : undefined}

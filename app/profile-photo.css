@@ -1,4 +1,4 @@
-.profile-media-row{align-items:center;border-bottom:1px solid var(--line);display:grid;gap:18px;grid-column:1/-1;grid-template-columns:minmax(0,1.3fr) repeat(2,minmax(0,1fr));padding:0 0 18px}
+.profile-media-row{align-items:center;border-bottom:1px solid var(--line);display:grid;gap:18px;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));padding:0 0 18px}
 .profile-photo-field{align-items:center;display:flex;gap:14px;min-width:0}
 .profile-photo-preview{background:var(--mint);border-radius:50%;flex:0 0 auto;height:76px;object-fit:cover;width:76px}
 .profile-photo-controls{align-items:flex-start;display:flex;flex-direction:column;gap:7px}
@@ -15,4 +15,41 @@
 .profile-signature-controls strong{font-size:13px}
 .profile-signature-controls small{color:var(--muted);font-size:12px}
 .profile-signature-controls .auth-message{font-size:12px;margin:0}
-@media(max-width:720px){.profile-media-row{grid-template-columns:1fr}.profile-photo-field{align-items:flex-start}}
+
+.profile-form>.profile-name-fields,
+.profile-form>.profile-demographic-fields,
+.profile-form>.profile-work-fields,
+.profile-form>.profile-security-fields{grid-column:1/-1;min-width:0}
+.profile-name-fields,
+.profile-demographic-fields,
+.profile-work-fields{display:grid;gap:14px;grid-template-columns:repeat(4,minmax(0,1fr));min-width:0}
+.profile-name-fields>label,
+.profile-demographic-fields>label,
+.profile-work-fields>label,
+.profile-work-fields>.profile-designation-field{min-width:0}
+.profile-work-fields .profile-designation-field{grid-column:auto}
+.profile-work-fields>label:last-child{grid-column:1/-1}
+
+@media(max-width:720px){
+  .profile-media-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .profile-photo-field,.profile-signature-field{align-items:flex-start;gap:8px}
+  .profile-photo-preview{height:58px;width:58px}
+  .profile-photo-controls,.profile-signature-controls{min-width:0}
+  .profile-photo-controls small,.profile-signature-controls small{font-size:10px;overflow-wrap:anywhere}
+  .profile-photo-select{max-width:100%;width:100%}
+  .profile-photo-select .ghost-button{font-size:11px;max-width:100%;padding:8px 9px;text-align:center;white-space:normal}
+  .profile-signature-preview-wrap{flex-basis:48px;height:44px}
+  .profile-name-fields,.profile-demographic-fields,.profile-work-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .profile-form .profile-security-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .profile-work-fields>label:last-child{grid-column:1/-1}
+}
+
+@media(max-width:360px){
+  .profile-photo-preview{height:48px;width:48px}
+  .profile-signature-preview-wrap{flex-basis:42px;height:40px}
+  .profile-photo-select .ghost-button{font-size:10px;padding:7px 6px}
+}
+
+@media(max-width:560px){
+  .registration-name-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

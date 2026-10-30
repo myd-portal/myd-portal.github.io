@@ -335,7 +335,7 @@ button.remove-action{align-items:center;background:#fff;border:1px solid #f0bda9
 .permit-table .table-row>strong{font-weight:400}
 .table-row,.table-row *,.mytev-table-row,.mytev-table-row *{font-family:'DM Sans',sans-serif;font-style:normal;font-weight:400}
 .table-row strong,.mytev-table-row strong{font-family:'DM Sans',sans-serif;font-style:normal;font-weight:400}
-.calendar-of-activities-list-row .calendar-of-activities-list-status select{font-family:'DM Sans',sans-serif;font-style:normal;font-weight:400}
+.calendar-of-activities-list-row .calendar-of-activities-list-status select{font-family:'DM Sans',sans-serif;font-style:normal;font-weight:600}
 
 .profile-designation-field{display:grid;gap:8px;grid-column:span 2;min-width:0}.profile-designation-field>label{color:#4e5b55;font-size:12px;font-weight:600;letter-spacing:.02em}.designation-picker{min-width:0;position:relative}.designation-picker-toggle{align-items:center;background:var(--white);border:1px solid var(--line);color:var(--ink);display:flex;gap:12px;justify-content:space-between;min-height:43px;padding:12px 14px;text-align:left;width:100%}.designation-picker-toggle:focus-visible,.designation-picker-custom-input:focus-visible{border-color:var(--ink);box-shadow:0 0 0 2px #d7e8dc;outline:none}.designation-picker-toggle span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.designation-picker-custom-field{align-items:stretch;display:flex;gap:6px}.designation-picker-custom-input{flex:1;min-width:0}.designation-picker-list-button{background:var(--white);border:1px solid var(--line);color:var(--accent-dark);font-size:12px;padding:8px 12px}.designation-picker-list-button:hover{background:#f4f8f4}.designation-picker-menu{background:var(--white);border:1px solid var(--line);box-shadow:0 10px 24px #18211f20;margin-top:5px;padding:8px;z-index:5}.designation-picker-options{display:grid;gap:2px;max-height:280px;overflow:auto}.designation-picker-option{align-items:center;color:var(--ink);display:flex;font-size:12px;font-weight:500;gap:9px;letter-spacing:0;line-height:1.35;padding:7px 8px}.designation-picker-option:hover{background:#f4f8f4}.designation-picker-option input{accent-color:var(--accent);flex:0 0 16px;height:16px;margin:0;padding:0;width:16px}.designation-picker-other{border-top:1px solid var(--line);margin-top:5px;padding-top:5px}
 .profile-designation-field{font-size:12px;font-weight:600;letter-spacing:.02em}
@@ -353,3 +353,40 @@ button.remove-action{align-items:center;background:#fff;border:1px solid #f0bda9
 .affix-signature-select{appearance:auto;background:#fff;border:1px solid var(--line);border-radius:6px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;line-height:1.3;min-height:40px;outline:none;padding:8px 36px 8px 12px;width:100%}
 .affix-signature-select:focus-visible{border-color:var(--accent-dark);box-shadow:none;outline:2px solid #df603c33;outline-offset:1px}
 .affix-signature-select:disabled{cursor:not-allowed;opacity:.65}
+
+/* Shared form sizing keeps nested grids and native controls inside their cards. */
+input:not([type="checkbox"]):not([type="radio"]),select,textarea{font-size:14px;line-height:1.35;max-width:100%;min-width:0}
+form,fieldset{max-width:100%;min-width:0}
+form :where(*){min-width:0}
+label{min-width:0}
+.content-section.form-section{max-width:1100px;min-width:0;width:100%}
+.dashboard .content-section.form-section{max-width:1100px;width:100%}
+.dashboard .content-section .section-heading h2{font-size:clamp(22px,2.5vw,28px);line-height:1.12;overflow-wrap:anywhere}
+.dashboard .status-select.status-select{appearance:auto;background:#fff;border:1px solid var(--line);border-radius:0;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;font-style:normal;line-height:1.3;max-width:100%;min-height:40px;min-width:0;padding:8px 34px 8px 10px;width:100%}
+.dashboard .status-select.status-select[data-status="Pending"]{background:#fff5e8;color:#8e5712}
+.dashboard .status-select.status-select[data-status="Approved"],.dashboard .status-select.status-select[data-status="Done"]{background:#eaf5ed;color:#21603a}
+.dashboard .status-select.status-select[data-status="Disapproved"]{background:#fff0ed;color:#a23d2d}
+.dashboard .status-select.status-select[data-status="Processing"]{background:#eef3f0;color:#43544b}
+.date-range-field{min-width:0}
+.date-range-field>div{display:grid;gap:8px;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);min-width:0}
+.date-range-field>div>input{max-width:100%;min-width:0;width:100%}
+@media(max-width:720px){
+  .dashboard,.dashboard>.content-section{min-width:0;width:100%}
+  .dashboard .content-section.form-section{padding:22px 16px}
+  .dashboard .content-section .section-heading{gap:12px;min-width:0}
+  .dashboard .content-section .section-heading>div{flex:1;min-width:0}
+  .dashboard .content-section .section-heading h2{font-size:clamp(21px,5.4vw,26px)}
+  .dashboard .content-section .section-heading .muted{font-size:13px}
+  .dashboard .content-section .section-heading .ghost-button{flex:0 0 auto;font-size:13px;padding:9px 12px}
+}
+@media(max-width:480px){
+  .dashboard .content-section.form-section{padding:20px 14px}
+  .dashboard .content-section .section-heading h2{font-size:clamp(20px,5.2vw,23px)}
+  .dashboard .content-section .section-heading .eyebrow{font-size:10px;margin-bottom:10px}
+  .date-range-field>div{gap:6px}
+  .date-range-field>div>input{font-size:13px;padding-left:6px;padding-right:6px}
+}
+@media(max-width:380px){
+  .date-range-field>div{grid-template-columns:minmax(0,1fr)}
+  .date-range-field>div>span{padding:0;text-align:center}
+}

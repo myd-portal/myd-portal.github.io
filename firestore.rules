@@ -424,31 +424,8 @@ service cloud.firestore {
         && order.people[0] is map
         && order.people[0].get("userId", "") == recipientId;
     }
-    function isNamedTravelOrderRecipient(order) {
-      let userPath = currentUserPath();
-      return exists(userPath)
-        && order.get("people", []) is list
-        && order.people.size() == 1
-        && order.people[0] is map
-        && order.people[0].get("name", "") is string
-        && order.people[0].get("name", "").size() > 0
-        && order.people[0].get("name", "").lower().replace("[.,'â€™-]+", " ").replace(" +", " ").trim()
-          == get(userPath).data.get("name", "").lower().replace("[.,'â€™-]+", " ").replace(" +", " ").trim();
-    }
     function canUpdateTravelOrderAsRecipient(order) {
-      return isPersonalTravelOrder(order, request.auth.uid)
-        || (order.get("recipientId", "") == request.auth.uid
-          && order.get("people", []) is list
-          && order.people.size() == 1)
-        || (order.get("recipientIds", []) is list
-          && request.auth.uid in order.recipientIds
-          && order.get("people", []) is list
-          && order.people.size() == 1)
-        || (order.get("people", []) is list
-          && order.people.size() == 1
-          && order.people[0] is map
-          && order.people[0].get("userId", "") == request.auth.uid)
-        || isNamedTravelOrderRecipient(order);
+      return isPersonalTravelOrder(order, request.auth.uid);
     }
     function isPermitAdmin() {
       let userPath = currentUserPath();
@@ -801,7 +778,7 @@ service cloud.firestore {
     }
     function validUserProfile(data) {
       return data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin"])
-        && data.keys().hasOnly(["name", "position", "office", "division", "unit", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "accountRole", "accountStatus", "isRootSuperAdmin", "emailVerified", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
+        && data.keys().hasOnly(["name", "position", "office", "division", "unit", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "suffix", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "accountRole", "accountStatus", "isRootSuperAdmin", "emailVerified", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
         && data.emailVerified is bool
         && data.isRootSuperAdmin is bool
         && data.accountRole in ["superadmin", "admin", "regular"]
@@ -810,6 +787,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(["firstName"]) || (data.firstName is string && data.firstName.size() <= 60))
         && (!data.keys().hasAny(["middleName"]) || (data.middleName is string && data.middleName.size() <= 60))
         && (!data.keys().hasAny(["lastName"]) || (data.lastName is string && data.lastName.size() <= 60))
+        && (!data.keys().hasAny(["suffix"]) || (data.suffix is string && data.suffix in ["", "Jr.", "Sr.", "I", "II", "III", "IV", "V"]))
         && (!data.keys().hasAny(["photoURL"]) || (data.photoURL is string && data.photoURL.size() <= 2048))
         && (!data.keys().hasAny(["fullSignatureURL"]) || (data.fullSignatureURL is string && data.fullSignatureURL.size() <= 2048))
         && (!data.keys().hasAny(["initialSignatureURL"]) || (data.initialSignatureURL is string && data.initialSignatureURL.size() <= 2048))
@@ -1072,7 +1050,7 @@ service cloud.firestore {
             || canUploadInitialSignature(resource.data)))
         || (isEmailVerified()
           && request.auth.uid == userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "position", "office", "division", "unit", "assignment", "projectProgram", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "position", "office", "division", "unit", "assignment", "projectProgram", "profileFieldsVersion", "designation", "firstName", "middleName", "lastName", "suffix", "gender", "photoURL", "fullSignatureURL", "initialSignatureURL", "address", "taxIdentificationNo", "emailVerified", "accountRole", "accountStatus", "isRootSuperAdmin", "registrationStage", "welcomeNotificationSeenAt", "createdAt"])
           && request.resource.data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion", "emailVerified"])
           && !request.resource.data.keys().hasAny(["assignment", "projectProgram"])
           && request.resource.data.emailVerified == true
@@ -1114,6 +1092,7 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["firstName"]) || (request.resource.data.firstName is string && request.resource.data.firstName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["middleName"]) || (request.resource.data.middleName is string && request.resource.data.middleName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["lastName"]) || (request.resource.data.lastName is string && request.resource.data.lastName.size() <= 60))
+          && (!request.resource.data.keys().hasAny(["suffix"]) || (request.resource.data.suffix is string && request.resource.data.suffix in ["", "Jr.", "Sr.", "I", "II", "III", "IV", "V"]))
           && (!request.resource.data.keys().hasAny(["photoURL"]) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 2048))
           && (!request.resource.data.keys().hasAny(["fullSignatureURL"]) || (request.resource.data.fullSignatureURL is string && request.resource.data.fullSignatureURL.size() <= 2048))
           && (!request.resource.data.keys().hasAny(["initialSignatureURL"]) || (request.resource.data.initialSignatureURL is string && request.resource.data.initialSignatureURL.size() <= 2048))
@@ -1125,7 +1104,7 @@ service cloud.firestore {
         || (isSuperAdmin()
           && userId != request.auth.uid
           && resource.data.get("isRootSuperAdmin", false) != true
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "firstName", "middleName", "lastName", "address", "taxIdentificationNo", "position", "designation", "office", "division", "unit", "profileFieldsVersion"])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "firstName", "middleName", "lastName", "suffix", "address", "taxIdentificationNo", "position", "designation", "office", "division", "unit", "profileFieldsVersion"])
           && request.resource.data.keys().hasAll(["name", "position", "office", "division", "unit", "profileFieldsVersion"])
           && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
           && request.resource.data.position is string && request.resource.data.position.size() <= 120
@@ -1136,6 +1115,7 @@ service cloud.firestore {
           && (!request.resource.data.keys().hasAny(["firstName"]) || (request.resource.data.firstName is string && request.resource.data.firstName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["middleName"]) || (request.resource.data.middleName is string && request.resource.data.middleName.size() <= 60))
           && (!request.resource.data.keys().hasAny(["lastName"]) || (request.resource.data.lastName is string && request.resource.data.lastName.size() <= 60))
+          && (!request.resource.data.keys().hasAny(["suffix"]) || (request.resource.data.suffix is string && request.resource.data.suffix in ["", "Jr.", "Sr.", "I", "II", "III", "IV", "V"]))
           && (!request.resource.data.keys().hasAny(["address"]) || (request.resource.data.address is string && request.resource.data.address.size() <= 200))
           && (!request.resource.data.keys().hasAny(["taxIdentificationNo"]) || (request.resource.data.taxIdentificationNo is string && request.resource.data.taxIdentificationNo.size() <= 30))
           && (!request.resource.data.keys().hasAny(["designation"]) || (request.resource.data.designation is string && request.resource.data.designation.size() <= 2000)))
@@ -2014,6 +1994,7 @@ service cloud.firestore {
         && request.resource.data.firstName is string
         && request.resource.data.middleName is string
         && request.resource.data.lastName is string
+        && (!request.resource.data.keys().hasAny(["suffix"]) || (request.resource.data.suffix is string && request.resource.data.suffix in ["", "Jr.", "Sr.", "I", "II", "III", "IV", "V"]))
         && request.resource.data.office is string
         && request.resource.data.position is string
         && request.resource.data.salary is string
@@ -2081,6 +2062,7 @@ service cloud.firestore {
           && getAfter(applicationPath).data.leaveType == data.leaveType
           && getAfter(applicationPath).data.inclusiveDateFrom == data.inclusiveDateFrom
           && getAfter(applicationPath).data.inclusiveDateTo == data.inclusiveDateTo
+          && getAfter(applicationPath).data.get("suffix", "") == data.get("suffix", "")
           && ((!getAfter(applicationPath).data.keys().hasAll(["firstName", "lastName"]))
             || (getAfter(applicationPath).data.firstName == data.firstName
               && getAfter(applicationPath).data.lastName == data.lastName));
@@ -2088,7 +2070,7 @@ service cloud.firestore {
       allow read: if isVerifiedUser() && resource.data.status in ["Approved", "Pending"];
       allow create, update: if isVerifiedUser()
         && request.resource.data.keys().hasAll(["leaveApplicationId", "ownerId", "status", "firstName", "middleInitial", "lastName", "office", "leaveType", "inclusiveDateFrom", "inclusiveDateTo"])
-        && request.resource.data.keys().hasOnly(["leaveApplicationId", "ownerId", "status", "firstName", "middleInitial", "lastName", "office", "leaveType", "inclusiveDateFrom", "inclusiveDateTo"])
+        && request.resource.data.keys().hasOnly(["leaveApplicationId", "ownerId", "status", "firstName", "middleInitial", "lastName", "suffix", "office", "leaveType", "inclusiveDateFrom", "inclusiveDateTo"])
         && request.resource.data.leaveApplicationId == leaveApplicationId
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.status in ["Approved", "Pending"]
@@ -2101,6 +2083,7 @@ service cloud.firestore {
         && request.resource.data.lastName is string
         && request.resource.data.lastName.size() > 0
         && request.resource.data.lastName.size() <= 60
+        && (!request.resource.data.keys().hasAny(["suffix"]) || (request.resource.data.suffix is string && request.resource.data.suffix in ["", "Jr.", "Sr.", "I", "II", "III", "IV", "V"]))
         && request.resource.data.office is string
         && request.resource.data.office.size() > 0
         && request.resource.data.office.size() <= 120
@@ -2123,8 +2106,7 @@ service cloud.firestore {
     }
     match /travelOrders/{travelOrderId} {
       allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
-        || resource.data.get("recipientId", "") == request.auth.uid
-        || resource.data.get("status", "") in ["Approved", "Pending", "Processing", "Disapproved"]));
+        || resource.data.get("recipientId", "") == request.auth.uid));
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerUnit == signedInUnit()
         && isPersonalTravelOrder(request.resource.data, request.resource.data.get("recipientId", ""));
