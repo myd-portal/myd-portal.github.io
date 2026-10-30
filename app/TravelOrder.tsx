@@ -553,36 +553,42 @@ export default function TravelOrderModule({ user, role, office, division, unit, 
           && order.people.every((person) => Boolean(person.userId)));
 
       if (unit) {
+        let migratedLegacyOrder = false;
         for (const order of legacyOrders) {
-          const notificationReferences = await getDocumentNotificationReferences(firestore, user.uid, order.id);
-          const batch = writeBatch(firestore);
-          notificationReferences.forEach((reference) => batch.delete(reference));
-          if (order.status === "Pending") batch.delete(doc(firestore, "travelOrders", order.id));
-          const { id: _sourceId, ...sourceData } = order;
-          for (const [personIndex, person] of order.people.entries()) {
-            const recipientId = person.userId!;
-            const personalOrderId = `${encodeURIComponent(order.id)}_${personIndex}_${encodeURIComponent(recipientId)}`;
-            const orderRef = doc(firestore, "travelOrders", personalOrderId);
-            const personalRecord = {
-              ...sourceData,
-              people: [person],
-              status: normalizeWorkflowStatus(order.status),
-              ownerUnit: unit,
-              travelOrderGroupId: order.travelOrderGroupId ?? order.id,
-              travelOrderPersonIndex: personIndex,
-              recipientId,
-              recipientIds: [recipientId],
-              splitFromOrderId: order.id,
-            };
-            batch.set(orderRef, personalRecord);
-            if (recipientId !== user.uid) {
-              const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: orderRef.id, documentType: "Travel Order", departureDate: order.departureDate, returnDate: order.returnDate, placeOfTravel: order.placeOfTravel, purpose: order.purpose });
-              batch.set(notification.reference, notification.data);
+          try {
+            const notificationReferences = await getDocumentNotificationReferences(firestore, user.uid, order.id);
+            const batch = writeBatch(firestore);
+            notificationReferences.forEach((reference) => batch.delete(reference));
+            if (order.status === "Pending") batch.delete(doc(firestore, "travelOrders", order.id));
+            const { id: _sourceId, ...sourceData } = order;
+            for (const [personIndex, person] of order.people.entries()) {
+              const recipientId = person.userId!;
+              const personalOrderId = `${encodeURIComponent(order.id)}_${personIndex}_${encodeURIComponent(recipientId)}`;
+              const orderRef = doc(firestore, "travelOrders", personalOrderId);
+              const personalRecord = {
+                ...sourceData,
+                people: [person],
+                status: normalizeWorkflowStatus(order.status),
+                ownerUnit: unit,
+                travelOrderGroupId: order.travelOrderGroupId ?? order.id,
+                travelOrderPersonIndex: personIndex,
+                recipientId,
+                recipientIds: [recipientId],
+                splitFromOrderId: order.id,
+              };
+              batch.set(orderRef, personalRecord);
+              if (recipientId !== user.uid) {
+                const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: orderRef.id, documentType: "Travel Order", departureDate: order.departureDate, returnDate: order.returnDate, placeOfTravel: order.placeOfTravel, purpose: order.purpose });
+                batch.set(notification.reference, notification.data);
+              }
             }
+            await batch.commit();
+            migratedLegacyOrder = true;
+          } catch (cause) {
+            console.warn("Could not split a legacy Travel Order; keeping the original order visible.", cause);
           }
-          await batch.commit();
         }
-        if (legacyOrders.length) [ownerSnapshot, recipientSnapshot] = await loadSnapshots();
+        if (migratedLegacyOrder) [ownerSnapshot, recipientSnapshot] = await loadSnapshots();
       }
 
       ownerRowsCache = ownerSnapshot.docs.map((item) => ({ id: item.id, ...item.data(), status: normalizeWorkflowStatus(item.data().status) } as TravelOrder));

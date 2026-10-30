@@ -2109,8 +2109,12 @@ service cloud.firestore {
           || !(getAfter(/databases/$(database)/documents/leaveApplications/$(resource.data.leaveApplicationId)).data.status in ["Approved", "Pending"]));
     }
     match /travelOrders/{travelOrderId} {
-      allow read: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
-        || resource.data.get("recipientId", "") == request.auth.uid));
+      allow get: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
+        || resource.data.recipientId == request.auth.uid
+        || resource.data.status in ["Approved", "Pending", "Processing", "Disapproved"]));
+      allow list: if isSuperAdmin() || (isVerifiedUser() && (resource.data.ownerId == request.auth.uid
+        || resource.data.recipientId == request.auth.uid
+        || resource.data.status in ["Approved", "Pending", "Processing", "Disapproved"]));
       allow create: if isVerifiedUser() && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerUnit == signedInUnit()
         && isPersonalTravelOrder(request.resource.data, request.resource.data.get("recipientId", ""));
