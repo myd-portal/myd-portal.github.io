@@ -45,7 +45,7 @@
 .travel-order-approval-person-row>label{min-width:0}
 .travel-order-approval-person-row input{font-size:13px}
 .travel-order-approval-person-row>.primary-button{min-height:42px;white-space:nowrap}
-.travel-order-approval-person-row>strong{align-self:center;overflow-wrap:anywhere}
+.travel-order-approval-person-row>strong{align-self:center;color:var(--ink);font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .travel-order-approval-complete{align-self:center;color:#27613b;font-size:12px;font-weight:700;justify-self:start}
 .travel-order-number-error{color:#a23d2d;font-size:12px;margin:0}
 .travel-order-number-actions{align-items:center;display:flex;gap:10px;justify-content:flex-end}
