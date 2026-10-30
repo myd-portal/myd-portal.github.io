@@ -1603,6 +1603,10 @@ service cloud.firestore {
       allow read, delete: if isSuperAdmin();
       allow read: if isVerifiedUser()
         && (resource.data.recipientId == request.auth.uid || resource.data.ownerId == request.auth.uid);
+      allow delete: if isVerifiedUser()
+        && resource.data.ownerId == request.auth.uid
+        && resource.data.documentType == "Travel Order"
+        && resource.data.documentId is string;
       allow create: if isVerifiedUser()
         && (request.resource.data.ownerId == request.auth.uid || request.resource.data.documentType == "Leave Application")
         && request.resource.data.recipientId is string
