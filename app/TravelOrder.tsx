@@ -371,7 +371,7 @@ function TravelOrderList({ orders, ownerId, preparedByNames, fallbackPreparedBy,
           <div className="travel-order-approval-person-rows">{groupApprovalPeople.map(({ pageOrder, person, personIndex, index }) => <div className="travel-order-approval-person-row" key={`${pageOrder.id}-approval-${personIndex}`}>
             <label>Date<input type="date" value={approvalDates[index] ?? ""} onChange={(event) => updateApprovalDate(index, event.target.value)} disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
             <label>TO No.<input value={approvalNumbers[index] ?? ""} onChange={(event) => updateApprovalNumber(index, event.target.value)} disabled={pageOrder.status !== "Pending" || updatingId !== null} /></label>
-            <strong>{person.name}</strong>
+            <label className="travel-order-approval-person-name">Personnel<input value={person.name} readOnly aria-label={`Personnel name: ${person.name}`} /></label>
             {pageOrder.status === "Pending" ? <button type="button" className="primary-button" disabled={updatingId !== null || deletingId !== null} onClick={() => void updateApprovedPerson(pageOrder, personIndex, groupOrders)}>{updatingId === pageOrder.id ? "Updating..." : "Update"}</button> : <span className="travel-order-approval-complete">Approved</span>}
           </div>)}</div>
           <div className="travel-order-number-actions"><button type="button" className="ghost-button" disabled={updatingId !== null || deletingId !== null} onClick={() => setApprovalOrderId(null)}>Close</button></div>
