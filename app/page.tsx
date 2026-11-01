@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { App } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -3439,6 +3441,81 @@ export default function Home() {
     user && accountProfile?.userId === user.uid ? accountProfile.accountRole : undefined,
     user?.email,
   ) === "superadmin";
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let disposed = false;
+    let removeListener: (() => void) | undefined;
+    const listenerPromise = App.addListener("backButton", () => {
+      if (mobileMenuOpen || mobileCertificateOpen || mobileAdminPanelOpen || mobileAmiaDocumentOpen || mobileMyDocsOpen || myDocsMenuOpen || certificateMenuOpen || adminPanelMenuOpen || amiaDocumentMenuOpen) {
+        closeMobileNavigation();
+        setMyDocsMenuOpen(false);
+        setCertificateMenuOpen(false);
+        setAdminPanelMenuOpen(false);
+        setAmiaDocumentMenuOpen(false);
+        return;
+      }
+      if (profileMenuOpen) {
+        setProfileMenuOpen(false);
+        return;
+      }
+      if (profileOpen) {
+        setProfileOpen(false);
+        return;
+      }
+      if (pendingPermitDelete) {
+        setPendingPermitDelete(null);
+        return;
+      }
+      if (pendingSpecialOrderDelete) {
+        setPendingSpecialOrderDelete(null);
+        return;
+      }
+      if (preview) {
+        setPreview(null);
+        setSingleSlipPreview(false);
+        return;
+      }
+      if (specialOrderPreview) {
+        setSpecialOrderPreview(null);
+        return;
+      }
+      if (findDocsRecord) {
+        setFindDocsRecord(null);
+        return;
+      }
+      if (editingSpecialOrder) {
+        setEditingSpecialOrder(null);
+        return;
+      }
+      if (view === "new") {
+        setView("list");
+        return;
+      }
+
+      const homeSection = isSuperAdmin ? "user-master-list" : "whereabouts-calendar";
+      if (section !== homeSection) {
+        setSection(homeSection);
+        setView("list");
+        return;
+      }
+      void App.exitApp();
+    });
+
+    void listenerPromise.then((listener) => {
+      if (disposed) {
+        void listener.remove();
+      } else {
+        removeListener = () => { void listener.remove(); };
+      }
+    });
+
+    return () => {
+      disposed = true;
+      removeListener?.();
+    };
+  }, [adminPanelMenuOpen, amiaDocumentMenuOpen, certificateMenuOpen, editingSpecialOrder, findDocsRecord, isSuperAdmin, mobileAdminPanelOpen, mobileAmiaDocumentOpen, mobileCertificateOpen, mobileMenuOpen, mobileMyDocsOpen, myDocsMenuOpen, pendingPermitDelete, pendingSpecialOrderDelete, preview, profileMenuOpen, profileOpen, section, specialOrderPreview, view]);
 
   useEffect(() => {
     if (isSuperAdmin && section !== "user-master-list" && section !== "document-notifications" && section !== "pending-permit-slips" && section !== "users-profile" && section !== "users-nta" && section !== "users-so" && section !== "users-to" && section !== "users-appearances" && section !== "cleaning-task-assignments") {

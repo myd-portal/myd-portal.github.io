@@ -6,9 +6,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "android:assets": "npm run assets:generate && npx capacitor-assets generate --android --iconBackgroundColor \"#000000\" --splashBackgroundColor \"#f7faf6\"",
+    "assets:generate": "node scripts/generate-app-assets.mjs",
+    "ios:add": "npx cap add ios --packagemanager SPM",
+    "ios:assets": "npm run assets:generate && npx capacitor-assets generate --ios --iconBackgroundColor \"#000000\" --splashBackgroundColor \"#f7faf6\"",
+    "ios:sync": "npm run build && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "mobile:sync": "npm run build && npx cap sync",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/share": "^8.0.3",
     "@uploadthing/react": "^7.3.3",
     "fflate": "^0.8.3",
     "firebase": "^12.3.0",
@@ -21,9 +37,12 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "sharp": "^0.35.5",
     "typescript": "^5.7.0"
   }
 }

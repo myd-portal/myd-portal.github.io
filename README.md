@@ -27,6 +27,52 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Build the Android app
+
+This project uses Capacitor to package the existing portal for Android. The app uses the same Firebase accounts and Firestore records as the website. It needs an internet connection to sign in, read records, and upload files. Android opens external links in a browser tab, sends generated files to the system share sheet, and uses the device back button to close app menus or return to the home section.
+
+1. Install Android Studio and its Android SDK.
+2. Set the Firebase and UploadThing environment variables described above in `.env.local`.
+3. Build the web app and sync it into the Android project:
+
+```bash
+npm run android:sync
+```
+
+4. Open the Android project in Android Studio:
+
+```bash
+npm run android:open
+```
+
+In Android Studio, run the app on a connected device or emulator. To distribute it, use **Build → Generate Signed Bundle / APK** and follow Android Studio's signing steps. The Android application ID is `com.mydesk.portal`.
+
+After changing web code, run `npm run android:sync` again before building the Android app. To regenerate the app icon and splash screen from the source artwork, run `npm run android:assets`.
+
+## Build the iOS app
+
+The iOS project is also included and uses the same web app, Firebase data, accounts, external-link handling, and file-sharing flow. Building or signing an iOS app requires macOS with Xcode 26 or later and Xcode Command Line Tools; Capacitor's iOS project can be synced from Windows, but the `.ipa` must be built on a Mac.
+
+1. Install Node.js 22 or later, Xcode, and Xcode Command Line Tools on a Mac.
+2. Install dependencies with `npm ci` and set the environment variables described above in `.env.local`.
+3. Build the web app and sync both mobile projects, or sync only iOS:
+
+```bash
+npm run mobile:sync
+# or
+npm run ios:sync
+```
+
+4. Open the iOS project in Xcode:
+
+```bash
+npm run ios:open
+```
+
+Select a simulator or connected iPhone in Xcode. For device distribution, set your Apple Developer Team under **Signing & Capabilities**, then use **Product → Archive** to prepare a signed build for TestFlight or the App Store. The bundle identifier is `com.mydesk.portal`.
+
+To create the iOS platform folder on a fresh checkout, run `npm run ios:add`. To regenerate the platform icons and splash screen, run `npm run ios:assets`.
+
 ## UploadThing profile photos
 
 Profile photos are stored by UploadThing. Since this site is statically exported, its UploadThing endpoint runs as a small Cloudflare Worker; it verifies Firebase sign-in tokens and keeps the UploadThing token server-side. This does not use Firebase Functions or require the Blaze plan.
