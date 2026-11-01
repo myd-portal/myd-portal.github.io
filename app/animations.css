@@ -35,7 +35,10 @@
 .system-background-video::-webkit-media-controls-overlay-play-button,
 .system-background-video::-webkit-media-controls-overlay-enclosure {
   display: none !important;
+  visibility: hidden !important;
   opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
   pointer-events: none !important;
   -webkit-appearance: none;
 }

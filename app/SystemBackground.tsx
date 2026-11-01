@@ -62,6 +62,7 @@ export default function SystemBackground() {
         muted
         loop
         playsInline
+        webkit-playsinline=""
         preload="auto"
         controls={false}
         disablePictureInPicture
