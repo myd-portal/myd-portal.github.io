@@ -8,6 +8,8 @@ import {
   formatTevAmount,
   formatTevDate,
   formatTevDateRange,
+  additionalTevEvidenceFromLegacyValue,
+  tevEvidenceOptions,
   formatTevTime,
   formatTevTravelDateRanges,
   formatTevTravelReferences,
@@ -351,9 +353,14 @@ function MyTevCtcPage({ record }: { record: MyTevRecord }) {
   const profile = record.profile;
   const signatory = divisionSignatory(record.divisionName);
   const references = formatTevTravelReferences(record.travelReferences);
+  const selectedEvidence = record.evidenceOfTravelOptions?.length
+    ? record.evidenceOfTravelOptions
+    : tevEvidenceOptions.filter((option) => option.pattern.test(record.evidenceOfTravel ?? "")).map((option) => option.label);
+  const additionalEvidence = record.evidenceOfTravelAdditional?.trim() || additionalTevEvidenceFromLegacyValue(record.evidenceOfTravel ?? "");
+  const evidenceOfTravel = [selectedEvidence.join(", "), additionalEvidence].filter(Boolean).join("; ") || record.evidenceOfTravel;
   const certification = record.certificationOfTravel ?? defaultTevCertificationOfTravel();
   const hasExplanation = Boolean((certification.cutShort || certification.extended || certification.otherDeviation) && certification.otherExplanation.trim());
-  const denseContent = references.length > 120 || record.evidenceOfTravel.length > 140 || certification.otherExplanation.length > 150;
+  const denseContent = references.length > 120 || evidenceOfTravel.length > 140 || certification.otherExplanation.length > 150;
   return <div className="mytev-paper-frame"><article className="mytev-paper mytev-ctc-paper">
     <div className={`mytev-ctc-document${denseContent ? " mytev-ctc-document-dense" : ""}${hasExplanation ? " mytev-ctc-document-has-approval" : ""}`}>
       <MyTevLetterhead appendix="Appendix 47" />
@@ -368,7 +375,7 @@ function MyTevCtcPage({ record }: { record: MyTevRecord }) {
         <p><i className={certification.otherDeviation ? "is-checked" : undefined} /><span>Other deviation as explained below.</span></p>
       </div>
       <div className="mytev-ctc-explanation"><b>Explanation or Justification:</b><span className={hasExplanation ? "has-value" : undefined}>{certification.cutShort || certification.extended || certification.otherDeviation ? certification.otherExplanation : ""}</span>{!hasExplanation && <span />}</div>
-      <div className="mytev-ctc-evidence"><b>Evidence of Travel:</b><span style={fitTextStyle(record.evidenceOfTravel, 150)}>{record.evidenceOfTravel}</span></div>
+      <div className="mytev-ctc-evidence"><b>Evidence of Travel:</b><span style={fitTextStyle(evidenceOfTravel, 150)}>{evidenceOfTravel}</span></div>
       <p className="mytev-ctc-submitted">Respectfully submitted:</p>
       <div className="mytev-ctc-employee"><strong style={fitTextStyle(profile.name, 36)}>{profile.name.toLocaleUpperCase("en-PH")}</strong><span>Name of Employee</span></div>
       <p className="mytev-ctc-knowledge">On evidence and information of which I have the knowledge, the travel was actually undertaken.</p>

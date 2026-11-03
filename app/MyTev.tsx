@@ -22,8 +22,10 @@ import {
   maxItineraryRows,
   tevClaims,
   tevDivisions,
+  tevEvidenceOptions,
   tevOfficialStations,
   perDiemForClaims,
+  additionalTevEvidenceFromLegacyValue,
   tevTransportationMeans,
   totalsForRecord,
   normalizeTevTransportationMeansForEditor,
@@ -48,19 +50,6 @@ const maxItineraries = 8;
 const maxTevPersonnel = 18;
 type TevPersonnel = { userId: string; profile: TevProfile; recordProfile: TevProfile; office: string; profileComplete: boolean; adminAccount: boolean };
 type TevPersonnelDraft = { key: string; userId: string; travelReferences: TevTravelReference[] };
-const tevEvidenceOptions = [
-  { label: "Approved Itinerary of Travel", pattern: /\bapproved itinerary of travel\b/i },
-  { label: "Approved PTR", pattern: /\bapproved ptr\b/i },
-  { label: "Approved Travel Orders", pattern: /\bapproved travel orders?\b/i },
-  { label: "Boarding Pass", pattern: /\bboarding passes?\b/i },
-  { label: "Boat Ticket", pattern: /\bboat tickets?\b/i },
-  { label: "Bus Ticket", pattern: /\bbus tickets?\b/i },
-  { label: "Certificate of Appearance", pattern: /\bcertificate of appearance\b/i },
-  { label: "COENRR", pattern: /\b(?:COENRR|communication letters?)\b/i },
-  { label: "GSS Certification", pattern: /\bgss certification\b/i },
-  { label: "Plane Ticket", pattern: /\bplane tickets?\b/i },
-] as const;
-
 function localMonthValue() {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -250,6 +239,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   const [selectedEvidence, setSelectedEvidence] = useState<string[]>(() => initialRecord
     ? tevEvidenceOptions.filter((option) => initialRecord.evidenceOfTravelOptions?.includes(option.label) || option.pattern.test(initialRecord.evidenceOfTravel ?? "")).map((option) => option.label)
     : []);
+  const [additionalEvidence, setAdditionalEvidence] = useState(() => initialRecord?.evidenceOfTravelAdditional || additionalTevEvidenceFromLegacyValue(initialRecord?.evidenceOfTravel ?? ""));
   const [certification, setCertification] = useState<TevCertificationOfTravel>(() => ({ ...defaultTevCertificationOfTravel(), ...initialRecord?.certificationOfTravel }));
   const evidenceOfTravel = selectedEvidence.join(", ");
   const [divisionName, setDivisionName] = useState<TevDivision>(() => initialRecord?.divisionName ?? profileDivision ?? tevDivisions[0]);
@@ -451,6 +441,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       travelReferences: references.map((reference) => ({ ...reference, travelOrderNo: reference.travelOrderNo.trim() })),
       evidenceOfTravel: evidenceOfTravel.trim(),
       evidenceOfTravelOptions: tevEvidenceOptions.filter((option) => selectedEvidence.includes(option.label)).map((option) => option.label),
+      evidenceOfTravelAdditional: additionalEvidence.trim(),
       certificationOfTravel: certification,
       divisionName,
       itineraries: result.itineraries,
@@ -561,7 +552,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         </div>}
         {(certification.cutShort || certification.extended || certification.otherDeviation) && <label className="mytev-certification-explanation">Explanation or Justification<textarea value={certification.otherExplanation} maxLength={500} rows={3} required onChange={(event) => updateCertification({ otherExplanation: event.target.value })} /></label>}
         </fieldset>
-        <fieldset className="mytev-evidence-picker"><legend>Evidence of Travel</legend><div className="mytev-evidence-options">{tevEvidenceOptions.map((option) => <label key={option.label}><input type="checkbox" checked={selectedEvidence.includes(option.label)} onChange={(event) => toggleEvidence(option.label, event.target.checked)} disabled={saving} /><span>{option.label}</span></label>)}</div></fieldset>
+        <fieldset className="mytev-evidence-picker"><legend>Evidence of Travel</legend><div className="mytev-evidence-options">{tevEvidenceOptions.map((option) => <label key={option.label}><input type="checkbox" checked={selectedEvidence.includes(option.label)} onChange={(event) => toggleEvidence(option.label, event.target.checked)} disabled={saving} /><span>{option.label}</span></label>)}</div><label className="mytev-evidence-additional">Additional Evidence of Travel<textarea value={additionalEvidence} maxLength={500} rows={2} placeholder="Enter any additional evidence of travel" onChange={(event) => setAdditionalEvidence(event.target.value)} disabled={saving} /></label></fieldset>
       </section>
       <div className="mytev-form-actions"><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button><button className="primary-button">Continue</button></div>
     </form> : <form className="mytev-form mytev-itinerary-form" onSubmit={saveRecord}>

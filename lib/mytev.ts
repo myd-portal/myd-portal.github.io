@@ -22,6 +22,25 @@ export const tevOfficialStations = [
   "DA - Integrated Laboratories Division Caraga",
 ] as const;
 
+export const tevEvidenceOptions = [
+  { label: "Approved Itinerary of Travel", pattern: /\bapproved itinerary of travel\b/i },
+  { label: "Approved PTR", pattern: /\bapproved ptr\b/i },
+  { label: "Approved Travel Orders", pattern: /\bapproved travel orders?\b/i },
+  { label: "Boarding Pass", pattern: /\bboarding passes?\b/i },
+  { label: "Boat Ticket", pattern: /\bboat tickets?\b/i },
+  { label: "Bus Ticket", pattern: /\bbus tickets?\b/i },
+  { label: "Certificate of Appearance", pattern: /\bcertificate of appearance\b/i },
+  { label: "COENRR", pattern: /\b(?:COENRR|communication letters?)\b/i },
+  { label: "GSS Certification", pattern: /\bgss certification\b/i },
+  { label: "Plane Ticket", pattern: /\bplane tickets?\b/i },
+] as const;
+
+export function additionalTevEvidenceFromLegacyValue(value: string) {
+  let additional = value;
+  for (const option of tevEvidenceOptions) additional = additional.replace(new RegExp(option.pattern.source, "gi"), " ");
+  return additional.replace(/^(?:\s*[,;]\s*)+|(?:\s*[,;]\s*)+$/g, "").trim();
+}
+
 export const tevDivisions = [
   "Administrative and Finance Division",
   "Agribusiness and Marketing Assistance Division",
@@ -120,6 +139,7 @@ export type MyTevRecord = {
   travelReferences: TevTravelReference[];
   evidenceOfTravel: string;
   evidenceOfTravelOptions?: string[];
+  evidenceOfTravelAdditional?: string;
   certificationOfTravel?: TevCertificationOfTravel;
   divisionName: TevDivision;
   itineraries: TevItinerary[];

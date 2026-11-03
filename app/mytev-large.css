@@ -65,6 +65,8 @@
 .mytev-evidence-options>label{align-items:center;background:#fff;border:1px solid var(--line);display:flex;gap:10px;min-width:0;padding:12px}
 .mytev-evidence-options input[type=checkbox]{accent-color:var(--accent);flex:0 0 auto;height:18px;margin:0;padding:0;width:18px}
 .mytev-evidence-options span{color:#4e5b55;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.mytev-evidence-additional{display:grid;gap:6px;min-width:0}
+.mytev-evidence-additional textarea{min-width:0;width:100%}
 .mytev-certification-picker{border:1px solid var(--line);display:grid;gap:14px;margin:0;min-width:0;padding:16px}
 .mytev-certification-picker legend{color:var(--ink);font-size:14px;font-weight:700;padding:0 7px}
 .mytev-certification-options{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}

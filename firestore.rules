@@ -2234,6 +2234,11 @@ service cloud.firestore {
             && recordData.evidenceOfTravelOptions.size() <= 10
             && recordData.evidenceOfTravelOptions.hasOnly(["Approved Itinerary of Travel", "Approved PTR", "Approved Travel Orders", "Boarding Pass", "Boat Ticket", "Bus Ticket", "Certificate of Appearance", "COENRR", "GSS Certification", "Plane Ticket"]));
       }
+      function hasValidAdditionalEvidence(recordData) {
+        return !recordData.keys().hasAny(["evidenceOfTravelAdditional"])
+          || (recordData.evidenceOfTravelAdditional is string
+            && recordData.evidenceOfTravelAdditional.size() <= 500);
+      }
       function hasValidCertificationOfTravel(recordData) {
         return !recordData.keys().hasAny(["certificationOfTravel"])
           || (recordData.certificationOfTravel is map
@@ -2289,17 +2294,19 @@ service cloud.firestore {
           && recordData.officialStation == getAfter(sourcePath).data.officialStation
           && recordData.evidenceOfTravel == getAfter(sourcePath).data.evidenceOfTravel
           && recordData.evidenceOfTravelOptions == getAfter(sourcePath).data.evidenceOfTravelOptions
+          && recordData.get("evidenceOfTravelAdditional", "") == getAfter(sourcePath).data.get("evidenceOfTravelAdditional", "")
           && recordData.certificationOfTravel == getAfter(sourcePath).data.certificationOfTravel
           && recordData.divisionName == getAfter(sourcePath).data.divisionName
           && recordData.itineraries == getAfter(sourcePath).data.itineraries;
       }
       function isValidMyTevRecord(recordData) {
         return recordData.keys().hasAll(["ownerId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "divisionName", "itineraries", "createdAt"])
-          && recordData.keys().hasOnly(["ownerId", "sharedWith", "createdById", "sourceRecordId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "evidenceOfTravelOptions", "certificationOfTravel", "divisionName", "itineraries", "createdAt"])
+          && recordData.keys().hasOnly(["ownerId", "sharedWith", "createdById", "sourceRecordId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "evidenceOfTravelOptions", "evidenceOfTravelAdditional", "certificationOfTravel", "divisionName", "itineraries", "createdAt"])
           && hasValidTevSharingMetadata(recordData)
           && hasValidEvidenceOptions(recordData)
+          && hasValidAdditionalEvidence(recordData)
           && hasValidCertificationOfTravel(recordData)
-          && recordData.ownerId == request.auth.uid
+          && (recordData.ownerId == request.auth.uid || isAuthorizedSharedMyTevCopy(recordData))
           && recordData.profile is map
           && recordData.profile.keys().hasOnly(["name", "address", "taxIdentificationNo", "position", "unit"])
           && recordData.profile.name is string
@@ -2331,42 +2338,7 @@ service cloud.firestore {
           && recordData.createdAt is timestamp;
       }
       allow read: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
-      allow create: if isVerifiedUser()
-        && request.resource.data.keys().hasAll(["ownerId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "divisionName", "itineraries", "createdAt"])
-        && request.resource.data.keys().hasOnly(["ownerId", "sharedWith", "createdById", "sourceRecordId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "evidenceOfTravelOptions", "certificationOfTravel", "divisionName", "itineraries", "createdAt"])
-        && hasValidTevSharingMetadata(request.resource.data)
-        && hasValidEvidenceOptions(request.resource.data)
-        && hasValidCertificationOfTravel(request.resource.data)
-        && (request.resource.data.ownerId == request.auth.uid || isAuthorizedSharedMyTevCopy(request.resource.data))
-        && request.resource.data.profile is map
-        && request.resource.data.profile.keys().hasOnly(["name", "address", "taxIdentificationNo", "position", "unit"])
-        && request.resource.data.profile.name is string
-        && request.resource.data.profile.name.size() > 0
-        && request.resource.data.profile.name.size() <= 120
-        && request.resource.data.profile.address is string
-        && request.resource.data.profile.address.size() > 0
-        && request.resource.data.profile.address.size() <= 200
-        && request.resource.data.profile.taxIdentificationNo is string
-        && request.resource.data.profile.taxIdentificationNo.size() > 0
-        && request.resource.data.profile.taxIdentificationNo.size() <= 30
-        && request.resource.data.profile.position is string
-        && request.resource.data.profile.position.size() > 0
-        && request.resource.data.profile.position.size() <= 120
-        && request.resource.data.profile.unit is string
-        && request.resource.data.month is string
-        && request.resource.data.month.matches("^[0-9]{4}-(0[1-9]|1[0-2])$")
-        && request.resource.data.officialStation in ["Department of Agriculture - Regional Office XIII", "DA - Integrated Laboratories Division Caraga"]
-        && request.resource.data.travelReferences is list
-        && request.resource.data.travelReferences.size() > 0
-        && request.resource.data.travelReferences.size() <= 8
-        && request.resource.data.evidenceOfTravel is string
-        && request.resource.data.evidenceOfTravel.size() > 0
-        && request.resource.data.evidenceOfTravel.size() <= 240
-        && request.resource.data.divisionName in ["Field Operations Division", "Planning, Monitoring and Evaluation Division", "Administrative and Finance Division", "Finance Division", "Agribusiness and Marketing Assistance Division", "Regional Agricultural Engineering Division", "Research Division", "Regulatory Division", "Integrated Laboratories Division"]
-        && request.resource.data.itineraries is list
-        && request.resource.data.itineraries.size() > 0
-        && request.resource.data.itineraries.size() <= 8
-        && request.resource.data.createdAt is timestamp;
+      allow create: if isVerifiedUser() && isValidMyTevRecord(request.resource.data);
       allow update: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.month == resource.data.month
