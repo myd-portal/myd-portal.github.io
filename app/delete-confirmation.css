@@ -1,16 +1,16 @@
 .delete-confirmation-backdrop{align-items:center;background:rgba(24,33,31,.58);display:flex;inset:0;justify-content:center;overflow-y:auto;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));position:fixed;z-index:100}
-.delete-confirmation-dialog{background:#fff;border-radius:22px;box-shadow:0 24px 70px #0003;max-height:calc(100vh - 32px);max-width:460px;overflow-y:auto;padding:clamp(24px,5vw,34px) clamp(20px,5vw,32px) clamp(22px,4vw,30px);text-align:center;width:min(100%,460px);overscroll-behavior:contain}
-.delete-confirmation-dialog h2{color:#202a32;font-size:clamp(21px,5vw,25px);letter-spacing:-.035em;line-height:1.2;margin:0 0 12px;overflow-wrap:anywhere;text-wrap:balance}
+.delete-confirmation-dialog{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:0 24px 70px #0003;max-height:calc(100vh - 32px);max-width:460px;overflow-y:auto;padding:clamp(24px,5vw,34px) clamp(20px,5vw,32px) clamp(22px,4vw,30px);text-align:center;width:min(100%,460px);overscroll-behavior:contain}
+.delete-confirmation-dialog h2{color:var(--ink);font-size:clamp(21px,5vw,25px);letter-spacing:-.035em;line-height:1.2;margin:0 0 12px;overflow-wrap:anywhere;text-wrap:balance}
 .delete-confirmation-dialog p{color:#66717c;font-size:15px;line-height:1.55;margin:0 auto 27px;max-width:360px}
 .delete-confirmation-actions{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
-.delete-confirmation-cancel,.delete-confirmation-confirm{border-radius:999px;font-size:clamp(14px,3.6vw,15px);font-weight:600;min-height:52px;min-width:0;padding:12px clamp(10px,3vw,18px);transition:background .15s ease,color .15s ease,transform .15s ease;white-space:nowrap}
-.delete-confirmation-cancel{background:#fff;border:1.5px solid #d85532;color:#d85532}
-.delete-confirmation-confirm{background:#d85532;border:1.5px solid #d85532;color:#fff}
+.delete-confirmation-cancel,.delete-confirmation-confirm{border-radius:var(--radius-md);font-size:clamp(14px,3.6vw,15px);font-weight:600;min-height:44px;min-width:0;padding:10px clamp(10px,3vw,18px);transition:background .15s ease,color .15s ease,transform .15s ease;white-space:nowrap}
+.delete-confirmation-cancel{background:var(--white);border:1px solid var(--line);color:var(--accent)}
+.delete-confirmation-confirm{background:var(--accent);border:1px solid var(--accent);color:#fff}
 .delete-confirmation-cancel:hover{background:#fdf1ed}
-.delete-confirmation-confirm:hover{background:#c24a2a;text-decoration:none}
-.delete-confirmation-cancel:focus-visible,.delete-confirmation-confirm:focus-visible{outline:3px solid #efb5a3;outline-offset:3px}
+.delete-confirmation-confirm:hover{background:var(--accent-dark);text-decoration:none}
+.delete-confirmation-cancel:focus-visible,.delete-confirmation-confirm:focus-visible{outline:2px solid #efb5a3;outline-offset:2px}
 .delete-confirmation-cancel:disabled,.delete-confirmation-confirm:disabled{cursor:wait;opacity:.68}
-@media(max-width:480px){.delete-confirmation-dialog{border-radius:18px}.delete-confirmation-dialog p{font-size:14px}.delete-confirmation-actions{gap:10px}.delete-confirmation-cancel,.delete-confirmation-confirm{min-height:48px}}
+@media(max-width:480px){.delete-confirmation-dialog{border-radius:var(--radius-lg)}.delete-confirmation-dialog p{font-size:14px}.delete-confirmation-actions{gap:10px}.delete-confirmation-cancel,.delete-confirmation-confirm{min-height:44px}}
 @media(max-width:340px){.delete-confirmation-actions{grid-template-columns:1fr}}
 @media(max-height:460px){.delete-confirmation-backdrop{align-items:flex-start}.delete-confirmation-dialog{margin:auto 0}.delete-confirmation-dialog p{margin-bottom:18px}}
 @supports (height:100dvh){.delete-confirmation-dialog{max-height:calc(100dvh - 32px)}}

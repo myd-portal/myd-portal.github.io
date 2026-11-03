@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "./components/ui";
 import "./delete-confirmation.css";
 
 export default function DeleteConfirmation({ open, title, description, busy = false, confirmDisabled = false, confirmLabel = "Delete", busyLabel = "Deleting...", children, onCancel, onConfirm }: {
@@ -67,8 +68,8 @@ export default function DeleteConfirmation({ open, title, description, busy = fa
       <p id="delete-confirmation-description">{description}</p>
       {children}
       <div className="delete-confirmation-actions">
-        <button type="button" className="delete-confirmation-cancel" ref={cancelButtonRef} disabled={busy} onClick={onCancel}>Cancel</button>
-        <button type="button" className="delete-confirmation-confirm" ref={confirmButtonRef} disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? busyLabel : confirmLabel}</button>
+        <Button type="button" variant="outline" size="lg" className="delete-confirmation-cancel" ref={cancelButtonRef} disabled={busy} onClick={onCancel}>Cancel</Button>
+        <Button type="button" variant="destructive" size="lg" className="delete-confirmation-confirm" ref={confirmButtonRef} disabled={busy || confirmDisabled} onClick={onConfirm}>{busy ? busyLabel : confirmLabel}</Button>
       </div>
     </section>
   </div>, document.body);

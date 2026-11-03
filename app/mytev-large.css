@@ -21,11 +21,14 @@
 .mytev-form textarea{line-height:1.5;resize:vertical}
 .mytev-date-field{color:#4e5b55;display:grid;font-size:12px;font-weight:600;gap:7px;letter-spacing:.02em;min-width:0}
 .mytev-date-picker{min-width:0;position:relative;width:100%}
-.mytev-date-picker-field{display:grid;grid-template-columns:minmax(0,1fr) 42px;min-width:0}
-.mytev-date-picker-field input{border-right:0!important;min-width:0}
-.mytev-date-picker-trigger{align-items:center;background:#fff;border:1px solid var(--line);color:var(--muted);cursor:pointer;display:flex;font-size:19px;justify-content:center;min-height:42px;padding:0}
+.mytev-date-picker-field{align-items:stretch;background:#fff;border:1px solid var(--line);border-radius:var(--radius-md);display:grid;grid-template-columns:minmax(0,1fr) 42px;min-height:42px;min-width:0;overflow:hidden}
+.mytev-date-picker-field:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px #d7e8dc}
+.mytev-date-picker-field input{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;height:100%;min-height:40px;min-width:0;outline:none!important;padding:8px 12px;width:100%}
+.mytev-date-picker-field input:focus-visible{box-shadow:none!important;outline:none!important}
+.mytev-date-picker-trigger{align-items:center;background:transparent;border:0;border-left:1px solid var(--line);border-radius:0;color:var(--muted);cursor:pointer;display:flex;justify-content:center;min-height:40px;padding:0}
+.mytev-date-picker-trigger svg{display:block;height:18px;width:18px}
 .mytev-date-picker-trigger:hover{background:#f5f7f5;color:var(--ink)}
-.mytev-date-picker-trigger:focus-visible,.mytev-date-picker-popover button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;z-index:1}
+.mytev-date-picker-trigger:focus-visible,.mytev-date-picker-popover button:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;z-index:1}
 .mytev-date-picker-popover{background:#fff;border:1px solid var(--line);box-shadow:0 12px 32px #17241f26;min-width:276px;padding:10px;position:absolute;right:0;top:calc(100% + 5px);z-index:50}
 .mytev-date-picker-toolbar{align-items:center;display:grid;gap:8px;grid-template-columns:34px minmax(0,1fr) 34px;margin-bottom:8px}
 .mytev-date-picker-toolbar strong{color:var(--ink);font-size:12px;text-align:center}
@@ -119,8 +122,6 @@
 .mytev-preview-pages{display:grid;gap:24px;justify-items:center}
 .mytev-paper-frame{aspect-ratio:210/297;position:relative;width:min(90vw,210mm)}
 .mytev-paper{--mytev-medium-line:.35mm solid #111;--mytev-thin-line:.18mm solid #111;aspect-ratio:210/297;background:#fff;box-shadow:0 18px 50px #0004;color:#111;container-type:inline-size;height:297mm;left:0;overflow:hidden;position:absolute;top:0;transform:scale(var(--mytev-page-scale,1));transform-origin:top left;width:210mm}
-.mytev-document-pages-export .mytev-paper-frame{aspect-ratio:auto!important;height:297mm!important;width:210mm!important}
-.mytev-document-pages-export .mytev-paper{left:auto!important;position:relative!important;top:auto!important;transform:none!important}
 .mytev-paper,.mytev-paper *{box-sizing:border-box;color:#111}
 .mytev-paper.mytev-itinerary-paper{--mytev-font-8:.71cqi;--mytev-font-10:.89cqi;--mytev-font-12:1.07cqi;--mytev-font-14:1.25cqi;--mytev-font-15:1.35cqi;--mytev-font-16:1.41cqi;--mytev-font-18:1.59cqi;--mytev-font-22:1.95cqi;--mytev-medium-line:.4mm solid #111;--mytev-thin-line:.4mm solid #111}
 .mytev-paper.mytev-ors-paper{--mytev-font-8:calc(.94cqi + 2pt);--mytev-font-10:calc(1.18cqi + 2pt);--mytev-font-11:calc(1.29cqi + 2pt);--mytev-font-12:calc(1.41cqi + 2pt);--mytev-font-14:calc(1.65cqi + 2pt);--mytev-medium-line:.3mm solid #111;--mytev-thin-line:.18mm solid #111}

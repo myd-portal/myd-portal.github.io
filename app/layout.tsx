@@ -6,6 +6,7 @@ import "./navigation.css";
 import "./permit-standalone.css";
 import "./permit-slip-form.css";
 import "./special-order-form.css";
+import "./shadcn.css";
 import SystemBackground from "./SystemBackground";
 import NativePlatformBridge from "./NativePlatformBridge";
 

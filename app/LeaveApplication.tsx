@@ -307,7 +307,7 @@ async function createLeaveApplicationPdf(record: LeaveApplicationRecord) {
   const applicant = {
     last: [record.lastName?.trim() || parsedApplicant.last, applicantSuffix].filter(Boolean).join(" "),
     first: record.firstName?.trim() || parsedApplicant.first,
-    middle: middleInitial(typeof record.middleName === "string" ? record.middleName : parsedApplicant.middle),
+    middle: normalizeNamePart(typeof record.middleName === "string" ? record.middleName : parsedApplicant.middle),
   };
 
   drawFitText(page, bold, record.profileDivision || record.office, 85.37, 878.38, 190, 13.5);

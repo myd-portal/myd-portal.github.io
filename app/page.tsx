@@ -2229,6 +2229,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [startupError, setStartupError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCertificateOpen, setMobileCertificateOpen] = useState(false);
@@ -2595,12 +2596,13 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!auth) { setLoading(false); return; }
+    if (!auth) { setLoadingProgress(100); setLoading(false); return; }
     let authChange = 0;
     let active = true;
     const showStartupTimeout = () => {
       if (!active) return;
       setStartupError("My Desk could not complete its Firebase startup check. Check your internet connection and Firebase project configuration, then reload.");
+      setLoadingProgress(100);
       setLoading(false);
     };
     let startupTimeout = window.setTimeout(showStartupTimeout, 15000);
@@ -2611,6 +2613,7 @@ export default function Home() {
       const verifiedUser = currentUser?.emailVerified ? currentUser : null;
       setStartupError("");
       setLoading(true);
+      setLoadingProgress(18);
       setApprovalError("");
       setApprovalStatus(null);
       setApprovalUser(null);
@@ -2618,20 +2621,23 @@ export default function Home() {
       if (!verifiedUser) {
         setUser(null);
         setAccountProfile(null);
+        setLoadingProgress(100);
         window.clearTimeout(startupTimeout);
         setLoading(false);
         return;
       }
       void (async () => {
-        if (!db) { setUser(verifiedUser); window.clearTimeout(startupTimeout); setLoading(false); return; }
+        if (!db) { setUser(verifiedUser); setLoadingProgress(100); window.clearTimeout(startupTimeout); setLoading(false); return; }
         try {
           const profileRef = doc(db, "users", verifiedUser.uid);
           let profileSnapshot = await getDoc(profileRef);
           if (thisAuthChange !== authChange) return;
+          setLoadingProgress(58);
           if (!profileSnapshot.exists()) {
             setUser(null);
             setApprovalUser(verifiedUser);
             setApprovalStatus("Missing");
+            setLoadingProgress(100);
             setLoading(false);
             return;
           }
@@ -2640,6 +2646,7 @@ export default function Home() {
             setUser(null);
             setAccountProfile(null);
             setProfileSetupUser(verifiedUser);
+            setLoadingProgress(100);
             setLoading(false);
             return;
           }
@@ -2652,6 +2659,7 @@ export default function Home() {
             } catch (cause) {
               console.warn("Could not initialize account Division fields during Super Admin sign-in.", cause);
             }
+            setLoadingProgress(78);
           }
           const accountRole = normalizeAccountRole(profileData.accountRole, verifiedUser.email);
           const accountStatus = isBootstrapSuperAdmin ? "Approved" : normalizeAccountStatus(profileData.accountStatus);
@@ -2674,6 +2682,7 @@ export default function Home() {
             }
           }
           if (thisAuthChange !== authChange) return;
+          setLoadingProgress(92);
           const profileSelection = accountProfileSelection(profileData);
           setAccountProfile({
             userId: verifiedUser.uid,
@@ -2709,6 +2718,7 @@ export default function Home() {
           if (active && thisAuthChange === authChange) {
             window.clearTimeout(startupTimeout);
             setStartupError("");
+            setLoadingProgress(100);
             setLoading(false);
           }
         }
@@ -2720,6 +2730,7 @@ export default function Home() {
       setStartupError(code
         ? `Firebase could not restore your sign-in session (${code}). Reload My Desk to try again.`
         : "Firebase could not restore your sign-in session. Reload My Desk to try again.");
+      setLoadingProgress(100);
       setLoading(false);
     });
     return () => {
@@ -3524,7 +3535,7 @@ export default function Home() {
     }
   }, [isSuperAdmin, section]);
 
-  if (loading) return <div className="loading-screen" role="status" aria-label="Loading My Desk"><span>Loading</span><img className="loading-logo" src={publicAsset("/my%20desk%20logo.png")} alt="" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><span aria-hidden="true">...</span></div>;
+  if (loading) return <div className="loading-screen"><div className="loading-progress-indicator" role="progressbar" aria-label="Loading My Desk" aria-valuemin={0} aria-valuemax={100} aria-valuenow={loadingProgress} aria-valuetext={`${loadingProgress}%`}>{loadingProgress}%</div><div className="loading-screen-caption" aria-hidden="true"><span>Loading</span><img className="loading-logo" src={publicAsset("/my%20desk%20logo.png")} alt="" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /></div></div>;
   if (!isFirebaseConfigured) return <div className="setup-screen"><div className="setup-card"><img className="brand-mark brand-logo" src="/my%20desk%20logo.png" alt="My Desk logo" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><p className="eyebrow">One setup step</p><h1>Connect your Firebase project</h1><p className="muted">Copy <strong>.env.example</strong> to <strong>.env.local</strong>, add your Firebase web app credentials, then restart the dev server.</p><code>NEXT_PUBLIC_FIREBASE_PROJECT_ID=...</code></div></div>;
   if (startupError) return <div className="setup-screen"><section className="setup-card"><p className="eyebrow">Connection issue</p><h1>My Desk could not start</h1><p className="muted" role="alert">{startupError}</p><button className="primary-button" type="button" onClick={() => window.location.reload()}>Reload My Desk</button></section></div>;
   if (!user) return profileSetupUser

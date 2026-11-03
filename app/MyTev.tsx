@@ -179,7 +179,7 @@ function MonthAwareDateInput({ value, month, label, minDate, required, onChange 
   return <div className="mytev-date-picker" ref={wrapperRef}>
     <div className="mytev-date-picker-field">
       <input type="text" inputMode="numeric" placeholder="MM/DD/YYYY" value={draft} required={required} aria-label={label} aria-haspopup="dialog" aria-expanded={open} title="Enter a date as MM/DD/YYYY or choose it from the calendar" onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => updateDraft(event.target.value)} onBlur={() => setDraft(formatDateInput(value))} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} />
-      <button type="button" className="mytev-date-picker-trigger" aria-label={`Choose ${label.toLowerCase()}`} aria-expanded={open} onClick={() => setOpen(true)}>▦</button>
+      <button type="button" className="mytev-date-picker-trigger" aria-label={`Choose ${label.toLowerCase()}`} aria-expanded={open} onClick={() => setOpen(true)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg></button>
     </div>
     {open && <div className="mytev-date-picker-popover" role="dialog" aria-label={`Choose ${label.toLowerCase()}`}>
       <div className="mytev-date-picker-toolbar"><button type="button" aria-label="Previous month" disabled={Boolean(earliestViewMonth && visibleMonth <= earliestViewMonth)} onClick={() => changeViewMonth(-1)}>‹</button><strong>{monthTitle}</strong><button type="button" aria-label="Next month" onClick={() => changeViewMonth(1)}>›</button></div>
@@ -618,6 +618,105 @@ function MyTevList({ records, loading, deletingId, rates, rateError, onNew, onEd
   </section>;
 }
 
+type PdfTableBorderSide = "top" | "right" | "bottom" | "left";
+type PdfTableBorder = { width: number; style: string; color: string };
+
+function normalizePdfTableBorders(clonedDocument: Document, pageIndex: number) {
+  const page = clonedDocument.querySelectorAll<HTMLElement>(".mytev-screen-document-pages .mytev-paper-frame").item(pageIndex);
+  const clonedWindow = clonedDocument.defaultView;
+  if (!page || !clonedWindow) return;
+
+  page.querySelectorAll<HTMLTableElement>("table").forEach((table) => {
+    const rows = Array.from(table.rows);
+    const cells = rows.flatMap((row) => Array.from(row.cells));
+    if (cells.length < 2) return;
+    if (clonedWindow.getComputedStyle(table).borderCollapse !== "collapse") return;
+
+    const borderByCell = new Map<HTMLTableCellElement, Record<PdfTableBorderSide, PdfTableBorder>>();
+    cells.forEach((cell) => {
+      const computed = clonedWindow.getComputedStyle(cell);
+      borderByCell.set(cell, {
+        top: { width: Number.parseFloat(computed.borderTopWidth) || 0, style: computed.borderTopStyle, color: computed.borderTopColor },
+        right: { width: Number.parseFloat(computed.borderRightWidth) || 0, style: computed.borderRightStyle, color: computed.borderRightColor },
+        bottom: { width: Number.parseFloat(computed.borderBottomWidth) || 0, style: computed.borderBottomStyle, color: computed.borderBottomColor },
+        left: { width: Number.parseFloat(computed.borderLeftWidth) || 0, style: computed.borderLeftStyle, color: computed.borderLeftColor },
+      });
+    });
+
+    const grid: Array<Array<HTMLTableCellElement | undefined>> = rows.map(() => []);
+    rows.forEach((row, rowIndex) => {
+      let column = 0;
+      const groupEnd = (() => {
+        let end = rowIndex;
+        while (end + 1 < rows.length && rows[end + 1].parentElement === row.parentElement) end += 1;
+        return end;
+      })();
+      Array.from(row.cells).forEach((cell) => {
+        while (grid[rowIndex][column]) column += 1;
+        const columnSpan = Math.max(1, cell.colSpan);
+        const rowSpanAttribute = cell.getAttribute("rowspan");
+        const rowSpan = rowSpanAttribute === "0" ? groupEnd - rowIndex + 1 : Math.max(1, cell.rowSpan);
+        const bottom = Math.min(groupEnd, rowIndex + rowSpan - 1);
+        const right = column + columnSpan - 1;
+        for (let occupiedRow = rowIndex; occupiedRow <= bottom; occupiedRow += 1) {
+          for (let occupiedColumn = column; occupiedColumn <= right; occupiedColumn += 1) grid[occupiedRow][occupiedColumn] = cell;
+        }
+        column = right + 1;
+      });
+    });
+
+    const cellIds = new Map<HTMLTableCellElement, number>();
+    cells.forEach((cell, index) => cellIds.set(cell, index));
+    const handledEdges = new Set<string>();
+    const setBorder = (cell: HTMLTableCellElement, side: PdfTableBorderSide, border: PdfTableBorder, width: number) => {
+      cell.style.setProperty(`border-${side}-width`, `${width}px`, "important");
+      cell.style.setProperty(`border-${side}-style`, border.style, "important");
+      cell.style.setProperty(`border-${side}-color`, border.color, "important");
+    };
+    const normalizeSharedEdge = (first: HTMLTableCellElement, firstSide: PdfTableBorderSide, second: HTMLTableCellElement, secondSide: PdfTableBorderSide, axis: "horizontal" | "vertical") => {
+      const firstId = cellIds.get(first);
+      const secondId = cellIds.get(second);
+      if (firstId === undefined || secondId === undefined) return;
+      const edgeKey = `${axis}:${firstId}:${secondId}`;
+      if (handledEdges.has(edgeKey)) return;
+      handledEdges.add(edgeKey);
+
+      const firstBorder = borderByCell.get(first)![firstSide];
+      const secondBorder = borderByCell.get(second)![secondSide];
+      if (firstBorder.style === "hidden" || secondBorder.style === "hidden") {
+        setBorder(first, firstSide, { ...firstBorder, style: "none" }, 0);
+        setBorder(second, secondSide, { ...secondBorder, style: "none" }, 0);
+        return;
+      }
+      const candidates = [firstBorder, secondBorder].filter((border) => border.width > 0 && border.style !== "none");
+      if (!candidates.length) return;
+      const winner = candidates.reduce((current, border) => border.width > current.width ? border : current);
+      const halfWidth = winner.width / 2;
+      setBorder(first, firstSide, winner, halfWidth);
+      setBorder(second, secondSide, winner, halfWidth);
+    };
+
+    const columnCount = Math.max(...grid.map((row) => row.length));
+    for (let rowIndex = 0; rowIndex < grid.length; rowIndex += 1) {
+      for (let column = 0; column < columnCount - 1; column += 1) {
+        const leftCell = grid[rowIndex][column];
+        const rightCell = grid[rowIndex][column + 1];
+        if (leftCell && rightCell && leftCell !== rightCell) normalizeSharedEdge(leftCell, "right", rightCell, "left", "vertical");
+      }
+    }
+    for (let rowIndex = 0; rowIndex < grid.length - 1; rowIndex += 1) {
+      for (let column = 0; column < columnCount; column += 1) {
+        const upperCell = grid[rowIndex][column];
+        const lowerCell = grid[rowIndex + 1][column];
+        if (upperCell && lowerCell && upperCell !== lowerCell) normalizeSharedEdge(upperCell, "bottom", lowerCell, "top", "horizontal");
+      }
+    }
+
+    table.style.setProperty("border-collapse", "separate", "important");
+    table.style.setProperty("border-spacing", "0", "important");
+  });
+}
+
 export default function MyTevModule({ user, focusRecordId, onFocusHandled, onPreviewClose }: { user: User; focusRecordId?: string; onFocusHandled?: () => void; onPreviewClose?: () => void }) {
   const [records, setRecords] = useState<MyTevRecord[]>([]);
   const [profile, setProfile] = useState<TevProfile | null>(null);
@@ -799,27 +898,25 @@ export default function MyTevModule({ user, focusRecordId, onFocusHandled, onPre
     }));
     if (document.fonts?.ready) await document.fonts.ready;
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    return Array.from(container.querySelectorAll<HTMLElement>(".mytev-paper"));
+    return Array.from(container.querySelectorAll<HTMLElement>(".mytev-paper-frame"));
   }
 
   async function downloadPdf() {
     setDownloading(true);
     setPreviewError("");
-    pagesRef.current?.classList.add("mytev-document-pages-export");
     try {
       const { html2canvas, jsPDF } = await loadPdfTools();
       const pages = await preparePages();
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       for (const [index, page] of pages.entries()) {
-        const canvas = await html2canvas(page, { backgroundColor: "#fff", logging: false, scale: 3, useCORS: true });
+        const canvas = await html2canvas(page, { backgroundColor: "#fff", logging: false, scale: 3, useCORS: true, onclone: (clonedDocument) => normalizePdfTableBorders(clonedDocument, index) });
         if (index > 0) pdf.addPage("a4", "portrait");
-        pdf.addImage(canvas.toDataURL("image/jpeg", .97), "JPEG", 0, 0, 210, 297);
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297);
       }
       pdf.save(`mytev-${preview?.month ?? "travel"}-${preview?.id ?? "record"}.pdf`);
     } catch (cause) {
       setPreviewError(cause instanceof Error ? cause.message : "Unable to create the myTEV PDF.");
     } finally {
-      pagesRef.current?.classList.remove("mytev-document-pages-export");
       setDownloading(false);
     }
   }

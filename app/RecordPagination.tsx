@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "./components/ui";
 
 export const recordPageSize = 5;
 
@@ -26,9 +27,9 @@ export default function RecordPagination({ totalRecords, currentPage, pageCount,
   return <nav className="record-pagination" aria-label={`${label} pages`}>
     <span className="record-pagination-range">Showing {firstRecord}-{lastRecord} of {totalRecords}</span>
     <div className="record-pagination-controls">
-      <button type="button" className="ghost-button" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 0}>Previous</button>
+      <Button type="button" variant="outline" size="sm" className="ghost-button" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 0}>Previous</Button>
       <span aria-live="polite">Page {currentPage + 1} of {pageCount}</span>
-      <button type="button" className="ghost-button" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= pageCount - 1}>Next</button>
+      <Button type="button" variant="outline" size="sm" className="ghost-button" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= pageCount - 1}>Next</Button>
     </div>
   </nav>;
 }
