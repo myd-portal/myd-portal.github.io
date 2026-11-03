@@ -372,7 +372,6 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
           {mode === "workspace" && canUpload && <label className={`cleaning-task-upload-button${busy ? " is-busy" : ""}${!canUploadCurrentAssignment ? " is-disabled" : ""}`} title={uploadDisabledMessage || undefined}><span>{visibleImages.length > 0 ? "Replace photos" : "Upload"}</span><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose exactly 4 photos to upload as one collage" multiple onChange={(event) => void handleImageSelection(event)} disabled={busy || !canUploadCurrentAssignment} /></label>}
         </div>
         <p className="muted">{mode === "workspace" ? "Post or replace the shared verification during the active weekly assignment." : "Latest photo verification and the AGRISTAT, AMIA, and DRRM weekly cleaning schedule."}</p>
-        {mode === "workspace" && canUpload && !loading && !canUploadCurrentAssignment && <p className="cleaning-task-upload-disabled-note" role="status">{uploadDisabledMessage}</p>}
       </div>
     </header>
     {error && <p className="cleaning-task-message is-error" role="alert">{error}</p>}
