@@ -357,7 +357,7 @@ function MyTevCtcPage({ record }: { record: MyTevRecord }) {
     ? record.evidenceOfTravelOptions
     : tevEvidenceOptions.filter((option) => option.pattern.test(record.evidenceOfTravel ?? "")).map((option) => option.label);
   const additionalEvidence = record.evidenceOfTravelAdditional?.trim() || additionalTevEvidenceFromLegacyValue(record.evidenceOfTravel ?? "");
-  const evidenceOfTravel = [selectedEvidence.join(", "), additionalEvidence].filter(Boolean).join("; ") || record.evidenceOfTravel;
+  const evidenceOfTravel = [selectedEvidence.join(", "), additionalEvidence].filter(Boolean).join(", ") || record.evidenceOfTravel;
   const certification = record.certificationOfTravel ?? defaultTevCertificationOfTravel();
   const hasExplanation = Boolean((certification.cutShort || certification.extended || certification.otherDeviation) && certification.otherExplanation.trim());
   const denseContent = references.length > 120 || evidenceOfTravel.length > 140 || certification.otherExplanation.length > 150;

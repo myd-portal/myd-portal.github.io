@@ -26,7 +26,7 @@ export const tevEvidenceOptions = [
   { label: "Approved Itinerary of Travel", pattern: /\bapproved itinerary of travel\b/i },
   { label: "Approved PTR", pattern: /\bapproved ptr\b/i },
   { label: "Approved Travel Orders", pattern: /\bapproved travel orders?\b/i },
-  { label: "Boarding Pass", pattern: /\bboarding passes?\b/i },
+  { label: "Boarding Pass", pattern: /\bboarding pass(?:es)?\b/i },
   { label: "Boat Ticket", pattern: /\bboat tickets?\b/i },
   { label: "Bus Ticket", pattern: /\bbus tickets?\b/i },
   { label: "Certificate of Appearance", pattern: /\bcertificate of appearance\b/i },
