@@ -684,9 +684,15 @@ html body .leave-application-currency-field > input:not([type="checkbox"]):not([
 .loading-screen-overlay {
   background: var(--background);
   inset: 0;
+  pointer-events: none;
   position: fixed;
   width: 100%;
-  z-index: 10000;
+  z-index: 0;
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
 }
 
 .loading-progress-indicator {

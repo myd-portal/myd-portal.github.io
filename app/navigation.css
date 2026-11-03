@@ -1,4 +1,5 @@
 .topbar{
+  --topbar-sticky-offset:20px;
   align-items:center;
   background:var(--accent);
   border:6px solid #f8eae5;
@@ -8,8 +9,20 @@
   margin:20px clamp(12px,2.2vw,34px) 0;
   min-height:72px;
   padding:6px 10px 6px 16px;
-  position:relative;
+  position:sticky;
+  top:20px;
   z-index:40;
+}
+.topbar::before{
+  background:rgba(247,250,246,.22);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+  content:"";
+  height:var(--topbar-sticky-offset);
+  inset:0 0 auto;
+  pointer-events:none;
+  position:fixed;
+  z-index:0;
 }
 .topbar .brand{
   color:#fff;
@@ -156,13 +169,15 @@
 @media(max-width:920px){
   :root{--preview-toolbar-offset:24px}
   .topbar{
+    --topbar-sticky-offset:max(0.75rem,env(safe-area-inset-top,0px));
     align-items:center;
     border-radius:26px;
     flex-wrap:wrap;
     gap:2px 8px;
-    margin:12px 12px 0;
+    margin:0 12px;
     min-height:0;
     padding:5px 9px 8px;
+    top:0;
   }
   .topbar .brand{order:1}
   .topbar .brand-logo{height:40px;width:40px}
@@ -201,7 +216,7 @@
 
 @media(max-width:480px){
   :root{--preview-toolbar-offset:18px}
-  .topbar{border-width:4px;border-radius:22px;margin:8px 8px 0;padding:4px 7px 6px}
+  .topbar{border-width:4px;border-radius:22px;margin:0 8px;padding:4px 7px 6px;top:0}
   .topbar .brand-logo{height:38px;width:38px}
   .topbar .user-menu{gap:4px}
   .topbar .notification-button{border-radius:0;height:32px;width:32px}
@@ -232,6 +247,7 @@
     margin:calc(18px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) 0 calc(16px + env(safe-area-inset-left,0px));
     min-height:44px;
     padding:0 8px 0 12px;
+    top:max(0.75rem,env(safe-area-inset-top,0px));
   }
   .topbar .brand{height:34px;order:1}
   .topbar .brand-logo{height:52px;width:52px}
