@@ -164,7 +164,7 @@ export function canViewCleaningTaskLanding(role: AccountRole, office: string, di
   return canAccessCleaningTaskNavigation(role, office, division, unit, designation);
 }
 
-export function CleaningTaskBoard({ user, role, office, division, unit, designation, name, canUpload = false, mode = "landing" }: {
+export function CleaningTaskBoard({ user, role, office, division, unit, designation, name, canUpload = false, mode = "landing", onInitialLoadComplete }: {
   user: User;
   role: AccountRole;
   office: string;
@@ -174,6 +174,7 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
   name: string;
   canUpload?: boolean;
   mode?: "landing" | "workspace";
+  onInitialLoadComplete?: () => void;
 }) {
   const [assignments, setAssignments] = useState<CleaningTaskAssignment[]>([]);
   const [images, setImages] = useState<CleaningTaskImage[]>([]);
@@ -192,23 +193,36 @@ export function CleaningTaskBoard({ user, role, office, division, unit, designat
   });
 
   useEffect(() => {
+    const initialSources = new Set(["assignments", "images"]);
+    const finishInitialSource = (source: string) => {
+      if (initialSources.delete(source) && initialSources.size === 0) onInitialLoadComplete?.();
+    };
     if (!db) {
       setError("Cleaning Task storage is unavailable.");
       setLoading(false);
+      onInitialLoadComplete?.();
       return;
     }
-    const stopAssignments = onSnapshot(query(collection(db, "cleaningTaskAssignments"), orderBy("startAt", "desc"), limit(100)), (snapshot) => {
+    const stopAssignments = onSnapshot(query(collection(db, "cleaningTaskAssignments"), orderBy("startAt", "desc"), limit(100)), { includeMetadataChanges: true }, (snapshot) => {
       setAssignments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CleaningTaskAssignment)));
-      setLoading(false);
+      if (!snapshot.metadata.fromCache) {
+        setLoading(false);
+        finishInitialSource("assignments");
+      }
     }, (cause) => {
       setError(errorMessage(cause, "Could not load cleaning assignments."));
       setLoading(false);
+      finishInitialSource("assignments");
     });
-    const stopImages = onSnapshot(query(collection(db, "cleaningTaskImages"), orderBy("uploadedAt", "desc"), limit(10)), (snapshot) => {
+    const stopImages = onSnapshot(query(collection(db, "cleaningTaskImages"), orderBy("uploadedAt", "desc"), limit(10)), { includeMetadataChanges: true }, (snapshot) => {
       setImages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CleaningTaskImage)));
-    }, (cause) => setError(errorMessage(cause, "Could not load cleaning photos.")));
+      if (!snapshot.metadata.fromCache) finishInitialSource("images");
+    }, (cause) => {
+      setError(errorMessage(cause, "Could not load cleaning photos."));
+      finishInitialSource("images");
+    });
     return () => { stopAssignments(); stopImages(); };
-  }, []);
+  }, [onInitialLoadComplete]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);

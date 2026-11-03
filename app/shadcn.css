@@ -681,6 +681,14 @@ html body .leave-application-currency-field > input:not([type="checkbox"]):not([
   min-height: 100dvh;
 }
 
+.loading-screen-overlay {
+  background: var(--background);
+  inset: 0;
+  position: fixed;
+  width: 100%;
+  z-index: 10000;
+}
+
 .loading-progress-indicator {
   color: var(--accent);
   font-size: clamp(3.5rem, 12vw, 5.5rem);

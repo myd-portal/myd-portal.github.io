@@ -44,7 +44,7 @@ const roleOptions: { value: AccountRole; label: string }[] = [
   { value: "regular", label: "Regular" },
 ];
 
-export default function UserMasterList({ user }: { user: User }) {
+export default function UserMasterList({ user, onInitialLoadComplete }: { user: User; onInitialLoadComplete?: () => void }) {
   const [accounts, setAccounts] = useState<MasterListAccount[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -77,8 +77,8 @@ export default function UserMasterList({ user }: { user: User }) {
   const { currentPage, pageCount, visibleRecords, setPage } = useRecordPagination(filteredAccounts);
 
   useEffect(() => {
-    if (!db) { setError("Firebase is not configured."); setLoading(false); return; }
-    return onSnapshot(query(collection(db, "users"), where("emailVerified", "==", true)), (snapshot) => {
+    if (!db) { setError("Firebase is not configured."); setLoading(false); onInitialLoadComplete?.(); return; }
+    return onSnapshot(query(collection(db, "users"), where("emailVerified", "==", true)), { includeMetadataChanges: true }, (snapshot) => {
       const rows = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as MasterListAccount));
       rows.sort((first, second) => {
         const newestFirst = accountCreatedAtMillis(second.createdAt) - accountCreatedAtMillis(first.createdAt);
@@ -87,13 +87,17 @@ export default function UserMasterList({ user }: { user: User }) {
       });
       setAccounts(rows);
       setError("");
-      setLoading(false);
+      if (!snapshot.metadata.fromCache) {
+        setLoading(false);
+        onInitialLoadComplete?.();
+      }
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       setError(code ? `Could not load User Approval (${code}).` : "Could not load User Approval.");
       setLoading(false);
+      onInitialLoadComplete?.();
     });
-  }, []);
+  }, [onInitialLoadComplete]);
 
   const accountCountLabel = useMemo(() => `${accounts.length} verified ${accounts.length === 1 ? "account" : "accounts"}`, [accounts.length]);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { collection, doc, getDocs, onSnapshot, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
+import { collection, doc, getDocs, getDocsFromServer, onSnapshot, query, setDoc, where, writeBatch, type Firestore } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import type { AccountRole } from "@/lib/user-roles";
@@ -360,7 +360,7 @@ function formatCalendarDateRange(from: string, to: string) {
   return `${startDate} - ${endMonthName} ${endDay}, ${endYear}`;
 }
 
-export default function WhereaboutsCalendarModule({ user, accountRole, office, division, unit, assignment, onViewApprovedDocument }: { user: User; accountRole: AccountRole; office: string; division?: string; unit?: string; assignment?: string; onViewApprovedDocument?: (record: { id: string; type: ApprovedArchiveDocumentType; data: Record<string, unknown>; readOnly: true }) => void }) {
+export default function WhereaboutsCalendarModule({ user, accountRole, office, division, unit, assignment, onViewApprovedDocument, onInitialDataProgress, onInitialDataReady }: { user: User; accountRole: AccountRole; office: string; division?: string; unit?: string; assignment?: string; onViewApprovedDocument?: (record: { id: string; type: ApprovedArchiveDocumentType; data: Record<string, unknown>; readOnly: true }) => void; onInitialDataProgress?: (progress: number) => void; onInitialDataReady?: () => void }) {
   const canFilterOfficeAssignment = isPermitAdmin(user.email, accountRole);
   const accountScope = division !== undefined || unit !== undefined
     ? accountProfileSelection({ office, division: division ?? "", unit: unit ?? "", profileFieldsVersion: 4 })
@@ -397,6 +397,10 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
   const [error, setError] = useState("");
   const approvedPermitNumbers = useMemo(() => assignApprovedPermitNumbers(permitSlips), [permitSlips]);
 
+  useEffect(() => {
+    if (!loading && !approvedArchiveLoading && !totalPersonnelLoading) onInitialDataReady?.();
+  }, [loading, approvedArchiveLoading, totalPersonnelLoading, onInitialDataReady]);
+
   useEffect(() => { setSelectedPeoplePage(0); }, [selectedDate]);
   useEffect(() => {
     setDivisionFilter(defaultDivisionFilter);
@@ -418,9 +422,17 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     setTotalPersonnelCount(null);
     setTotalPersonnelLoading(true);
     setError("");
-    if (!db) { setError("Firebase is not configured."); setLoading(false); setTotalPersonnelLoading(false); setApprovedArchiveLoading(false); return () => { active = false; }; }
+    if (!db) { setError("Firebase is not configured."); setLoading(false); setTotalPersonnelLoading(false); setApprovedArchiveLoading(false); onInitialDataProgress?.(100); return () => { active = false; }; }
     const firestore = db;
-    void getDocs(collection(firestore, "users")).then((snapshot) => {
+    const dashboardSources = new Set(["travel", "permits", "leave", "leave-backfill", "special-orders", "ntas", "users", "activities"]);
+    const totalDashboardSources = dashboardSources.size;
+    onInitialDataProgress?.(30);
+    const finishDashboardSource = (source: string) => {
+      if (!active || !dashboardSources.delete(source)) return;
+      const completedSources = totalDashboardSources - dashboardSources.size;
+      onInitialDataProgress?.(30 + Math.round(completedSources * 70 / totalDashboardSources));
+    };
+    void getDocsFromServer(collection(firestore, "users")).then((snapshot) => {
       if (!active) return;
       const scopes = new Map<string, { office: string; division: string; unit: string; name: string }>();
       snapshot.docs.forEach((account) => {
@@ -437,7 +449,10 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     }).catch(() => {
       if (active) setTotalPersonnelCount(null);
     }).finally(() => {
-      if (active) setTotalPersonnelLoading(false);
+      if (active) {
+        setTotalPersonnelLoading(false);
+        finishDashboardSource("users");
+      }
     });
     if (isPermitAdmin(user.email, accountRole)) {
       void publishExistingApprovedPermits(firestore).catch((cause) => {
@@ -449,66 +464,70 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     const initialArchiveSources = new Set(["special-orders", "ntas"]);
     const finishArchiveLoad = (source: string) => {
       initialArchiveSources.delete(source);
+      finishDashboardSource(source);
       if (active && initialArchiveSources.size === 0) setApprovedArchiveLoading(false);
     };
     const finishInitialLoad = (source: string) => {
       initialSources.delete(source);
+      finishDashboardSource(source);
       if (active && initialSources.size === 0) setLoading(false);
     };
-    const unsubscribeTravel = onSnapshot(query(collection(firestore, "travelOrders"), where("status", "in", ["Approved", "Pending", LEGACY_PENDING_STATUS])), (snapshot) => {
+    const unsubscribeTravel = onSnapshot(query(collection(firestore, "travelOrders"), where("status", "in", ["Approved", "Pending", LEGACY_PENDING_STATUS])), { includeMetadataChanges: true }, (snapshot) => {
       const calendarOrders = snapshot.docs.map((item) => {
         const data = item.data();
         return { id: item.id, ...data, status: normalizeWorkflowStatus(data.status) } as CalendarTravelOrder;
       }).filter((order) => order.departureDate && order.returnDate);
       if (active) setOrders(calendarOrders);
-      finishInitialLoad("travel");
+      if (!snapshot.metadata.fromCache) finishInitialLoad("travel");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load Travel Orders (${code}).` : "Could not load Travel Orders. Refresh and try again.");
       finishInitialLoad("travel");
     });
-    const unsubscribeCalendarsOfActivities = onSnapshot(collection(firestore, calendarOfActivitiesCollection), (snapshot) => {
+    const unsubscribeCalendarsOfActivities = onSnapshot(collection(firestore, calendarOfActivitiesCollection), { includeMetadataChanges: true }, (snapshot) => {
       const approved = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ApprovedCalendarOfActivities))
         .filter((plan) => plan.month && Array.isArray(plan.activities));
       if (active) setCalendarsOfActivities(approved);
+      if (!snapshot.metadata.fromCache) finishDashboardSource("activities");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load Calendar of Activities (${code}).` : "Could not load Calendar of Activities. Refresh and try again.");
+      finishDashboardSource("activities");
     });
-    const unsubscribeApprovedSpecialOrders = onSnapshot(collection(firestore, "specialOrders"), (snapshot) => {
+    const unsubscribeApprovedSpecialOrders = onSnapshot(collection(firestore, "specialOrders"), { includeMetadataChanges: true }, (snapshot) => {
       const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
       if (active) setApprovedSpecialOrders(records);
-      finishArchiveLoad("special-orders");
+      if (!snapshot.metadata.fromCache) finishArchiveLoad("special-orders");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setApprovedArchiveError((current) => current || (code ? `Could not load Special Orders (${code}).` : "Could not load Special Orders."));
       finishArchiveLoad("special-orders");
     });
-    const unsubscribeApprovedNtas = onSnapshot(collection(firestore, "ntaRecords"), (snapshot) => {
+    const unsubscribeApprovedNtas = onSnapshot(collection(firestore, "ntaRecords"), { includeMetadataChanges: true }, (snapshot) => {
       const records = snapshot.docs.map((item) => ({ id: item.id, data: { ...item.data(), id: item.id } }));
       if (active) setApprovedNtas(records);
-      finishArchiveLoad("ntas");
+      if (!snapshot.metadata.fromCache) finishArchiveLoad("ntas");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setApprovedArchiveError((current) => current || (code ? `Could not load Notices to Attend (${code}).` : "Could not load Notices to Attend."));
       finishArchiveLoad("ntas");
     });
-    const unsubscribePermits = onSnapshot(collection(firestore, "approvedPermitCalendar"), (snapshot) => {
+    const unsubscribePermits = onSnapshot(collection(firestore, "approvedPermitCalendar"), { includeMetadataChanges: true }, (snapshot) => {
       const approved = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ApprovedPermitSlip))
         .filter((permit) => permit.status === "Approved" && permit.date && permit.name);
       if (active) setPermitSlips(approved);
-      finishInitialLoad("permits");
+      if (!snapshot.metadata.fromCache) finishInitialLoad("permits");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load approved Permit Slips (${code}).` : "Could not load approved Permit Slips. Refresh and try again.");
       finishInitialLoad("permits");
     });
-    const unsubscribeLeaveApplications = onSnapshot(query(collection(firestore, "approvedLeaveCalendar"), where("status", "in", ["Approved", "Pending"])), (snapshot) => {
+    const unsubscribeLeaveApplications = onSnapshot(query(collection(firestore, "approvedLeaveCalendar"), where("status", "in", ["Approved", "Pending"])), { includeMetadataChanges: true }, (snapshot) => {
       const approved = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ApprovedLeaveApplication))
         .filter((leave) => ["Approved", "Pending"].includes(leave.status)
           && leave.inclusiveDateFrom && leave.inclusiveDateTo && ((leave.firstName && leave.lastName) || leave.name));
       if (active) setLeaveApplications(approved);
-      finishInitialLoad("leave");
+      if (!snapshot.metadata.fromCache) finishInitialLoad("leave");
     }, (cause) => {
       const code = (cause as { code?: string }).code;
       if (active) setError(code ? `Could not load Leave Applications (${code}).` : "Could not load Leave Applications. Refresh and try again.");
@@ -516,7 +535,8 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
     });
     let legacyLeaveBackfillComplete = false;
     const unsubscribeLeaveBackfill = onSnapshot(query(collection(firestore, "leaveApplications"), where("ownerId", "==", user.uid)), { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.metadata.fromCache || legacyLeaveBackfillComplete) return;
+      if (snapshot.metadata.fromCache) return;
+      if (legacyLeaveBackfillComplete) return;
       legacyLeaveBackfillComplete = true;
       const activeLeaveRecords = snapshot.docs.flatMap((item) => {
         const data = item.data();
@@ -550,7 +570,7 @@ export default function WhereaboutsCalendarModule({ user, accountRole, office, d
       finishInitialLoad("leave-backfill");
     });
     return () => { active = false; unsubscribeTravel(); unsubscribeCalendarsOfActivities(); unsubscribeApprovedSpecialOrders(); unsubscribeApprovedNtas(); unsubscribePermits(); unsubscribeLeaveApplications(); unsubscribeLeaveBackfill(); };
-  }, [user.uid, user.email, accountRole, office, division, unit, assignment]);
+  }, [user.uid, user.email, accountRole, office, division, unit, assignment, onInitialDataProgress]);
 
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
