@@ -88,8 +88,10 @@
 .travel-order-approvals>strong{align-items:flex-end;align-self:end;border-bottom:1.5px solid #111;display:flex;font-size:.95em;justify-content:center;line-height:1.15;min-height:1.15em;overflow-wrap:anywhere;padding:0 .2cqi .15cqi;white-space:nowrap}
 .travel-order-approvals>em{font-size:.95em;margin-top:.3cqi}
 .travel-order-approvals .travel-order-position-division{font-size:inherit;font-style:normal}
-.travel-order-certification{border-collapse:collapse;flex:1;min-height:0;table-layout:fixed;margin-top:2.4cqi;width:100%}
-.travel-order-certification th,.travel-order-certification td{border:1.5px solid #111;overflow-wrap:anywhere;padding:.35cqi .4cqi;text-align:center;vertical-align:top;white-space:normal}
+.travel-order-certification{border:1.5px solid #111;border-collapse:separate;border-spacing:0;flex:1;min-height:0;table-layout:fixed;margin-top:2.4cqi;width:100%}
+.travel-order-certification th,.travel-order-certification td{border:0;border-bottom:1.5px solid #111;border-right:1.5px solid #111;overflow-wrap:anywhere;padding:.35cqi .4cqi;text-align:center;vertical-align:top;white-space:normal}
+.travel-order-certification th:last-child,.travel-order-certification td:last-child{border-right:0}
+.travel-order-certification tbody tr:last-child td{border-bottom:0}
 .travel-order-certification th{font-size:.95em;line-height:1.1}
 .travel-order-certification th:first-child{width:15%}
 .travel-order-certification th:nth-child(2){width:25%}

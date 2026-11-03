@@ -447,23 +447,36 @@ function TravelOrderPreview({ order, role, office, division, unit, onClose }: { 
   const pageOrders = order.previewPageOrders?.length ? order.previewPageOrders : [order];
   const pageCount = pageOrders.reduce((total, pageOrder) => total + pageOrder.people.length, 0);
 
+  async function preparePreviewPages() {
+    const pagesContainer = pagesRef.current;
+    if (!pagesContainer) return null;
+    await Promise.all(Array.from(pagesContainer.querySelectorAll("img")).map(async (image) => {
+      if (!image.complete) await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("The Travel Order header image could not be loaded."));
+      });
+      if (image.naturalWidth === 0) throw new Error("The Travel Order header image could not be loaded.");
+      if (image.decode) await image.decode();
+    }));
+    if (document.fonts?.ready) await document.fonts.ready;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    return pagesContainer;
+  }
+
   async function downloadPdf() {
     if (!pagesRef.current) return;
     setDownloading(true);
     setError("");
     try {
       const { html2canvas, jsPDF } = await loadPdfTools();
-      await Promise.all(Array.from(pagesRef.current.querySelectorAll("img")).map(async (image) => {
-        if (!image.complete) await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("The Travel Order header image could not be loaded.")); });
-        if (image.naturalWidth === 0) throw new Error("The Travel Order header image could not be loaded.");
-        if (image.decode) await image.decode();
-      }));
-      const pages = Array.from(pagesRef.current.querySelectorAll<HTMLElement>(".travel-order-paper"));
+      const pagesContainer = await preparePreviewPages();
+      if (!pagesContainer) return;
+      const pages = Array.from(pagesContainer.querySelectorAll<HTMLElement>(".travel-order-paper"));
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       for (let index = 0; index < pages.length; index += 1) {
         const canvas = await html2canvas(pages[index], { backgroundColor: "#fff", logging: false, scale: 3, useCORS: true });
         if (index > 0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL("image/jpeg", .96), "JPEG", 0, 0, 210, 297);
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297);
       }
       pdf.save(`travel-order-${order.id}.pdf`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to create the Travel Order PDF."); }
@@ -475,16 +488,7 @@ function TravelOrderPreview({ order, role, office, division, unit, onClose }: { 
     setPrinting(true);
     setPrintError("");
     try {
-      await Promise.all(Array.from(pagesRef.current.querySelectorAll("img")).map(async (image) => {
-        if (!image.complete) await new Promise<void>((resolve, reject) => {
-          image.onload = () => resolve();
-          image.onerror = () => reject(new Error("The Travel Order header image could not be loaded."));
-        });
-        if (image.naturalWidth === 0) throw new Error("The Travel Order header image could not be loaded.");
-        if (image.decode) await image.decode();
-      }));
-      if (document.fonts?.ready) await document.fonts.ready;
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await preparePreviewPages();
       window.print();
     } catch (cause) {
       setPrintError(cause instanceof Error ? cause.message : "Unable to prepare the Travel Order for printing.");
