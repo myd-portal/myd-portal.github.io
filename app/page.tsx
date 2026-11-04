@@ -53,6 +53,7 @@ import ProfilePhotoUpload from "./ProfilePhotoUpload";
 import ProfileSignatureUpload from "./ProfileSignatureUpload";
 import DeleteConfirmation from "./DeleteConfirmation";
 import NameSearchSelect from "./NameSearchSelect";
+import PasswordInput from "./PasswordInput";
 import type { AdminPermit } from "./PermitSlipAdmin";
 import type { FindDocsRecord } from "./FindDocs";
 import { normalizeWorkflowStatus } from "./workflow-status";
@@ -360,8 +361,6 @@ function Login({ onError }: { onError: (message: string) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
@@ -450,13 +449,13 @@ function Login({ onError }: { onError: (message: string) => void }) {
       </form> : <>
         <form className={registering ? "auth-registration-form auth-credential-registration-form" : undefined} onSubmit={submit}>
           {(registering || !forgotPasswordOpen) && <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="your email here" required /></label>}
-          {registering ? <div className="auth-password-fields"><label>Password<div className="password-field"><input type={showPassword ? "text" : "password"} autoComplete="new-password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" required /><button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide" : "Show"}</button></div></label><label>Password Confirmation<div className="password-field"><input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={6} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Confirm your password" required /><button type="button" className="password-toggle" aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} onClick={() => setShowConfirmPassword(!showConfirmPassword)}>{showConfirmPassword ? "Hide" : "Show"}</button></div></label></div> : !forgotPasswordOpen && <label>Password<div className="password-field"><input type={showPassword ? "text" : "password"} autoComplete="current-password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 6 characters" required /><button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Hide" : "Show"}</button></div></label>}
+          {registering ? <div className="auth-password-fields"><PasswordInput label="Password" autoComplete="new-password" minLength={6} value={password} onChange={setPassword} placeholder="At least 6 characters" required /><PasswordInput label="Password Confirmation" autoComplete="new-password" minLength={6} value={confirmPassword} onChange={setConfirmPassword} placeholder="Confirm your password" required /></div> : !forgotPasswordOpen && <PasswordInput label="Password" autoComplete="current-password" minLength={6} value={password} onChange={setPassword} placeholder="At least 6 characters" required />}
           {registering && confirmPassword && confirmPassword !== password && <p className="auth-validation-message" role="alert">Passwords do not match.</p>}
           <button className="primary-button" disabled={busy}>{busy ? "Please wait..." : registering ? "Create account" : "Sign in"}</button>
         </form>
         <div className="auth-footer-actions">
           {!registering && !forgotPasswordOpen && <button type="button" className="text-button plain-action auth-forgot-password" onClick={() => { setForgotPasswordOpen(true); setAuthMessage(null); }}>Forgot Password?</button>}
-          <button type="button" className="text-button plain-action" onClick={() => { setRegistering(!registering); setForgotPasswordOpen(false); setConfirmPassword(""); setShowConfirmPassword(false); setAuthMessage(null); onError(""); }}>{registering ? "Already have an account? Sign in" : "Need an account? Register here"}</button>
+          <button type="button" className="text-button plain-action" onClick={() => { setRegistering(!registering); setForgotPasswordOpen(false); setConfirmPassword(""); setAuthMessage(null); onError(""); }}>{registering ? "Already have an account? Sign in" : "Need an account? Register here"}</button>
         </div>
       </>}
     </div></section>
@@ -2327,8 +2326,6 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [changePassword, setChangePassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
   const [resetEmailBusy, setResetEmailBusy] = useState(false);
   const [profileFirstName, setProfileFirstName] = useState("");
   const [profilePhotoURL, setProfilePhotoURL] = useState("");
@@ -2471,8 +2468,6 @@ export default function Home() {
     setProfileMessage(null);
     setChangePassword("");
     setConfirmNewPassword("");
-    setShowChangePassword(false);
-    setShowConfirmNewPassword(false);
   }
 
   async function openProfile() {
@@ -3763,14 +3758,14 @@ export default function Home() {
     <label>Unit / Program / Project<select value={profileUnit} onChange={(event) => setProfileUnit(event.target.value)} required disabled={profileLoading || profileSaving || !profileDivision}><option value="" disabled>{profileDivision ? "Select your Unit / Program / Project" : "Select a Division first"}</option>{unitsForOfficeDivision(profileOffice, profileDivision).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
   </div>
   <div className="profile-security-fields">
-  <label>Change Password<div className="password-field"><input type={showChangePassword ? "text" : "password"} autoComplete="new-password" value={changePassword} onChange={(event) => setChangePassword(event.target.value)} /><button type="button" className="password-toggle" aria-label={showChangePassword ? "Hide new password" : "Show new password"} onClick={() => setShowChangePassword((show) => !show)}>{showChangePassword ? "Hide" : "Show"}</button></div></label>
-  <label>Confirmation Password<div className="password-field"><input type={showConfirmNewPassword ? "text" : "password"} autoComplete="new-password" value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} /><button type="button" className="password-toggle" aria-label={showConfirmNewPassword ? "Hide confirmation password" : "Show confirmation password"} onClick={() => setShowConfirmNewPassword((show) => !show)}>{showConfirmNewPassword ? "Hide" : "Show"}</button></div></label>
+  <PasswordInput label="Change Password" autoComplete="new-password" minLength={6} value={changePassword} onChange={setChangePassword} disabled={profileLoading || profileSaving} />
+  <PasswordInput label="Confirmation Password" autoComplete="new-password" minLength={6} value={confirmNewPassword} onChange={setConfirmNewPassword} disabled={profileLoading || profileSaving} />
   </div>
   </>}
   {isSuperAdmin && <div className="profile-superadmin-fields">
   <label>Email<input type="email" value={user.email ?? ""} readOnly /></label>
-  <label>Change Password<div className="password-field"><input type={showChangePassword ? "text" : "password"} autoComplete="new-password" value={changePassword} onChange={(event) => setChangePassword(event.target.value)} /><button type="button" className="password-toggle" aria-label={showChangePassword ? "Hide new password" : "Show new password"} onClick={() => setShowChangePassword((show) => !show)}>{showChangePassword ? "Hide" : "Show"}</button></div></label>
-  <label>Confirmation Password<div className="password-field"><input type={showConfirmNewPassword ? "text" : "password"} autoComplete="new-password" value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} /><button type="button" className="password-toggle" aria-label={showConfirmNewPassword ? "Hide confirmation password" : "Show confirmation password"} onClick={() => setShowConfirmNewPassword((show) => !show)}>{showConfirmNewPassword ? "Hide" : "Show"}</button></div></label>
+  <PasswordInput label="Change Password" autoComplete="new-password" minLength={6} value={changePassword} onChange={setChangePassword} disabled={profileLoading || profileSaving} />
+  <PasswordInput label="Confirmation Password" autoComplete="new-password" minLength={6} value={confirmNewPassword} onChange={setConfirmNewPassword} disabled={profileLoading || profileSaving} />
   </div>}
   <div className="profile-password-actions"><button type="button" className="ghost-button" disabled={profileSaving || resetEmailBusy} onClick={() => void sendResetLink()}>{resetEmailBusy ? "Sending..." : "Reset Password"}</button><button className="primary-button" disabled={profileLoading || profileSaving || resetEmailBusy}>{profileLoading ? "Loading..." : profileSaving ? "Saving..." : "Save Changes"}</button></div>
   {profileMessage && <p className={`auth-message auth-message-${profileMessage.kind}`} role={profileMessage.kind === "error" ? "alert" : "status"}>{profileMessage.text}</p>}

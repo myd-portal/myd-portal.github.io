@@ -297,9 +297,9 @@
 .profile-contact-row{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
 .profile-contact-row>label{min-width:0}
 .profile-security-fields{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
-.profile-security-fields>label{min-width:0}
+.profile-security-fields>label,.profile-security-fields>.password-input-component{min-width:0}
 .profile-superadmin-fields{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
-.profile-superadmin-fields>label{min-width:0}
+.profile-superadmin-fields>label,.profile-superadmin-fields>.password-input-component{min-width:0}
 .profile-password-actions{display:flex;gap:10px;justify-content:flex-end}
 .auth-footer-actions{align-items:center;display:flex;gap:12px;justify-content:center;margin-top:24px}.auth-footer-actions .text-button{margin:0;white-space:nowrap;transition:none}.auth-footer-actions .text-button:hover,.auth-footer-actions .text-button:focus-visible{box-shadow:none;color:inherit;outline:none!important;text-decoration:none}.auth-forgot-password{color:var(--ink)}
 .auth-reset-form .text-button{justify-self:start;margin:0;transition:none}
@@ -312,6 +312,34 @@
 
 .brand-logo,.auth-title-logo{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
 img{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
+
+.password-input-component{--password-strength-color:#d5dbe1;align-content:start;align-self:start;display:grid;gap:8px;min-width:0}
+.password-input-component[data-strength="0"]{--password-strength-color:#98a1aa}
+.password-input-component[data-strength="1"]{--password-strength-color:#f04438}
+.password-input-component[data-strength="2"]{--password-strength-color:#f5a623}
+.password-input-component[data-strength="3"]{--password-strength-color:#a4bd68}
+.password-input-component[data-strength="4"]{--password-strength-color:#39bda5}
+.password-input-control{align-items:center;display:grid;grid-template-columns:minmax(0,1fr) 48px;min-height:52px;position:relative}
+.password-input-component .password-input-control input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]){border:1.5px solid var(--password-strength-color);border-radius:12px;grid-column:1/-1;grid-row:1;min-height:52px;min-width:0;padding:14px 58px 14px 15px;transition:border-color .16s,box-shadow .16s}
+.password-input-component .password-input-control input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):focus{border-color:#59616b;box-shadow:0 0 0 3px #59616b1a}
+.password-visibility-toggle{align-items:center;align-self:center;background:transparent;border:0;border-radius:8px;color:#59616b;display:flex;grid-column:2;grid-row:1;height:36px;justify-content:center;justify-self:end;margin-right:8px;padding:7px;position:relative;inset:auto;transform:none!important;width:36px;z-index:1}
+.password-visibility-toggle:hover,.password-visibility-toggle:active{background:transparent;color:var(--accent-dark);inset:auto;position:relative;transform:none!important}
+.password-visibility-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.password-visibility-toggle svg{height:21px;width:21px}
+.password-strength{display:grid;gap:7px}
+.password-strength-bars{display:grid;gap:6px;grid-template-columns:repeat(4,minmax(0,1fr))}
+.password-strength-bars span{background:#e2e7ec;border-radius:999px;height:6px}
+.password-strength-bars[data-level="1"] span:nth-child(-n+1){background:#f04438}
+.password-strength-bars[data-level="2"] span:nth-child(-n+2){background:#f5a623}
+.password-strength-bars[data-level="3"] span:nth-child(-n+3){background:#a4bd68}
+.password-strength-bars[data-level="4"] span{background:#39bda5}
+.password-strength-caption{align-items:center;color:#59616b;display:flex;font-size:12px;font-weight:700;gap:7px;justify-content:flex-end;line-height:1}
+.password-strength-caption>[data-level="1"]{color:#e6483d}
+.password-strength-caption>[data-level="2"]{color:#e99a1c}
+.password-strength-caption>[data-level="3"]{color:#91ab57}
+.password-strength-caption>[data-level="4"]{color:#32ad98}
+.password-strength-info{align-items:center;background:#59616b;border-radius:50%;color:#fff;display:inline-flex;font-family:serif;font-size:11px;font-style:italic;height:16px;justify-content:center;line-height:1;width:16px}
+input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px var(--white) inset;-webkit-text-fill-color:var(--ink);caret-color:var(--ink);transition:background-color 9999s ease-out 0s}
 
 .permit-row-actions,.travel-order-row-actions{align-items:center;display:flex;gap:10px;justify-content:flex-end;white-space:nowrap}
 .delete-button{background:none;border:0;color:#a23d2d;font-size:12px;padding:0}.delete-button:hover:not(:disabled){text-decoration:none}
