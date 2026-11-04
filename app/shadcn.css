@@ -553,8 +553,8 @@ html body button.remove-action:hover:not(:disabled) {
   box-shadow: 0 8px 24px rgb(24 33 31 / 12%);
   margin: max(1rem, env(safe-area-inset-top, 0px)) auto 0;
   max-width: calc(100% - 2rem);
-  min-height: 4rem;
-  padding: 0.375rem 0.625rem 0.375rem 1rem;
+  min-height: 2.75rem;
+  padding: 0 0.625rem 0 1rem;
   width: 90rem;
 }
 
@@ -562,11 +562,17 @@ html body button.remove-action:hover:not(:disabled) {
   border-radius: var(--radius-md);
   color: #fff;
   font-size: 0.8125rem;
+  min-height: 34px;
+  padding: 5px 11px;
 }
 
-.topbar .nav-button.active,
+.topbar .nav-button.active {
+  background: #ffffff20;
+  color: #fff;
+}
+
 .topbar .main-nav .nav-button:hover:not(.active) {
-  background: #ffffff28;
+  background: #ffffff18;
   color: #fff;
 }
 
@@ -574,6 +580,15 @@ html body button.remove-action:hover:not(:disabled) {
   background: #fff;
   border: 1px solid #f3ddd6;
   border-radius: var(--radius-md);
+  color: var(--ink);
+  min-height: 34px;
+  padding: 5px 15px;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.topbar .profile-trigger:hover {
+  background: #fff4ef;
+  border-color: #e9bcae;
   color: var(--ink);
 }
 
