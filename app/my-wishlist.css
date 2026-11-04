@@ -405,28 +405,31 @@
   color: var(--accent-dark);
 }
 
-@media (min-width: 1121px) and (max-width: 1550px) {
-  .app-shell:has(.my-wishlist-page) > .topbar {
+@media (max-width: 1350px) {
+  .app-shell:has(.my-wishlist-page) .dashboard-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+  }
+
+  .app-shell:has(.my-wishlist-page) .dashboard-header-content {
+    align-items: start;
+    display: grid;
+    flex: 1 1 560px;
     gap: 6px;
-    padding-left: 10px;
-    padding-right: 8px;
-  }
-
-  .app-shell:has(.my-wishlist-page) > .topbar .main-nav {
-    justify-content: flex-start;
+    max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
   }
 
-  .app-shell:has(.my-wishlist-page) > .topbar .main-nav::-webkit-scrollbar {
-    display: none;
+  .app-shell:has(.my-wishlist-page) .dashboard-header-content .eyebrow,
+  .app-shell:has(.my-wishlist-page) .dashboard-header-content h1 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
-  .app-shell:has(.my-wishlist-page) > .topbar .user-menu {
-    flex: 0 0 auto;
-    gap: 8px;
+  .app-shell:has(.my-wishlist-page) .dashboard-header-content .eyebrow {
+    margin: 0;
+    white-space: normal;
   }
 }
 
