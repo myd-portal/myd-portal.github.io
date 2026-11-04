@@ -161,28 +161,28 @@ const amiaDocumentTrackingLinks = [
 ];
 const calendarOfActivitiesUnitLabel = (unit: string) => unit === "Field Operations Division" ? unit : `FOD-${unit}`;
 const publicAsset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
-function LoadingIndicator({ progress, startedAt, fadeOut = false }: { progress: number; startedAt: number | null; fadeOut?: boolean }) {
+function LoadingIndicator({ progress, startedAt, fadeOut = false, showPercentage = true }: { progress: number; startedAt: number | null; fadeOut?: boolean; showPercentage?: boolean }) {
   const percent = Math.max(0, Math.min(100, Math.round(progress)));
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (startedAt === null) return;
+    if (!showPercentage || startedAt === null) return;
     const progressTimer = window.setInterval(() => {
       const currentTime = Date.now();
       setNow(currentTime);
       if (currentTime >= startedAt + 5_000) window.clearInterval(progressTimer);
     }, 50);
     return () => window.clearInterval(progressTimer);
-  }, [startedAt]);
+  }, [showPercentage, startedAt]);
 
   const displayPercent = startedAt === null
     ? percent
     : Math.min(100, 30 + Math.floor(Math.max(0, now - startedAt) / 5_000 * 70));
 
-  return <div className={`loading-screen${fadeOut ? " is-fading-out" : ""}`} style={{ background: "transparent", inset: 0, pointerEvents: "auto", position: "fixed", width: "100%", zIndex: 2_147_483_647 }}><video className="loading-screen-video" autoPlay muted loop playsInline controls={false} disablePictureInPicture preload="auto" aria-hidden="true" tabIndex={-1}><source src={publicAsset("/bg.mp4")} type="video/mp4" /></video><div className="loading-progress-indicator" role="progressbar" aria-label="Loading My Desk" aria-valuemin={0} aria-valuemax={100} aria-valuenow={displayPercent} aria-valuetext={`${displayPercent}%`} aria-live="polite">{displayPercent}%</div><div className="loading-screen-caption" aria-hidden="true"><span>Loading</span><img className="loading-logo" src={publicAsset("/my%20desk%20logo.png")} alt="" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /></div></div>;
+  return <div className={`loading-screen${fadeOut ? " is-fading-out" : ""}`} style={{ background: "transparent", inset: 0, pointerEvents: "auto", position: "fixed", width: "100%", zIndex: 2_147_483_647 }}><video className="loading-screen-video" autoPlay muted loop playsInline controls={false} disablePictureInPicture preload="auto" aria-hidden="true" tabIndex={-1}><source src={publicAsset("/bg.mp4")} type="video/mp4" /></video>{showPercentage && <div className="loading-progress-indicator" role="progressbar" aria-label="Loading My Desk" aria-valuemin={0} aria-valuemax={100} aria-valuenow={displayPercent} aria-valuetext={`${displayPercent}%`} aria-live="polite">{displayPercent}%</div>}<div className="loading-screen-caption" aria-hidden="true"><span>Loading</span><img className="loading-logo" src={publicAsset("/my%20desk%20logo.png")} alt="" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /></div></div>;
 }
-function LoadingBoundary({ progress, startedAt, show, fadeOut = false, children }: { progress: number; startedAt: number | null; show: boolean; fadeOut?: boolean; children?: ReactNode }) {
-  return <>{children}{show && <LoadingIndicator progress={progress} startedAt={startedAt} fadeOut={fadeOut} />}</>;
+function LoadingBoundary({ progress, startedAt, show, fadeOut = false, showPercentage = true, children }: { progress: number; startedAt: number | null; show: boolean; fadeOut?: boolean; showPercentage?: boolean; children?: ReactNode }) {
+  return <>{children}{show && <LoadingIndicator progress={progress} startedAt={startedAt} fadeOut={fadeOut} showPercentage={showPercentage} />}</>;
 }
 function tinCaretPosition(value: string, digitsBeforeCaret: number) {
   let position = 0;
@@ -2253,6 +2253,7 @@ export default function Home() {
   const [startupError, setStartupError] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingPercentageVisible, setLoadingPercentageVisible] = useState(false);
   const [loadingProgressStartedAt, setLoadingProgressStartedAt] = useState<number | null>(null);
   const [initialDashboardReadsReady, setInitialDashboardReadsReady] = useState(false);
   const [initialDashboardDataReady, setInitialDashboardDataReady] = useState(false);
@@ -2678,12 +2679,13 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!auth) { setLoadingProgress(100); setLoading(false); return; }
+    if (!auth) { setLoadingPercentageVisible(false); setLoadingProgress(100); setLoading(false); return; }
     let authChange = 0;
     let active = true;
     const showStartupTimeout = () => {
       if (!active) return;
       setStartupError("My Desk could not complete its Firebase startup check. Check your internet connection and Firebase project configuration, then reload.");
+      setLoadingPercentageVisible(false);
       setLoadingProgress(100);
       setLoading(false);
     };
@@ -2693,6 +2695,7 @@ export default function Home() {
       startupTimeout = window.setTimeout(showStartupTimeout, 15000);
       const thisAuthChange = ++authChange;
       const verifiedUser = currentUser?.emailVerified ? currentUser : null;
+      setLoadingPercentageVisible(Boolean(verifiedUser));
       setStartupError("");
       setLoading(true);
       setInitialDashboardReadsReady(false);
@@ -2824,6 +2827,7 @@ export default function Home() {
       setStartupError(code
         ? `Firebase could not restore your sign-in session (${code}). Reload My Desk to try again.`
         : "Firebase could not restore your sign-in session. Reload My Desk to try again.");
+      setLoadingPercentageVisible(false);
       setLoadingProgress(100);
       setLoading(false);
     });
@@ -3629,7 +3633,7 @@ export default function Home() {
     }
   }, [isSuperAdmin, section]);
 
-  if (loading) return <LoadingBoundary progress={loadingProgress} startedAt={loadingProgressStartedAt} show fadeOut={loadingFadeOut} />;
+  if (loading) return <LoadingBoundary progress={loadingProgress} startedAt={loadingProgressStartedAt} show fadeOut={loadingFadeOut} showPercentage={loadingPercentageVisible} />;
   if (!isFirebaseConfigured) return <div className="setup-screen"><div className="setup-card"><img className="brand-mark brand-logo" src="/my%20desk%20logo.png" alt="My Desk logo" draggable={false} onDragStart={(event) => event.preventDefault()} onContextMenu={(event) => event.preventDefault()} /><p className="eyebrow">One setup step</p><h1>Connect your Firebase project</h1><p className="muted">Copy <strong>.env.example</strong> to <strong>.env.local</strong>, add your Firebase web app credentials, then restart the dev server.</p><code>NEXT_PUBLIC_FIREBASE_PROJECT_ID=...</code></div></div>;
   if (startupError) return <div className="setup-screen"><section className="setup-card"><p className="eyebrow">Connection issue</p><h1>My Desk could not start</h1><p className="muted" role="alert">{startupError}</p><button className="primary-button" type="button" onClick={() => window.location.reload()}>Reload My Desk</button></section></div>;
   if (!user) return profileSetupUser
