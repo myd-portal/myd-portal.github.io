@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { randomInt } from "node:crypto";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
@@ -13,6 +14,309 @@ const day = 24 * hour;
 const permitDeletionAfter = 6 * hour;
 const permitWarningAfter = permitDeletionAfter - 30 * 60 * 1000;
 const rootSuperAdminEmail = "rjamescute2@gmail.com";
+
+const wishlistEntries = db.collection("myWishlistEntries");
+const wishlistParticipants = db.collection("myWishlistParticipants");
+const wishlistDraw = db.collection("myWishlistDraws").doc("current");
+const wishlistStatus = db.collection("myWishlistStatus").doc("current");
+
+function isWishlistProfile(profile) {
+  if (!profile || profile.emailVerified !== true || ![undefined, null, "Approved"].includes(profile.accountStatus)) return false;
+  if (profile.accountRole === "regular") {
+    return profile.office === "Division"
+      && profile.division === "Field Operations Division"
+      && ["AGRISTAT", "AMIA", "DRRM"].includes(profile.unit);
+  }
+  return profile.accountRole === "admin"
+    && profile.office === "Division"
+    && profile.division === "Field Operations Division"
+    && profile.unit === "Field Operations Division"
+    && profile.designation === "AGRISTAT/DRRM/AMIA Project Leader";
+}
+
+async function requireWishlistUser(request) {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError("unauthenticated", "Sign in with a verified email to use myWishlist.");
+  }
+  const profileSnapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!profileSnapshot.exists || !isWishlistProfile(profileSnapshot.data())) {
+    throw new HttpsError("permission-denied", "myWishlist is available to approved FOD AGRISTAT, AMIA, and DRRM regular users and the FOD Project Leader admin.");
+  }
+  return { uid: request.auth.uid, profile: profileSnapshot.data() };
+}
+
+async function getWishlistParticipants(transaction) {
+  const profileQuery = db.collection("users").where("division", "==", "Field Operations Division");
+  const profiles = transaction
+    ? await transaction.get(profileQuery)
+    : await profileQuery.get();
+  return profiles.docs
+    .filter((profile) => isWishlistProfile(profile.data()))
+    .map((profile) => profile.id)
+    .sort((first, second) => first.localeCompare(second));
+}
+
+function normalizeWishlistItems(items) {
+  if (items === undefined) return undefined;
+  if (!Array.isArray(items) || items.length < 1 || items.length > 20) {
+    throw new HttpsError("invalid-argument", "Add between 1 and 20 wishlist items.");
+  }
+  return items.map((item) => {
+    if (!item || typeof item !== "object") throw new HttpsError("invalid-argument", "A wishlist item is invalid.");
+    const desiredGift = requiredSpecialOrderText(item.desiredGift, "Desired Gift", 160);
+    const description = requiredSpecialOrderText(item.description, "Description", 1000);
+    const amount = optionalWishlistText(item.amount, "Amount", 80);
+    const link = optionalWishlistText(item.link, "Link", 2048);
+    if (link) {
+      let url;
+      try { url = new URL(link); } catch {}
+      if (!url || !["http:", "https:"].includes(url.protocol) || !url.hostname) {
+        throw new HttpsError("invalid-argument", "Link must be a valid HTTP or HTTPS URL.");
+      }
+    }
+    return { desiredGift, description, amount, link };
+  });
+}
+
+function optionalWishlistText(value, field, maxLength) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string" || value.trim().length > maxLength) {
+    throw new HttpsError("invalid-argument", `${field} is invalid.`);
+  }
+  return value.trim();
+}
+
+function wishlistEntryIsComplete(entry) {
+  return typeof entry?.nickname === "string"
+    && entry.nickname.trim().length > 0
+    && ((Array.isArray(entry.wishlist) && entry.wishlist.length > 0)
+      || (entry.hasWishlist === true && typeof entry.itemCount === "number" && entry.itemCount > 0));
+}
+
+function wishlistProgress(participantIds, entries) {
+  const completeCount = participantIds.filter((userId) => wishlistEntryIsComplete(entries.get(userId))).length;
+  return {
+    participantCount: participantIds.length,
+    completedCount: completeCount,
+    ready: completeCount >= 2,
+  };
+}
+
+function createElfsterAssignments(participantIds) {
+  if (participantIds.length < 2) throw new HttpsError("failed-precondition", "At least two users must enter a wishlist before the reveal can begin.");
+  // Sattolo's shuffle creates one random cycle, so nobody draws themself and each nickname is used once.
+  const cycle = [...participantIds];
+  for (let index = cycle.length - 1; index > 0; index -= 1) {
+    const otherIndex = randomInt(index);
+    [cycle[index], cycle[otherIndex]] = [cycle[otherIndex], cycle[index]];
+  }
+  return new Map(cycle.map((userId, index) => [userId, cycle[(index + 1) % cycle.length]]));
+}
+
+function publicWishlistStatus({ participantCount, completedCount, drawActive, revealedCount = 0 }) {
+  const drawPoolCount = drawActive ? completedCount : participantCount;
+  return {
+    participantCount,
+    completedCount,
+    ready: drawActive || completedCount >= 2,
+    drawActive,
+    revealedCount,
+    remainingCount: Math.max(0, drawPoolCount - revealedCount),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+function revealedWishlist(assignment, snapshot) {
+  return {
+    nickname: snapshot.nickname,
+    wishlist: snapshot.wishlist,
+    cycleId: assignment.cycleId,
+  };
+}
+
+export const saveMyWishlist = onCall({ region: "asia-southeast1" }, async (request) => {
+  const { uid } = await requireWishlistUser(request);
+  const nickname = requiredSpecialOrderText(request.data?.nickname, "Nickname", 40);
+  const submittedItems = normalizeWishlistItems(request.data?.wishlist);
+  const userReference = db.collection("users").doc(uid);
+  const entryReference = wishlistEntries.doc(uid);
+  const participantReference = wishlistParticipants.doc(uid);
+
+  await db.runTransaction(async (transaction) => {
+    const [profileSnapshot, drawSnapshot, entrySnapshot] = await Promise.all([
+      transaction.get(userReference),
+      transaction.get(wishlistDraw),
+      transaction.get(entryReference),
+    ]);
+    if (!profileSnapshot.exists || !isWishlistProfile(profileSnapshot.data())) {
+      throw new HttpsError("permission-denied", "Your account no longer meets the myWishlist access requirements.");
+    }
+    if (drawSnapshot.exists) {
+      throw new HttpsError("failed-precondition", "The Elfster reveal has started, so wishlists are now locked.");
+    }
+
+    const participantIds = await getWishlistParticipants(transaction);
+    if (!participantIds.includes(uid)) throw new HttpsError("permission-denied", "Your account is not an active myWishlist participant.");
+    const otherParticipantRefs = participantIds.filter((userId) => userId !== uid).map((userId) => wishlistParticipants.doc(userId));
+    const otherParticipants = otherParticipantRefs.length ? await transaction.getAll(...otherParticipantRefs) : [];
+    const duplicateNickname = otherParticipants.some((participant) => participant.exists
+      && typeof participant.data()?.nickname === "string"
+      && participant.data().nickname.trim().toLocaleLowerCase() === nickname.toLocaleLowerCase());
+    if (duplicateNickname) throw new HttpsError("already-exists", "That nickname is already in use. Choose a different nickname.");
+
+    const previousEntry = entrySnapshot.data();
+    const wishlist = submittedItems ?? previousEntry?.wishlist ?? [];
+    const entry = { nickname, wishlist, updatedAt: FieldValue.serverTimestamp() };
+    const progressEntries = new Map([[uid, { ...entry, updatedAt: null }]]);
+    for (const participant of otherParticipants) {
+      if (participant.exists) progressEntries.set(participant.id, participant.data());
+    }
+    const progress = wishlistProgress(participantIds, progressEntries);
+    transaction.set(entryReference, entry);
+    transaction.set(participantReference, {
+      nickname,
+      hasWishlist: wishlist.length > 0,
+      itemCount: wishlist.length,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(wishlistStatus, publicWishlistStatus({
+      ...progress,
+      drawActive: false,
+    }));
+  });
+
+  return { saved: true };
+});
+
+export const getMyWishlistState = onCall({ region: "asia-southeast1" }, async (request) => {
+  const { uid } = await requireWishlistUser(request);
+  const participantIds = await getWishlistParticipants();
+  const [entrySnapshot, drawSnapshot] = await Promise.all([
+    wishlistEntries.doc(uid).get(),
+    wishlistDraw.get(),
+  ]);
+  const ownEntry = entrySnapshot.exists ? entrySnapshot.data() : null;
+  let state = {
+    nickname: ownEntry?.nickname ?? "",
+    wishlist: ownEntry?.wishlist ?? [],
+    participantCount: participantIds.length,
+    completedCount: 0,
+    ready: false,
+    drawActive: drawSnapshot.exists,
+    isParticipant: participantIds.includes(uid),
+    revealed: null,
+  };
+
+  if (drawSnapshot.exists) {
+    const draw = drawSnapshot.data();
+    state.participantCount = draw.specifiedUserCount ?? draw.participantIds.length;
+    state.completedCount = draw.entryCount ?? draw.participantIds.length;
+    state.ready = true;
+    state.isParticipant = draw.participantIds.includes(uid);
+    if (state.isParticipant) {
+      const assignmentSnapshot = await wishlistDraw.collection("assignments").doc(uid).get();
+      const assignment = assignmentSnapshot.data();
+      if (assignment?.revealed && typeof assignment.targetId === "string") {
+        const targetSnapshot = await wishlistDraw.collection("snapshots").doc(assignment.targetId).get();
+        if (targetSnapshot.exists) state.revealed = revealedWishlist(assignment, targetSnapshot.data());
+      }
+    }
+  } else {
+    const entryRefs = participantIds.map((userId) => wishlistEntries.doc(userId));
+    const entrySnapshots = entryRefs.length ? await db.getAll(...entryRefs) : [];
+    const entries = new Map(entrySnapshots.filter((entry) => entry.exists).map((entry) => [entry.id, entry.data()]));
+    const progress = wishlistProgress(participantIds, entries);
+    state = { ...state, ...progress };
+    await wishlistStatus.set(publicWishlistStatus({ ...progress, drawActive: false }), { merge: true });
+  }
+  return state;
+});
+
+export const revealElfster = onCall({ region: "asia-southeast1" }, async (request) => {
+  const { uid } = await requireWishlistUser(request);
+  return db.runTransaction(async (transaction) => {
+    const drawSnapshot = await transaction.get(wishlistDraw);
+
+    if (drawSnapshot.exists) {
+      const draw = drawSnapshot.data();
+      if (!draw.participantIds.includes(uid)) {
+        throw new HttpsError("failed-precondition", "Your account joined after this Elfster draw started and is not part of the current draw.");
+      }
+      const assignmentReference = wishlistDraw.collection("assignments").doc(uid);
+      const assignmentSnapshot = await transaction.get(assignmentReference);
+      if (!assignmentSnapshot.exists) throw new HttpsError("failed-precondition", "Your Elfster assignment could not be found.");
+      const assignment = assignmentSnapshot.data();
+      const targetReference = wishlistDraw.collection("snapshots").doc(assignment.targetId);
+      const targetSnapshot = await transaction.get(targetReference);
+      if (!targetSnapshot.exists) throw new HttpsError("internal", "The revealed wishlist could not be found.");
+
+      if (!assignment.revealed) {
+        const revealedCount = (draw.revealedCount ?? 0) + 1;
+        transaction.update(assignmentReference, { revealed: true, revealedAt: FieldValue.serverTimestamp() });
+        transaction.update(wishlistDraw, { revealedCount, remainingCount: draw.participantIds.length - revealedCount });
+        transaction.set(wishlistStatus, publicWishlistStatus({
+          participantCount: draw.specifiedUserCount ?? draw.participantIds.length,
+          completedCount: draw.entryCount ?? draw.participantIds.length,
+          drawActive: true,
+          revealedCount,
+        }));
+      }
+      return { ...revealedWishlist(assignment, targetSnapshot.data()), alreadyRevealed: Boolean(assignment.revealed) };
+    }
+
+    const participantIds = await getWishlistParticipants(transaction);
+    if (!participantIds.includes(uid)) throw new HttpsError("permission-denied", "Your account is not an active myWishlist participant.");
+    if (participantIds.length > 200) throw new HttpsError("resource-exhausted", "This Elfster draw has more than 200 participants. Contact the system administrator.");
+
+    const entryReferences = participantIds.map((userId) => wishlistEntries.doc(userId));
+    const entrySnapshots = await transaction.getAll(...entryReferences);
+    const entries = new Map(entrySnapshots.filter((entry) => entry.exists).map((entry) => [entry.id, entry.data()]));
+    const progress = wishlistProgress(participantIds, entries);
+    if (!progress.ready) throw new HttpsError("failed-precondition", `At least two specified users must save a nickname and wishlist before the reveal can begin (${progress.completedCount} complete).`);
+    const drawParticipantIds = participantIds.filter((userId) => wishlistEntryIsComplete(entries.get(userId)));
+    if (!drawParticipantIds.includes(uid)) {
+      throw new HttpsError("failed-precondition", "Save your nickname and at least one wishlist item before revealing a match.");
+    }
+
+    const assignments = createElfsterAssignments(drawParticipantIds);
+    const cycleId = wishlistDraw.id;
+    const now = FieldValue.serverTimestamp();
+    const myTargetId = assignments.get(uid);
+    const myAssignment = { targetId: myTargetId, cycleId, revealed: true, revealedAt: now };
+    const targetEntry = entries.get(myTargetId);
+    transaction.create(wishlistDraw, {
+      cycleId,
+      participantIds: drawParticipantIds,
+      specifiedUserCount: participantIds.length,
+      entryCount: drawParticipantIds.length,
+      revealedCount: 1,
+      remainingCount: drawParticipantIds.length - 1,
+      startedAt: now,
+    });
+    for (const userId of drawParticipantIds) {
+      const targetId = assignments.get(userId);
+      transaction.create(wishlistDraw.collection("assignments").doc(userId), userId === uid
+        ? myAssignment
+        : { targetId, cycleId, revealed: false, revealedAt: null });
+      transaction.create(wishlistDraw.collection("snapshots").doc(userId), {
+        nickname: entries.get(userId).nickname,
+        wishlist: entries.get(userId).wishlist,
+      });
+    }
+    transaction.set(wishlistStatus, publicWishlistStatus({
+      participantCount: participantIds.length,
+      completedCount: drawParticipantIds.length,
+      drawActive: true,
+      revealedCount: 1,
+    }));
+    return {
+      nickname: targetEntry.nickname,
+      wishlist: targetEntry.wishlist,
+      cycleId,
+      alreadyRevealed: false,
+    };
+  });
+});
 
 export const getUserEmailForPasswordReset = onCall({ region: "asia-southeast1" }, async (request) => {
   if (!request.auth || request.auth.token.email_verified !== true) {

@@ -308,6 +308,22 @@ service cloud.firestore {
         && (isFodCalendarApproverProfile(get(userPath).data, "AGRISTAT/DRRM/AMIA Project Leader")
           || (isCleaningTaskRegularProfile(get(userPath).data) && get(userPath).data.get("unit", "") == unit));
     }
+    function canUseMyWishlist() {
+      let userPath = currentUserPath();
+      let profile = exists(userPath) ? get(userPath).data : {};
+      let regularUser = profile.get("accountRole", "") == "regular"
+        && profile.get("office", "") == "Division"
+        && profile.get("division", "") == "Field Operations Division"
+        && profile.get("unit", "") in ["AGRISTAT", "AMIA", "DRRM"];
+      let projectLeader = profile.get("accountRole", "") == "admin"
+        && profile.get("office", "") == "Division"
+        && profile.get("division", "") == "Field Operations Division"
+        && profile.get("unit", "") == "Field Operations Division"
+        && profile.get("designation", "") == "AGRISTAT/DRRM/AMIA Project Leader";
+      return isVerifiedUser() && exists(userPath)
+        && profile.get("accountStatus", "Approved") in ["Approved", null]
+        && (regularUser || projectLeader);
+    }
     function validCleaningTaskAssignment(data, weekStart) {
       return data.keys().hasAll(["weekStart", "month", "weekNumber", "unit", "startAt", "endAt", "assignedBy", "assignedAt"])
         && data.keys().hasOnly(["weekStart", "month", "weekNumber", "unit", "startAt", "endAt", "assignedBy", "assignedAt"])
@@ -1169,6 +1185,25 @@ service cloud.firestore {
           && request.resource.data.previousFileKey == ""
           && request.resource.data.previousFileOwnerId == "");
       allow delete: if false;
+    }
+    match /myWishlistParticipants/{userId} {
+      allow read, write: if false;
+    }
+    match /myWishlistStatus/{statusId} {
+      allow read: if canUseMyWishlist();
+      allow write: if false;
+    }
+    match /myWishlistEntries/{userId} {
+      allow read, write: if false;
+    }
+    match /myWishlistDraws/{drawId} {
+      allow read, write: if false;
+      match /assignments/{userId} {
+        allow read, write: if false;
+      }
+      match /snapshots/{userId} {
+        allow read, write: if false;
+      }
     }
     match /chats/{chatId} {
       allow read: if isVerifiedUser() && request.auth.uid in resource.data.members;
