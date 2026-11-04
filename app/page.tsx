@@ -2259,6 +2259,7 @@ export default function Home() {
   const [initialDashboardDataReady, setInitialDashboardDataReady] = useState(false);
   const [loadingFadeOut, setLoadingFadeOut] = useState(false);
   const initialScreenReadiness = useRef({ requiresCleaningTask: false, whereaboutsDataReady: false, dashboardSourcesReady: false, cleaningTaskDataReady: false });
+  const initialDashboardHasBeenRevealed = useRef(false);
   const completeInitialDataIfReady = useCallback(() => {
     const readiness = initialScreenReadiness.current;
     if (!readiness.dashboardSourcesReady || !readiness.whereaboutsDataReady || (readiness.requiresCleaningTask && !readiness.cleaningTaskDataReady)) return;
@@ -2266,6 +2267,7 @@ export default function Home() {
     setLoadingProgress(100);
   }, []);
   const updateInitialDashboardProgress = useCallback((progress: number) => {
+    if (initialDashboardHasBeenRevealed.current) return;
     const nextProgress = Math.max(30, Math.min(100, Math.round(progress)));
     if (nextProgress === 30) {
       initialScreenReadiness.current.dashboardSourcesReady = false;
@@ -2306,7 +2308,10 @@ export default function Home() {
     let fadeEndTimer: number | undefined;
     const revealTimer = window.setTimeout(() => {
       setLoadingFadeOut(true);
-      fadeEndTimer = window.setTimeout(() => setInitialDashboardDataReady(true), 3_000);
+      fadeEndTimer = window.setTimeout(() => {
+        initialDashboardHasBeenRevealed.current = true;
+        setInitialDashboardDataReady(true);
+      }, 3_000);
     }, revealDelay);
     return () => {
       window.clearTimeout(revealTimer);
@@ -2702,6 +2707,7 @@ export default function Home() {
       setInitialDashboardDataReady(false);
       setLoadingFadeOut(false);
       setLoadingProgressStartedAt(Date.now());
+      initialDashboardHasBeenRevealed.current = false;
       initialScreenReadiness.current = { requiresCleaningTask: false, whereaboutsDataReady: false, dashboardSourcesReady: false, cleaningTaskDataReady: false };
       setLoadingProgress(30);
       setApprovalError("");
