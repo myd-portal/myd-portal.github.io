@@ -261,7 +261,7 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
             <label className="my-wishlist-description-field">Description<textarea maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} required disabled={busy} placeholder="Add details to help your match choose" rows={3} /></label>
             <label>Amount <span>(optional)</span><input maxLength={80} value={amount} onChange={(event) => setAmount(event.target.value)} disabled={busy} placeholder="e.g. ₱500" /></label>
             <label>Link <span>(optional)</span><input type="url" maxLength={2048} value={link} onChange={(event) => setLink(event.target.value)} disabled={busy} placeholder="https://..." /></label>
-            <button type="submit" disabled={busy || wishlist.length >= 20}>Add to Wishlist</button>
+            <button type="submit" aria-label="Add gift to wishlist" disabled={busy || wishlist.length >= 20}>Add</button>
           </form>
 
           {wishlist.length > 0 && <div className="my-wishlist-items">
