@@ -91,6 +91,10 @@ textarea {
   width: 100%;
 }
 
+.password-field > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]) {
+  padding-right: 4.5rem;
+}
+
 select {
   appearance: auto;
 }
