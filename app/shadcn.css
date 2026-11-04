@@ -511,6 +511,14 @@ html body button.remove-action:hover:not(:disabled) {
   letter-spacing: 0;
 }
 
+.auth-credential-registration-form .auth-password-fields input::placeholder {
+  font-size: clamp(0.75rem, 1vw, 0.875rem);
+}
+
+.auth-credential-registration-form .auth-password-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .form-actions {
   border-color: var(--border);
 }
