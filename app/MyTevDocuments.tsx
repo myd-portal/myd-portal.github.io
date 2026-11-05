@@ -403,7 +403,9 @@ export default function MyTevDocuments({ record, rates, order = "preview" }: { r
   const itineraryDocuments = itineraryPages.map(({ itinerary, page, pageNumber, documentPageNumber }, index) => <MyTevItineraryPage key={`${itinerary.id}-${pageNumber - 1}`} record={record} itinerary={itinerary} page={page} pageNumber={pageNumber} documentPageNumber={documentPageNumber} isLastDocumentPage={index === itineraryPages.length - 1} recordTotals={itineraryTotals} rates={rates} />);
   const orsDocument = <MyTevOrsPage record={record} rates={rates} />;
   const disbursementDocument = <MyTevDisbursementPage record={record} rates={rates} />;
-  const cenrrDocuments = cenrrPages.map((page, index) => <MyTevCenrrPage key={`cenrr-${index}`} record={record} page={page} pageNumber={index + 1} pageCount={cenrrPages.length} grandTotal={cenrrGrandTotal} />);
+  const cenrrDocuments = cenrrList.length
+    ? cenrrPages.map((page, index) => <MyTevCenrrPage key={`cenrr-${index}`} record={record} page={page} pageNumber={index + 1} pageCount={cenrrPages.length} grandTotal={cenrrGrandTotal} />)
+    : [];
   const ctcDocument = <MyTevCtcPage record={record} />;
   return <div className="mytev-preview-pages">
     {order === "print" ? <>{disbursementDocument}{orsDocument}{itineraryDocuments}{cenrrDocuments}{ctcDocument}</> : <>{itineraryDocuments}{orsDocument}{disbursementDocument}{cenrrDocuments}{ctcDocument}</>}
