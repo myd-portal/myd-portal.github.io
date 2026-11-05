@@ -199,13 +199,13 @@ function TravelReferenceEditor({ references, month, title, description, labelPre
     <div className="mytev-reference-list">{references.map((reference, index) => {
       const referenceLabel = `${labelPrefix} reference ${index + 1}`;
       return <fieldset className="mytev-reference-row" key={`${labelPrefix}-travel-reference-${index}`}><legend>Travel reference {index + 1}</legend>
-        <label>Travel No.<input aria-label={`${referenceLabel} Travel No.`} value={reference.travelOrderNo} onChange={(event) => onUpdate(index, { travelOrderNo: event.target.value })} maxLength={40} required disabled={saving} /></label>
+        <label>Travel No.<input aria-label={`${referenceLabel} Travel No.`} value={reference.travelOrderNo} onChange={(event) => onUpdate(index, { travelOrderNo: event.target.value })} maxLength={40} disabled={saving} /></label>
         <div className="mytev-date-field mytev-reference-to-date"><span>TO Date (Records Unit)</span><MonthAwareDateInput label={`${referenceLabel} TO Date (Records Unit)`} month={month} value={reference.toDateRecordsUnit} onChange={(value) => onUpdate(index, { toDateRecordsUnit: value })} /></div>
-        <div className="mytev-date-field"><span>Date From</span><MonthAwareDateInput label={`${referenceLabel} Date From`} month={month} value={reference.dateFrom} required onChange={(value) => {
+        <div className="mytev-date-field"><span>Date From</span><MonthAwareDateInput label={`${referenceLabel} Date From`} month={month} value={reference.dateFrom} onChange={(value) => {
           const dateTo = reference.dateTo && (!value || reference.dateTo >= value) ? reference.dateTo : "";
           onUpdate(index, { dateFrom: value, dateTo });
         }} /></div>
-        <div className="mytev-date-field"><span>Date To</span><MonthAwareDateInput label={`${referenceLabel} Date To`} month={month} minDate={reference.dateFrom} value={reference.dateTo} required onChange={(value) => onUpdate(index, { dateTo: value })} /></div>
+        <div className="mytev-date-field"><span>Date To</span><MonthAwareDateInput label={`${referenceLabel} Date To`} month={month} minDate={reference.dateFrom} value={reference.dateTo} onChange={(value) => onUpdate(index, { dateTo: value })} /></div>
         {references.length > 1 && <button type="button" className="mytev-remove-reference remove-action" aria-label={`Remove ${referenceLabel}`} disabled={saving} onClick={() => onRemove(index)}>Remove</button>}
       </fieldset>;
     })}</div>
@@ -351,20 +351,12 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       setMessage("Choose a valid Month and Year.");
       return;
     }
-    if (!references.length || references.some((reference) => !reference.travelOrderNo.trim() || !reference.dateFrom || !reference.dateTo)) {
-      setMessage("Enter a Travel Order No. and date range for each travel reference.");
-      return;
-    }
-    if (references.some((reference) => reference.dateTo < reference.dateFrom)) {
+    if (references.some((reference) => reference.dateFrom && reference.dateTo && reference.dateTo < reference.dateFrom)) {
       setMessage("Each Travel Order end date must be on or after its start date.");
       return;
     }
     const selectedEntries = selectedPersonnelEntries.filter((entry) => entry.userId);
-    if (selectedEntries.some((entry) => !entry.travelReferences.length || entry.travelReferences.some((reference) => !reference.travelOrderNo.trim() || !reference.dateFrom || !reference.dateTo))) {
-      setMessage("Enter a Travel Order No. and date range for every reference for each selected personnel.");
-      return;
-    }
-    if (selectedEntries.some((entry) => entry.travelReferences.some((reference) => reference.dateTo < reference.dateFrom))) {
+    if (selectedEntries.some((entry) => entry.travelReferences.some((reference) => reference.dateFrom && reference.dateTo && reference.dateTo < reference.dateFrom))) {
       setMessage("Each selected personnel's Travel Order end date must be on or after its start date.");
       return;
     }
@@ -422,11 +414,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       setMessage("Each selected person must complete their name, address, Tax Identification No., and position in Profile first.");
       return;
     }
-    if (selectedPersonnel.some((entry) => !entry.travelReferences.length || entry.travelReferences.some((reference) => !reference.travelOrderNo.trim() || !reference.dateFrom || !reference.dateTo))) {
-      setMessage("Enter a Travel Order No. and date range for every reference for each selected personnel.");
-      return;
-    }
-    if (selectedPersonnel.some((entry) => entry.travelReferences.some((reference) => reference.dateTo < reference.dateFrom))) {
+    if (selectedPersonnel.some((entry) => entry.travelReferences.some((reference) => reference.dateFrom && reference.dateTo && reference.dateTo < reference.dateFrom))) {
       setMessage("Each selected personnel's Travel Order end date must be on or after its start date.");
       return;
     }
