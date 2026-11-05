@@ -2027,7 +2027,7 @@ service cloud.firestore {
                 && isFodCalendarApproverAccount(request.auth.uid, "Chief")))));
       allow create: if isVerifiedUser()
         && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.keys().size() <= 30
+        && request.resource.data.keys().size() <= 31
         && request.resource.data.filedDate is string
         && request.resource.data.name is string
         && request.resource.data.firstName is string
