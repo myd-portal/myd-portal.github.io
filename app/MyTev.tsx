@@ -219,7 +219,7 @@ function documentId() {
 }
 
 function hasRowData(row: TevItineraryRow) {
-  return Boolean(row.dateFrom || row.dateTo || row.visitedPlaces || row.departureTimeFrom || row.departureTimeTo || row.region || row.claims.length || row.meansOfTransportation || row.transportation);
+  return Boolean(row.dateFrom || row.dateTo || row.visitedPlaces || row.departureTimeFrom || row.departureTimeTo || row.still || row.region || row.claims.length || row.meansOfTransportation || row.transportation);
 }
 
 function timestampMillis(value: unknown) {
@@ -372,22 +372,29 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
     for (const [itineraryIndex, itinerary] of itineraries.entries()) {
       const rows = itinerary.rows.filter(hasRowData).map((row) => ({
         ...row,
+        still: Boolean(row.still),
         dateTo: row.dateTo && row.dateTo >= row.dateFrom ? row.dateTo : row.dateFrom,
         visitedPlaces: row.visitedPlaces.trim(),
-        transportation: row.meansOfTransportation === "Not Applicable" ? "Not Applicable" : row.transportation.trim(),
+        departureTimeFrom: row.still ? "" : row.departureTimeFrom,
+        departureTimeTo: row.still ? "" : row.departureTimeTo,
+        region: row.still ? "" : row.region,
+        claims: row.still ? [] : row.claims,
+        meansOfTransportation: row.still ? "" : row.meansOfTransportation,
+        transportation: row.still ? "" : row.meansOfTransportation === "Not Applicable" ? "Not Applicable" : row.transportation.trim(),
       }));
       if (!rows.length) return { error: `Add at least one travel line to Itinerary ${itineraryIndex + 1}.` };
       for (const [rowIndex, row] of rows.entries()) {
-        if (!row.dateFrom || !row.dateTo || !row.visitedPlaces || !row.departureTimeFrom || !row.departureTimeTo) {
-          return { error: `Complete the date, destination, and times for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
+        if (!row.dateFrom || !row.dateTo || !row.visitedPlaces || (!row.still && (!row.departureTimeFrom || !row.departureTimeTo))) {
+          const missingFields = row.still ? "date and destination" : "date, destination, and times";
+          return { error: `Complete the ${missingFields} for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
         }
-        if (!rates.some((rate) => rate.region === row.region)) {
+        if (!row.still && !rates.some((rate) => rate.region === row.region)) {
           return { error: `Select a valid region for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
         }
-        if (!row.meansOfTransportation) {
+        if (!row.still && !row.meansOfTransportation) {
           return { error: `Select the means of transportation for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
         }
-        if (isTevTransportationAmountRequired(row.meansOfTransportation) && !row.transportation) {
+        if (!row.still && isTevTransportationAmountRequired(row.meansOfTransportation) && !row.transportation) {
           return { error: `Enter the transportation amount for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
         }
       }
@@ -553,23 +560,24 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
             {itinerary.rows.map((row, rowIndex) => <fieldset className="mytev-itinerary-line" key={`${itinerary.id}-row-${rowIndex}`}>
               <legend>Row {String(rowIndex + 1).padStart(2, "0")}</legend>
               <div className="mytev-itinerary-line-actions"><button type="button" className="mytev-remove-row remove-action" aria-label={`Remove itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}`} onClick={() => removeRow(itinerary.id, rowIndex)}>Remove row</button></div>
-              <div className="mytev-itinerary-row-top">
+              <div className={`mytev-itinerary-row-top${row.still ? " mytev-itinerary-row-top--still" : ""}`}>
                 <div className="mytev-date-field"><span>Date</span><MonthAwareDateInput label="Itinerary date" month={month} value={row.dateFrom} onChange={(value) => {
                   updateRow(itinerary.id, rowIndex, { dateFrom: value, dateTo: value });
                 }} /></div>
                 <label className="mytev-row-places">Visited Places<input value={row.visitedPlaces} maxLength={180} onChange={(event) => updateRow(itinerary.id, rowIndex, { visitedPlaces: event.target.value })} /></label>
-                <label>Departure Time From<input type="time" value={row.departureTimeFrom} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeFrom: event.target.value })} /></label>
-                <label>Departure Time To<input type="time" value={row.departureTimeTo} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeTo: event.target.value })} /></label>
+                {!row.still && <label>Departure Time From<input type="time" value={row.departureTimeFrom} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeFrom: event.target.value })} /></label>}
+                {!row.still && <label>Departure Time To<input type="time" value={row.departureTimeTo} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeTo: event.target.value })} /></label>}
+                <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.still)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: true, departureTimeFrom: "", departureTimeTo: "", region: "", claims: [], meansOfTransportation: "", transportation: "" } : { still: false })} /><span>Still</span></label>
               </div>
-              <div className="mytev-itinerary-row-bottom">
+              {!row.still && <div className="mytev-itinerary-row-bottom">
                 <label className="mytev-row-region">Region<select required={hasRowData(row)} value={row.region} onChange={(event) => updateRow(itinerary.id, rowIndex, { region: event.target.value })}><option value="">Select region</option>{rates.map((rate) => <option key={rate.region} value={rate.region}>{rate.region}</option>)}</select></label>
                 <label className="mytev-row-means">Means of Transportation<select required={hasRowData(row)} value={row.meansOfTransportation} onChange={(event) => {
                   const means = event.target.value as TevItineraryRow["meansOfTransportation"];
                   updateRow(itinerary.id, rowIndex, { meansOfTransportation: means, transportation: means === "Not Applicable" ? "Not Applicable" : isTevTransportationAmountRequired(means) ? row.transportation : "" });
                 }}><option value="">Select mode</option>{tevTransportationMeans.map((means) => <option key={means} value={means}>{means}</option>)}</select></label>
                 <label className="mytev-row-transportation">Transportation{isTevTransportationAmountRequired(row.meansOfTransportation) ? <input type="number" min="0" step="0.01" inputMode="decimal" value={row.transportation} onChange={(event) => updateRow(itinerary.id, rowIndex, { transportation: event.target.value })} placeholder="0.00" /> : <span className="mytev-not-applicable">{row.meansOfTransportation === "Not Applicable" ? "Not Applicable" : "Not applicable"}</span>}</label>
-              </div>
-              <div className="mytev-itinerary-row-claims"><fieldset className="mytev-claim-picker"><legend>Claim / Per Diem</legend>{tevClaims.map((claim) => <label key={claim.id}><input type="checkbox" checked={row.claims.includes(claim.id)} disabled={!row.region} onChange={(event) => toggleClaim(itinerary.id, rowIndex, claim.id, event.target.checked)} /><span>{claim.label}{row.region && <small>₱{formatTevAmount(perDiemForClaims([claim.id], row.region, rates))}</small>}</span></label>)}</fieldset></div>
+              </div>}
+              {!row.still && <div className="mytev-itinerary-row-claims"><fieldset className="mytev-claim-picker"><legend>Claim / Per Diem</legend>{tevClaims.map((claim) => <label key={claim.id}><input type="checkbox" checked={row.claims.includes(claim.id)} disabled={!row.region} onChange={(event) => toggleClaim(itinerary.id, rowIndex, claim.id, event.target.checked)} /><span>{claim.label}{row.region && <small>₱{formatTevAmount(perDiemForClaims([claim.id], row.region, rates))}</small>}</span></label>)}</fieldset></div>}
             </fieldset>)}
           </div>
           <div className="mytev-add-row-control">{!rowThirteenFilled && <button type="button" className="ghost-button mytev-add-row" disabled={rowLimitReached} onClick={() => setItineraries((current) => current.map((item) => item.id === itinerary.id && item.rows.length < maxItineraryRows ? { ...item, rows: [...item.rows, blankTevItineraryRow()] } : item))}>Add row</button>}<span>{itinerary.rows.length} {itinerary.rows.length === 1 ? "row" : "rows"} · {rowLimitReached ? "maximum reached" : "page breaks are automatic"}</span></div>

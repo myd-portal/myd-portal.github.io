@@ -1,6 +1,7 @@
 node_modules/
 .next/
 out/
+.firebase/
 .env
 .env.local
 .secret.local

@@ -28,7 +28,7 @@ import {
   tevPurpose,
   totalsForItinerary,
   totalsForRecord,
-  perDiemForClaims,
+  perDiemForRow,
   transportationForRow,
   type MyTevRecord,
   type TevItinerary,
@@ -186,13 +186,13 @@ function MyTevItineraryPage({ record, itinerary, page, pageNumber, documentPageN
           return <tr key={`${itinerary.id}-line-${pageNumber}-${index}`} style={{ height: `${height}mm` }}>
           {!sameDateAsPrevious && <td className="mytev-itinerary-date" rowSpan={hasDate ? itineraryDateRowSpan(rows.map((item) => item.row), index) : 1}>{row ? formatTevDateRange(row.dateFrom, row.dateTo) : ""}</td>}
           <td>{row?.visitedPlaces}</td>
-          <td className="mytev-itinerary-departure">{row ? formatTevTime(row.departureTimeFrom) : ""}</td>
-          <td>{row ? formatTevTime(row.departureTimeTo) : ""}</td>
-          <td>{row ? displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
+          <td className="mytev-itinerary-departure">{row && !row.still ? formatTevTime(row.departureTimeFrom) : ""}</td>
+          <td>{row && !row.still ? formatTevTime(row.departureTimeTo) : ""}</td>
+          <td>{row && !row.still ? displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
           <td className="mytev-itinerary-transportation">{row ? formatTevAmountIfNonZero(transportationForRow(row)) : ""}</td>
-          <td>{row ? formatTevAmountIfNonZero(perDiemForClaims(row.claims, row.region, rates)) : ""}</td>
+          <td>{row ? formatTevAmountIfNonZero(perDiemForRow(row, rates)) : ""}</td>
           <td />
-          <td>{row && hasItineraryData(row) ? formatTevAmountIfNonZero(perDiemForClaims(row.claims, row.region, rates) + transportationForRow(row)) : ""}</td>
+          <td>{row && hasItineraryData(row) ? formatTevAmountIfNonZero(perDiemForRow(row, rates) + transportationForRow(row)) : ""}</td>
         </tr>})}</tbody>
         {!isLastDocumentPage ? <tfoot><tr><td className="mytev-itinerary-total-label" colSpan={5}>SUBTOTAL</td><td>{formatTevAmountIfNonZero(pageTotals.transportation)}</td><td>{formatTevAmountIfNonZero(pageTotals.perDiem)}</td><td>-</td><td>{formatTevAmountIfNonZero(pageTotals.grandTotal)}</td></tr></tfoot> : <tfoot><tr><td className="mytev-itinerary-total-label" colSpan={5}>TOTAL</td><td>{formatTevAmountIfNonZero(totals.transportation)}</td><td>{formatTevAmountIfNonZero(totals.perDiem)}</td><td>-</td><td>{formatTevAmountIfNonZero(totals.grandTotal)}</td></tr></tfoot>}
       </table>

@@ -102,6 +102,7 @@ export type TevItineraryRow = {
   visitedPlaces: string;
   departureTimeFrom: string;
   departureTimeTo: string;
+  still?: boolean;
   region: string;
   claims: TevClaimId[];
   meansOfTransportation: TevTransportationMeans;
@@ -172,6 +173,7 @@ export function blankTevItineraryRow(): TevItineraryRow {
     visitedPlaces: "",
     departureTimeFrom: "",
     departureTimeTo: "",
+    still: false,
     region: "",
     claims: [],
     meansOfTransportation: "",
@@ -303,12 +305,16 @@ export function perDiemForClaims(claims: TevClaimId[], region: string, rates: Te
   }, 0);
 }
 
+export function perDiemForRow(row: TevItineraryRow, rates: TevRegionRate[]) {
+  return row.still ? 0 : perDiemForClaims(row.claims, row.region, rates);
+}
+
 export function transportationForRow(row: TevItineraryRow) {
-  return isTevTransportationAmountRequired(row.meansOfTransportation) ? numberAmount(row.transportation) : 0;
+  return !row.still && isTevTransportationAmountRequired(row.meansOfTransportation) ? numberAmount(row.transportation) : 0;
 }
 
 export function totalsForItinerary(itinerary: TevItinerary, rates: TevRegionRate[]): TevTotals {
-  const perDiem = itinerary.rows.reduce((total, row) => total + perDiemForClaims(row.claims, row.region, rates), 0);
+  const perDiem = itinerary.rows.reduce((total, row) => total + perDiemForRow(row, rates), 0);
   const transportation = itinerary.rows.reduce((total, row) => total + transportationForRow(row), 0);
   return { perDiem, transportation, grandTotal: perDiem + transportation };
 }
