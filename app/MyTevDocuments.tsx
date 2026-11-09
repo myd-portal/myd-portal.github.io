@@ -29,6 +29,7 @@ import {
   totalsForItinerary,
   totalsForRecord,
   perDiemForRow,
+  isTevStillRow,
   transportationForRow,
   type MyTevRecord,
   type TevItinerary,
@@ -186,9 +187,9 @@ function MyTevItineraryPage({ record, itinerary, page, pageNumber, documentPageN
           return <tr key={`${itinerary.id}-line-${pageNumber}-${index}`} style={{ height: `${height}mm` }}>
           {!sameDateAsPrevious && <td className="mytev-itinerary-date" rowSpan={hasDate ? itineraryDateRowSpan(rows.map((item) => item.row), index) : 1}>{row ? formatTevDateRange(row.dateFrom, row.dateTo) : ""}</td>}
           <td>{row?.visitedPlaces}</td>
-          <td className="mytev-itinerary-departure">{row && !row.still ? formatTevTime(row.departureTimeFrom) : ""}</td>
-          <td>{row && !row.still ? formatTevTime(row.departureTimeTo) : ""}</td>
-          <td>{row && !row.still ? displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
+          <td className="mytev-itinerary-departure">{row && !isTevStillRow(row) ? formatTevTime(row.departureTimeFrom) : ""}</td>
+          <td>{row && !isTevStillRow(row) ? formatTevTime(row.departureTimeTo) : ""}</td>
+          <td>{row && !isTevStillRow(row) ? displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
           <td className="mytev-itinerary-transportation">{row ? formatTevAmountIfNonZero(transportationForRow(row)) : ""}</td>
           <td>{row ? formatTevAmountIfNonZero(perDiemForRow(row, rates)) : ""}</td>
           <td />

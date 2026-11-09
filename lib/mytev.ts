@@ -103,6 +103,7 @@ export type TevItineraryRow = {
   departureTimeFrom: string;
   departureTimeTo: string;
   still?: boolean;
+  stillWithPerDiem?: boolean;
   region: string;
   claims: TevClaimId[];
   meansOfTransportation: TevTransportationMeans;
@@ -174,6 +175,7 @@ export function blankTevItineraryRow(): TevItineraryRow {
     departureTimeFrom: "",
     departureTimeTo: "",
     still: false,
+    stillWithPerDiem: false,
     region: "",
     claims: [],
     meansOfTransportation: "",
@@ -277,6 +279,10 @@ export function isTevTransportationAmountRequired(means: TevTransportationMeans)
   return transportNeedsAmount.has(means);
 }
 
+export function isTevStillRow(row: Pick<TevItineraryRow, "still" | "stillWithPerDiem">) {
+  return Boolean(row.still || row.stillWithPerDiem);
+}
+
 export function normalizeTevTransportationMeansForEditor(means: TevTransportationMeans): TevTransportationMeans {
   if (means === "Plane") return "Plane (GS)";
   if (means === "None") return "";
@@ -306,11 +312,11 @@ export function perDiemForClaims(claims: TevClaimId[], region: string, rates: Te
 }
 
 export function perDiemForRow(row: TevItineraryRow, rates: TevRegionRate[]) {
-  return row.still ? 0 : perDiemForClaims(row.claims, row.region, rates);
+  return row.still && !row.stillWithPerDiem ? 0 : perDiemForClaims(row.claims, row.region, rates);
 }
 
 export function transportationForRow(row: TevItineraryRow) {
-  return !row.still && isTevTransportationAmountRequired(row.meansOfTransportation) ? numberAmount(row.transportation) : 0;
+  return !isTevStillRow(row) && isTevTransportationAmountRequired(row.meansOfTransportation) ? numberAmount(row.transportation) : 0;
 }
 
 export function totalsForItinerary(itinerary: TevItinerary, rates: TevRegionRate[]): TevTotals {
