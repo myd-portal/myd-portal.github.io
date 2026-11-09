@@ -53,7 +53,7 @@ export const tevDivisions = [
   "Research Division",
 ] as const;
 
-export const tevTransportationMeans = ["Boat", "MCH", "RP", "Plane (GS)", "Plane (Credit)", "PUB", "PUV", "Not Applicable"] as const;
+export const tevTransportationMeans = ["Boat", "MCH", "RP", "Plane (GS)", "Plane (Credit)", "PUB", "PUV", "Taxi", "Not Applicable", "Others"] as const;
 
 export type TevRegionRate = {
   region: string;
@@ -108,6 +108,7 @@ export type TevItineraryRow = {
   claims: TevClaimId[];
   meansOfTransportation: TevTransportationMeans;
   transportation: string;
+  otherTransportation?: string;
 };
 
 export type TevItinerary = {
@@ -149,7 +150,7 @@ export type MyTevRecord = {
 
 export type TevTotals = { perDiem: number; transportation: number; grandTotal: number };
 
-const transportNeedsAmount = new Set<TevTransportationMeans>(["Boat", "MCH", "Plane (Credit)", "PUV", "PUB"]);
+const transportNeedsAmount = new Set<TevTransportationMeans>(["Boat", "MCH", "Plane (Credit)", "PUV", "Taxi", "PUB", "Others"]);
 const signatoryByDivision: Record<TevDivision, { name: string; position: "Chief" | "OIC" }> = {
   "Field Operations Division": { name: "Melody M. Guimary", position: "Chief" },
   "Planning, Monitoring and Evaluation Division": { name: "Gemma A. Asufre", position: "Chief" },
@@ -180,6 +181,7 @@ export function blankTevItineraryRow(): TevItineraryRow {
     claims: [],
     meansOfTransportation: "",
     transportation: "",
+    otherTransportation: "",
   };
 }
 

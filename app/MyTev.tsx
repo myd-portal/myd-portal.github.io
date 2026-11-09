@@ -220,7 +220,7 @@ function documentId() {
 }
 
 function hasRowData(row: TevItineraryRow) {
-  return Boolean(row.dateFrom || row.dateTo || row.visitedPlaces || row.departureTimeFrom || row.departureTimeTo || row.still || row.stillWithPerDiem || row.region || row.claims.length || row.meansOfTransportation || row.transportation);
+  return Boolean(row.dateFrom || row.dateTo || row.visitedPlaces || row.departureTimeFrom || row.departureTimeTo || row.still || row.stillWithPerDiem || row.region || row.claims.length || row.meansOfTransportation || row.transportation || row.otherTransportation);
 }
 
 function timestampMillis(value: unknown) {
@@ -245,7 +245,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   const evidenceOfTravel = selectedEvidence.join(", ");
   const [divisionName, setDivisionName] = useState<TevDivision>(() => initialRecord?.divisionName ?? profileDivision ?? tevDivisions[0]);
   const [itineraries, setItineraries] = useState<TevItinerary[]>(() => initialRecord
-    ? initialRecord.itineraries.map((itinerary) => ({ ...itinerary, rows: itinerary.rows.map((row) => ({ ...row, still: Boolean(row.still) && !row.stillWithPerDiem, stillWithPerDiem: Boolean(row.stillWithPerDiem), meansOfTransportation: normalizeTevTransportationMeansForEditor(row.meansOfTransportation), claims: [...row.claims] })) }))
+    ? initialRecord.itineraries.map((itinerary) => ({ ...itinerary, rows: itinerary.rows.map((row) => ({ ...row, still: Boolean(row.still) && !row.stillWithPerDiem, stillWithPerDiem: Boolean(row.stillWithPerDiem), meansOfTransportation: normalizeTevTransportationMeansForEditor(row.meansOfTransportation), otherTransportation: row.otherTransportation ?? "", claims: [...row.claims] })) }))
     : [initialItinerary()]);
   const [selectedPersonnelEntries, setSelectedPersonnelEntries] = useState<TevPersonnelDraft[]>([]);
   const [saving, setSaving] = useState(false);
@@ -383,6 +383,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         claims: row.still && !row.stillWithPerDiem ? [] : row.claims,
         meansOfTransportation: isTevStillRow(row) ? "" : row.meansOfTransportation,
         transportation: isTevStillRow(row) ? "" : row.meansOfTransportation === "Not Applicable" ? "Not Applicable" : row.transportation.trim(),
+        otherTransportation: !isTevStillRow(row) && row.meansOfTransportation === "Others" ? row.otherTransportation?.trim() ?? "" : "",
       }));
       if (!rows.length) return { error: `Add at least one travel line to Itinerary ${itineraryIndex + 1}.` };
       for (const [rowIndex, row] of rows.entries()) {
@@ -399,6 +400,9 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         }
         if (!stillRow && isTevTransportationAmountRequired(row.meansOfTransportation) && !row.transportation) {
           return { error: `Enter the transportation amount for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
+        }
+        if (!stillRow && row.meansOfTransportation === "Others" && !row.otherTransportation) {
+          return { error: `Describe the other means of transportation for Itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}.` };
         }
       }
       const dateValues = rows.flatMap((row) => [row.dateFrom, row.dateTo]).sort();
@@ -571,16 +575,17 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
                 {!isTevStillRow(row) && <label>Departure Time From<input type="time" value={row.departureTimeFrom} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeFrom: event.target.value })} /></label>}
                 {!isTevStillRow(row) && <label>Departure Time To<input type="time" value={row.departureTimeTo} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeTo: event.target.value })} /></label>}
                 <div className="mytev-row-still-options">
-                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.still)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: true, stillWithPerDiem: false, departureTimeFrom: "", departureTimeTo: "", region: "", claims: [], meansOfTransportation: "", transportation: "" } : { still: false, stillWithPerDiem: false, region: "", claims: [] })} /><span>Still</span></label>
-                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.stillWithPerDiem)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: false, stillWithPerDiem: true, departureTimeFrom: "", departureTimeTo: "", meansOfTransportation: "", transportation: "" } : { stillWithPerDiem: false })} /><span>Still with Per Diem</span></label>
+                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.still)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: true, stillWithPerDiem: false, departureTimeFrom: "", departureTimeTo: "", region: "", claims: [], meansOfTransportation: "", transportation: "", otherTransportation: "" } : { still: false, stillWithPerDiem: false, region: "", claims: [] })} /><span>Still</span></label>
+                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.stillWithPerDiem)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: false, stillWithPerDiem: true, departureTimeFrom: "", departureTimeTo: "", meansOfTransportation: "", transportation: "", otherTransportation: "" } : { stillWithPerDiem: false })} /><span>Still with Per Diem</span></label>
                 </div>
               </div>
               {(!isTevStillRow(row) || row.stillWithPerDiem) && <div className={`mytev-itinerary-row-bottom${row.stillWithPerDiem ? " mytev-itinerary-row-bottom--still-per-diem" : ""}`}>
                 <label className="mytev-row-region">Region<select required={hasRowData(row)} value={row.region} onChange={(event) => updateRow(itinerary.id, rowIndex, { region: event.target.value })}><option value="">Select region</option>{rates.map((rate) => <option key={rate.region} value={rate.region}>{rate.region}</option>)}</select></label>
-                {!isTevStillRow(row) && <><label className="mytev-row-means">Means of Transportation<select required={hasRowData(row)} value={row.meansOfTransportation} onChange={(event) => {
+                {!isTevStillRow(row) && <>{row.meansOfTransportation === "Others" ? <div className="mytev-row-means mytev-row-means--other"><label htmlFor={`tev-other-means-${itinerary.id}-${rowIndex}`}>Means of Transportation</label><div className="mytev-other-means-control"><input id={`tev-other-means-${itinerary.id}-${rowIndex}`} type="text" maxLength={120} required={hasRowData(row)} value={row.otherTransportation ?? ""} onChange={(event) => updateRow(itinerary.id, rowIndex, { otherTransportation: event.target.value })} placeholder="Specify means of transportation" /><button type="button" onClick={() => updateRow(itinerary.id, rowIndex, { meansOfTransportation: "", otherTransportation: "" })}>Change mode</button></div></div> : <label className="mytev-row-means">Means of Transportation<select required={hasRowData(row)} value={row.meansOfTransportation} onChange={(event) => {
                   const means = event.target.value as TevItineraryRow["meansOfTransportation"];
-                  updateRow(itinerary.id, rowIndex, { meansOfTransportation: means, transportation: means === "Not Applicable" ? "Not Applicable" : isTevTransportationAmountRequired(means) ? row.transportation : "" });
-                }}><option value="">Select mode</option>{tevTransportationMeans.map((means) => <option key={means} value={means}>{means}</option>)}</select></label>
+                  const keepAmount = isTevTransportationAmountRequired(row.meansOfTransportation) && isTevTransportationAmountRequired(means);
+                  updateRow(itinerary.id, rowIndex, { meansOfTransportation: means, transportation: means === "Not Applicable" ? "Not Applicable" : keepAmount ? row.transportation : "", otherTransportation: "" });
+                }}><option value="">Select mode</option>{tevTransportationMeans.map((means) => <option key={means} value={means}>{means}</option>)}</select></label>}
                 <label className="mytev-row-transportation">Transportation{isTevTransportationAmountRequired(row.meansOfTransportation) ? <input type="number" min="0" step="0.01" inputMode="decimal" value={row.transportation} onChange={(event) => updateRow(itinerary.id, rowIndex, { transportation: event.target.value })} placeholder="0.00" /> : <span className="mytev-not-applicable">{row.meansOfTransportation === "Not Applicable" ? "Not Applicable" : "Not applicable"}</span>}</label>
                 </>}
               </div>}

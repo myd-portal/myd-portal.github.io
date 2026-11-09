@@ -55,7 +55,7 @@ function mergeSavedTravelOrders(current: TravelOrder[], savedOrders: TravelOrder
 const officeStations = ["DA-RFO XIII", "DA-ILD Caraga"] as const;
 const legacyChargeOptions = ["FOD-AGRISTAT", "FOD-AMIA", "FOD-DRRM"];
 const otherChargeOption = "__travel-order-other__";
-const travelTransportationOptions = ["Boat", "MCH", "Plane", "PUB", "PUV", "RP"] as const;
+const travelTransportationOptions = ["Boat", "MCH", "Plane", "PUB", "PUV", "Taxi", "RP"] as const;
 const statuses: TravelOrderStatus[] = ["Pending", "Approved", "Disapproved"];
 const asset = (path: string) => `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 

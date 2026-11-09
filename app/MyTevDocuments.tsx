@@ -80,7 +80,7 @@ function itineraryRowHeight(row: TevItineraryRow) {
     7,
     estimateTextHeight(row.visitedPlaces, 32, 3.2, 7),
     estimateTextHeight(formatTevDateRange(row.dateFrom, row.dateTo), 19, 3.2, 7),
-    estimateTextHeight(row.meansOfTransportation, 13, 3.2, 7),
+    estimateTextHeight(row.meansOfTransportation === "Others" ? row.otherTransportation ?? "" : row.meansOfTransportation, 13, 3.2, 7),
   );
 }
 
@@ -189,7 +189,7 @@ function MyTevItineraryPage({ record, itinerary, page, pageNumber, documentPageN
           <td>{row?.visitedPlaces}</td>
           <td className="mytev-itinerary-departure">{row && !isTevStillRow(row) ? formatTevTime(row.departureTimeFrom) : ""}</td>
           <td>{row && !isTevStillRow(row) ? formatTevTime(row.departureTimeTo) : ""}</td>
-          <td>{row && !isTevStillRow(row) ? displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
+          <td>{row && !isTevStillRow(row) ? row.meansOfTransportation === "Others" ? row.otherTransportation : displayTevTransportationMeans(row.meansOfTransportation) : ""}</td>
           <td className="mytev-itinerary-transportation">{row ? formatTevAmountIfNonZero(transportationForRow(row)) : ""}</td>
           <td>{row ? formatTevAmountIfNonZero(perDiemForRow(row, rates)) : ""}</td>
           <td />
