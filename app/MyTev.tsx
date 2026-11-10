@@ -377,8 +377,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         stillWithPerDiem: Boolean(row.stillWithPerDiem),
         dateTo: row.dateTo && row.dateTo >= row.dateFrom ? row.dateTo : row.dateFrom,
         visitedPlaces: row.visitedPlaces.trim(),
-        departureTimeFrom: isTevStillRow(row) ? "" : row.departureTimeFrom,
-        departureTimeTo: isTevStillRow(row) ? "" : row.departureTimeTo,
+        departureTimeFrom: row.departureTimeFrom,
+        departureTimeTo: row.departureTimeTo,
         region: row.still && !row.stillWithPerDiem ? "" : row.region,
         claims: row.still && !row.stillWithPerDiem ? [] : row.claims,
         meansOfTransportation: isTevStillRow(row) ? "" : row.meansOfTransportation,
@@ -567,16 +567,16 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
             {itinerary.rows.map((row, rowIndex) => <fieldset className="mytev-itinerary-line" key={`${itinerary.id}-row-${rowIndex}`}>
               <legend>Row {String(rowIndex + 1).padStart(2, "0")}</legend>
               <div className="mytev-itinerary-line-actions"><button type="button" className="mytev-remove-row remove-action" aria-label={`Remove itinerary ${itineraryIndex + 1}, row ${rowIndex + 1}`} onClick={() => removeRow(itinerary.id, rowIndex)}>Remove row</button></div>
-              <div className={`mytev-itinerary-row-top${isTevStillRow(row) ? " mytev-itinerary-row-top--still" : ""}`}>
+              <div className="mytev-itinerary-row-top">
                 <div className="mytev-date-field"><span>Date</span><MonthAwareDateInput label="Itinerary date" month={month} value={row.dateFrom} onChange={(value) => {
                   updateRow(itinerary.id, rowIndex, { dateFrom: value, dateTo: value });
                 }} /></div>
                 <label className="mytev-row-places">Visited Places<input value={row.visitedPlaces} maxLength={180} onChange={(event) => updateRow(itinerary.id, rowIndex, { visitedPlaces: event.target.value })} /></label>
-                {!isTevStillRow(row) && <label>Departure Time From<input type="time" value={row.departureTimeFrom} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeFrom: event.target.value })} /></label>}
-                {!isTevStillRow(row) && <label>Departure Time To<input type="time" value={row.departureTimeTo} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeTo: event.target.value })} /></label>}
+                <label>Departure Time From<input type="time" value={row.departureTimeFrom} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeFrom: event.target.value })} /></label>
+                <label>Departure Time To<input type="time" value={row.departureTimeTo} onChange={(event) => updateRow(itinerary.id, rowIndex, { departureTimeTo: event.target.value })} /></label>
                 <div className="mytev-row-still-options">
-                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.still)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: true, stillWithPerDiem: false, departureTimeFrom: "", departureTimeTo: "", region: "", claims: [], meansOfTransportation: "", transportation: "", otherTransportation: "" } : { still: false, stillWithPerDiem: false, region: "", claims: [] })} /><span>Still</span></label>
-                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.stillWithPerDiem)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: false, stillWithPerDiem: true, departureTimeFrom: "", departureTimeTo: "", meansOfTransportation: "", transportation: "", otherTransportation: "" } : { stillWithPerDiem: false })} /><span>Still with Per Diem</span></label>
+                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.still)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: true, stillWithPerDiem: false, region: "", claims: [], meansOfTransportation: "", transportation: "", otherTransportation: "" } : { still: false, stillWithPerDiem: false, region: "", claims: [] })} /><span>Still</span></label>
+                  <label className="mytev-row-still"><input type="checkbox" checked={Boolean(row.stillWithPerDiem)} onChange={(event) => updateRow(itinerary.id, rowIndex, event.target.checked ? { still: false, stillWithPerDiem: true, meansOfTransportation: "", transportation: "", otherTransportation: "" } : { stillWithPerDiem: false })} /><span>Still with Per Diem</span></label>
                 </div>
               </div>
               {(!isTevStillRow(row) || row.stillWithPerDiem) && <div className={`mytev-itinerary-row-bottom${row.stillWithPerDiem ? " mytev-itinerary-row-bottom--still-per-diem" : ""}`}>

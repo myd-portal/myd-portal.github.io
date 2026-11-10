@@ -101,7 +101,6 @@
 .mytev-remove-row:hover,.mytev-remove-row:active{box-shadow:none;color:#d85532;filter:none;transform:none}
 .mytev-remove-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mytev-itinerary-row-top{display:grid;gap:12px;grid-template-columns:minmax(100px,.9fr) minmax(160px,1.6fr) minmax(125px,1.1fr) minmax(125px,1.1fr) auto;min-width:0}
-.mytev-itinerary-row-top--still{grid-template-columns:minmax(100px,.9fr) minmax(160px,1.6fr) auto}
 .mytev-row-still-options{align-items:center;align-self:end;display:flex;flex-wrap:wrap;gap:10px;min-height:44px}
 .mytev-row-still{align-items:center;display:flex;gap:8px;min-height:44px;white-space:nowrap}
 .mytev-row-still input[type=checkbox]{accent-color:var(--accent);flex:0 0 auto;height:18px;margin:0;padding:0;width:18px}
