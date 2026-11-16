@@ -2376,7 +2376,6 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidMyTevRecord(request.resource.data);
       allow update: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
-        && request.resource.data.month == resource.data.month
         && request.resource.data.createdAt == resource.data.createdAt
         && isValidMyTevRecord(request.resource.data);
       allow delete: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;

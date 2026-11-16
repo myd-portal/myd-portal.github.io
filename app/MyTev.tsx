@@ -502,7 +502,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
     {step === "details" ? <form className="mytev-form" onSubmit={continueToItineraries}>
       <section className="mytev-form-group"><h3>Official travel</h3><div className="mytev-trip-fields">
         <label>Official Station<select value={officialStation} onChange={(event) => setOfficialStation(event.target.value as TevOfficialStation)} required>{tevOfficialStations.map((station) => <option key={station} value={station}>{station}</option>)}</select></label>
-        <label>Month and Year<input type="month" value={month} onChange={(event) => updateMonth(event.target.value)} disabled={Boolean(initialRecord)} required /></label>
+        <label>Month and Year<input type="month" value={month} onChange={(event) => updateMonth(event.target.value)} required /></label>
         <label className="mytev-division-field">Division<select value={divisionName} disabled={Boolean(initialRecord) || profileDivision !== null} onChange={(event) => setDivisionName(event.target.value as TevDivision)} required>{tevDivisions.map((division) => <option key={division}>{division}</option>)}</select></label>
       </div></section>
       {!initialRecord && <section className="mytev-form-group mytev-personnel-group">
