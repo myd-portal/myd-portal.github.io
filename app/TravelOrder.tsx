@@ -428,9 +428,9 @@ function TravelOrderPaper({ order, person, role, office, division, unit }: { ord
         <span>Recommending Approval:</span>
         <span>Approved:</span>
         <strong>{recommendingSignatory.name.toLocaleUpperCase("en-PH")}</strong>
-        <strong>ENGR. RICARDO M. OÑATE JR.</strong>
+        <strong>CARLENE C. COLLADO, CPA</strong>
         <em>{isAdministrativeFinanceAdminUser ? <>{recommendingPosition}<br /><span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingSignatory.position === "OIC" ? <>OIC, <span className="travel-order-position-division">Administrative and Finance Division</span></> : recommendingPosition}</em>
-        <em>Regional Executive Director</em>
+        <em>OIC - Regional Executive Director</em>
       </div>
       <table className="travel-order-certification"><thead><tr><th>Date</th><th>Place of Visited</th><th>Purpose</th><th>Certifying Officer</th></tr></thead><tbody><tr><td /><td /><td>{order.purpose}</td><td /></tr></tbody></table>
     </div>

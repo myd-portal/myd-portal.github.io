@@ -483,7 +483,7 @@ export const createFodSpecialOrder = onCall({ region: "asia-southeast1" }, async
     ownerUnit: owner.unit,
     approvalWorkflow: "fod",
     approvalStage: "owner-send",
-    externalSignatory: ["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation),
+    externalSignatory: ["OIC - Regional Executive Director", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation),
     initialSignerId: projectLeader.userId,
     chiefSignerId: chief.userId,
     affixInitialSignature: "No",

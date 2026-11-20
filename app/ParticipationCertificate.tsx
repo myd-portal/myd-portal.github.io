@@ -488,7 +488,7 @@ function ParticipationPaper({ record, participant }: { record: ParticipationReco
         <p>has actively participated in <strong>{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong> at <strong>{record.eventDestination}</strong>.</p>
         <p>Given this {ordinalDay(record.distributionDate || record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
       </div>
-      <footer className="participation-signatory participation-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="participation-signatory participation-signatory-agristat"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
     </article>;
   }
   if (record.unit === "DRRM") {
@@ -499,7 +499,7 @@ function ParticipationPaper({ record, participant }: { record: ParticipationReco
         <p>for {possessive} active participation during the <strong className="participation-event-title-drrm">{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " \u2013 ")}</strong> at {record.eventDestination}.</p>
         <p>Given this {ordinalDay(record.distributionDate || record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
       </div>
-      <footer className="participation-signatory participation-signatory-drrm"><strong>ENGR. RICARDO M. O{"\u00d1"}ATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="participation-signatory participation-signatory-drrm"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
     </article>;
   }
 
@@ -523,7 +523,7 @@ function ParticipationPaper({ record, participant }: { record: ParticipationReco
         <p>for {possessive} active participation during the <strong><em>{record.eventTitle}</em></strong> conducted on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong> at {record.eventDestination}.</p>
         <p>Given this {ordinalDay(record.distributionDate || record.eventDateTo)} in at <strong>{record.distributionPlace}</strong><strong>, Philippines.</strong></p>
       </div>
-      <footer className="participation-signatory participation-signatory-amia"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="participation-signatory participation-signatory-amia"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
   </article>;
 }
 

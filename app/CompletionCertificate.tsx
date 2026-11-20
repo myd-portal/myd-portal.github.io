@@ -477,7 +477,7 @@ function CompletionPaper({ record, participantName }: { record: CompletionRecord
         <p>for having successfully completed the <strong className="completion-event-title">{record.eventTitle}</strong> during <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong> at <strong>{record.eventDestination}</strong>.</p>
         <p>Given this {ordinalDay(record.eventDateTo)} in at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
       </div>
-      <footer className="completion-signatory completion-signatory-amia"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="completion-signatory completion-signatory-amia"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
     </article>;
   }
   if (record.unit === "AGRISTAT") {
@@ -488,7 +488,7 @@ function CompletionPaper({ record, participantName }: { record: CompletionRecord
         <p>has completed the <strong className="completion-event-title">{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo).replace(" - ", " – ")}</strong>, at <strong>{record.eventDestination}</strong>.</p>
         <p>Given this {ordinalDay(record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
       </div>
-      <footer className="completion-signatory completion-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="completion-signatory completion-signatory-agristat"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
     </article>;
   }
   return <article className="completion-paper">
@@ -498,6 +498,6 @@ function CompletionPaper({ record, participantName }: { record: CompletionRecord
       <p>has completed the <strong className="completion-event-title">{record.eventTitle}</strong> during <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at {record.eventDestination}.</p>
       <p>Given this {ordinalDay(record.eventDateTo)} at <strong>{record.distributionPlace}</strong>, <strong>Philippines.</strong></p>
     </div>
-    <footer className="completion-signatory"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+    <footer className="completion-signatory"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
   </article>;
 }

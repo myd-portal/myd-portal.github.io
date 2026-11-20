@@ -530,7 +530,7 @@ function AppreciationPaper({ record, speaker }: { record: AppreciationRecord; sp
       <div className="appreciation-body appreciation-body-amia" ref={bodyRef}>
         <p>in appreciation of {possessive} invaluable expertise and insight on {possessive} field as a <strong>RESOURCE SPEAKER</strong> in the <strong><em>{record.eventTitle}</em></strong> conducted on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at {record.eventDestination}.</p>
         <p>Given this {ordinalDate(record.eventDateTo)} in at <strong>{countryLocation(record.distributionPlace)}</strong>.</p>
-        <footer className="appreciation-signatory appreciation-signatory-amia"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+        <footer className="appreciation-signatory appreciation-signatory-amia"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
       </div>
     </article>;
   }
@@ -543,7 +543,7 @@ function AppreciationPaper({ record, speaker }: { record: AppreciationRecord; sp
       <div className="appreciation-body appreciation-body-agristat" ref={bodyRef}>
         <p>For {objectPronoun} exemplary service, commitment, and invaluable shared insights as <strong>RESOURCE SPEAKER</strong> for <strong>{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at <strong>{record.eventDestination}</strong>.</p>
         <p>Given this {ordinalDate(record.eventDateTo)} at <strong>{countryLocation(record.distributionPlace)}</strong>.</p>
-        <footer className="appreciation-signatory appreciation-signatory-agristat"><strong>ENGR. RICARDO M. OÑATE JR.</strong><em>Regional Executive Director</em></footer>
+        <footer className="appreciation-signatory appreciation-signatory-agristat"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
       </div>
     </article>;
   }
@@ -555,7 +555,7 @@ function AppreciationPaper({ record, speaker }: { record: AppreciationRecord; sp
     <div className="appreciation-body" ref={bodyRef}>
       <p>For {objectPronoun} exemplary service, commitment, and invaluable shared insights as <strong>RESOURCE SPEAKER</strong> for <strong>{record.eventTitle}</strong> held on <strong>{displayDateRange(record.eventDateFrom, record.eventDateTo)}</strong> at <strong>{record.eventDestination}</strong>.</p>
       <p>Given this {ordinalDate(record.eventDateTo)} at <strong>{countryLocation(record.distributionPlace)}</strong>.</p>
-      <footer className="appreciation-signatory"><strong>ENGR. RICARDO M. O&#209;ATE JR.</strong><em>Regional Executive Director</em></footer>
+      <footer className="appreciation-signatory"><strong>CARLENE C. COLLADO, CPA</strong><em>OIC - Regional Executive Director</em></footer>
     </div>
 
   </article>;

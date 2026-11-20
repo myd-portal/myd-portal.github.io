@@ -108,7 +108,7 @@ type Permit = { id: string; permitNo: string; permitNos?: string[]; date: string
 type SpecialOrder = { id: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string; venue: string; attachmentLink?: string; participants: string[]; participantPositions?: string[]; participantUnits?: string[]; participantOffices?: string[]; participantUserIds?: string[]; participantIds?: string[]; recipientIds?: string[]; signatoryName?: string; signatoryDesignation?: string; ownerId: string; ownerUnit?: string; ownerOffice?: string; ownerDivision?: string; createdAt?: unknown; approvalWorkflow?: "fod"; approvalStage?: "owner-send" | "initial" | "chief" | "returned" | "approved"; externalSignatory?: boolean; initialSignerId?: string; chiefSignerId?: string; affixInitialSignature?: "Yes" | "No"; affixInitialSignatureURL?: string; affixInitialSignatureName?: string; affixInitialSignatureAt?: unknown; affixChiefInitialSignature?: "Yes" | "No"; affixChiefInitialSignatureURL?: string; affixChiefInitialSignatureName?: string; affixChiefInitialSignatureAt?: unknown; affixSignature?: "Yes" | "No"; affixSignatureURL?: string; affixSignatureName?: string; affixSignatureAt?: unknown };
 
 const specialOrderSignatories = [
-  { name: "ENGR. RICARDO M. OÑATE JR.", designation: "Regional Executive Director" },
+  { name: "CARLENE C. COLLADO, CPA", designation: "OIC - Regional Executive Director" },
   { name: "REBECCA R. ATEGA", designation: "RTD for Operations" },
   { name: "MARCO ANTONIO C. MORIDO", designation: "RTD for Research and Regulations" },
   { name: "MELODY M. GUIMARY", designation: "Chief, Field Operations Division" },
@@ -3350,7 +3350,7 @@ export default function Home() {
           signatoryDesignation,
         });
         if (response.data.orderId !== copyRef.id) throw new Error("Special Order service returned an unexpected record ID.");
-        savedRecord = { ...record, signatoryName, signatoryDesignation, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: ["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation), initialSignerId: response.data.initialSignerId, chiefSignerId: response.data.chiefSignerId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: new Date() };
+        savedRecord = { ...record, signatoryName, signatoryDesignation, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: ["OIC - Regional Executive Director", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation), initialSignerId: response.data.initialSignerId, chiefSignerId: response.data.chiefSignerId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: new Date() };
       } else {
         batch.set(copyRef, record);
       }

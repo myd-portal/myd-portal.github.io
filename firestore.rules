@@ -49,7 +49,7 @@ service cloud.firestore {
     function isCalendarActivityApprover(signatory) {
       return signatory is map
         && signatory.name is string && signatory.name.size() > 0 && signatory.name.size() <= 120
-        && signatory.designation in ["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulation"];
+        && signatory.designation in ["OIC - Regional Executive Director", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulation"];
     }
     function isFodCalendarApproverProfile(profile, designation) {
       return normalizedAccountRole(profile) == "admin"

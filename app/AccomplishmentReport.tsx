@@ -73,15 +73,15 @@ const arSignatoryOptions = [
     position: "Acting Supervising Administrative Officer",
     division: "Administrative and Finance Division",
   },
-  ...[
-    { designation: "Regional Executive Director", name: "ENGR. RICARDO M. O\u00d1ATE JR." },
-    { designation: "RTD for Operations", name: "REBECCA R. ATEGA" },
-    { designation: "RTD for Research and Regulations", name: "MARCO ANTONIO C. MORIDO" },
-  ].map((signatory) => ({
+  ...([
+    { designation: "Regional Executive Director", label: "OIC - Regional Executive Director", name: "CARLENE C. COLLADO, CPA", position: "OIC - Regional Executive Director" },
+    { designation: "RTD for Operations", label: "RTD for Operations", name: "REBECCA R. ATEGA", position: "RTD for Operations" },
+    { designation: "RTD for Research and Regulations", label: "RTD for Research and Regulations", name: "MARCO ANTONIO C. MORIDO", position: "RTD for Research and Regulations" },
+  ] as const).map((signatory) => ({
     value: `role:${signatory.designation}`,
-    label: signatory.designation,
+    label: signatory.label,
     name: signatory.name,
-    position: signatory.designation,
+    position: signatory.position,
     division: "",
   })),
 ].sort((first, second) => first.label.localeCompare(second.label));
@@ -228,6 +228,7 @@ function applyCurrentProfile(report: Report, profile: Profile | null): Report {
 function supervisorSelectionForReport(report: Report) {
   if (report.signatoryPosition === "Acting Supervising Administrative Officer") return "division:acting-supervising-administrative-officer";
   if (report.signatoryDivision) return `division:${report.signatoryDivision}`;
+  if (report.signatoryPosition === "OIC - Regional Executive Director") return "role:Regional Executive Director";
   if (["Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(report.signatoryPosition ?? "")) {
     return `role:${report.signatoryPosition}`;
   }

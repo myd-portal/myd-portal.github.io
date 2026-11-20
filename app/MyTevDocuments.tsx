@@ -367,7 +367,7 @@ function MyTevCtcPage({ record }: { record: MyTevRecord }) {
       <MyTevLetterhead appendix="Appendix 47" />
       <h1>CERTIFICATION OF TRAVEL COMPLETED</h1>
       <div className="mytev-ctc-entity"><b>Entity Name:</b><span>{tevEntityName}</span><b>Fund Cluster:</b><span>{tevFundCluster}</span></div>
-      <div className="mytev-ctc-station"><div><b style={fitTextStyle(tevCtcDirector, 48)}>{tevCtcDirector.toLocaleUpperCase("en-PH")}</b><em>Director-In-Charge</em></div><div><b style={{ ...fitTextStyle(tevCtcDirectorOffice, 32), whiteSpace: "nowrap", overflowWrap: "normal" }}>{tevCtcDirectorOffice.toLocaleUpperCase("en-PH")}</b><span>Station</span></div></div>
+      <div className="mytev-ctc-station"><div><b style={fitTextStyle(tevCtcDirector, 48)}>{tevCtcDirector.toLocaleUpperCase("en-PH")}</b><em>OIC - Regional Executive Director</em></div><div><b style={{ ...fitTextStyle(tevCtcDirectorOffice, 32), whiteSpace: "nowrap", overflowWrap: "normal" }}>{tevCtcDirectorOffice.toLocaleUpperCase("en-PH")}</b><span>Station</span></div></div>
       <p className="mytev-ctc-statement" style={fitTextStyle(references, 220)}><b>I HEREBY CERTIFY THAT</b> I have completed the travel as authorized in Travel Order/Itinerary of Travel Nos. <strong>{references}</strong>, under the conditions indicated below:</p>
       <div className="mytev-ctc-conditions">
         <p><i className={certification.strictlyInAccordance ? "is-checked" : undefined} /><span>Strictly in accordance with the approved itinerary.</span></p>
@@ -386,7 +386,7 @@ function MyTevCtcPage({ record }: { record: MyTevRecord }) {
         <div className="mytev-ctc-approval-spacer-row" aria-hidden="true" />
         <p className="mytev-ctc-approved">Approved:</p>
         <div className="mytev-ctc-approval-spacer-row" aria-hidden="true" />
-        <div className="mytev-ctc-signatory mytev-ctc-approving-signatory"><strong>ENGR. RICARDO M. OÑATE JR.</strong><span><em>Regional Executive Director</em></span></div>
+        <div className="mytev-ctc-signatory mytev-ctc-approving-signatory"><strong>CARLENE C. COLLADO, CPA</strong><span><em>OIC - Regional Executive Director</em></span></div>
       </>}
     </div>
   </article></div>;
