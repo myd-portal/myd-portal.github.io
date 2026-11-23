@@ -1,0 +1,9 @@
+name = "myd-wishlist-api"
+main = "src/index.js"
+compatibility_date = "2026-11-23"
+workers_dev = true
+
+[vars]
+FIREBASE_PROJECT_ID = "ps-taguibo"
+FIRESTORE_DATABASE_ID = "ps-taguibo"
+ALLOWED_ORIGINS = "https://myd-portal.github.io,http://localhost:3000,http://192.168.254.101:3000"

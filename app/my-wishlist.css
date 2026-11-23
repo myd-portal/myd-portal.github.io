@@ -30,7 +30,8 @@
 .my-wishlist-progress,
 .my-wishlist-card,
 .my-wishlist-reveal-action,
-.my-wishlist-reveal {
+.my-wishlist-reveal,
+.my-wishlist-load-retry {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -69,6 +70,17 @@
 .my-wishlist-card {
   display: grid;
   gap: 14px;
+}
+
+.my-wishlist-load-retry {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.my-wishlist-load-retry > .muted {
+  margin: 0;
 }
 
 .my-wishlist-card h3,
@@ -128,7 +140,9 @@
 
 .my-wishlist-form button,
 .my-wishlist-save-list,
-.my-wishlist-reveal-action > button {
+.my-wishlist-reveal-action > button,
+.my-wishlist-load-retry > button,
+.my-wishlist-error-retry {
   background: var(--accent);
   border: 0;
   border-radius: 9px;
@@ -144,13 +158,17 @@
 
 .my-wishlist-form button:hover:not(:disabled),
 .my-wishlist-save-list:hover:not(:disabled),
-.my-wishlist-reveal-action > button:hover:not(:disabled) {
+.my-wishlist-reveal-action > button:hover:not(:disabled),
+.my-wishlist-load-retry > button:hover:not(:disabled),
+.my-wishlist-error-retry:hover:not(:disabled) {
   background: var(--accent-dark);
 }
 
 .my-wishlist-form button:disabled,
 .my-wishlist-save-list:disabled,
-.my-wishlist-reveal-action > button:disabled {
+.my-wishlist-reveal-action > button:disabled,
+.my-wishlist-load-retry > button:disabled,
+.my-wishlist-error-retry:disabled {
   cursor: not-allowed;
   opacity: .52;
 }
@@ -473,7 +491,8 @@
   }
 
   .my-wishlist-progress,
-  .my-wishlist-reveal-action {
+  .my-wishlist-reveal-action,
+  .my-wishlist-load-retry {
     align-items: stretch;
     flex-direction: column;
   }
@@ -502,6 +521,10 @@
   .my-wishlist-reveal-action > button {
     width: 100%;
   }
+
+  .my-wishlist-load-retry > button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 420px) {
@@ -512,7 +535,8 @@
   .my-wishlist-progress,
   .my-wishlist-card,
   .my-wishlist-reveal-action,
-  .my-wishlist-reveal {
+  .my-wishlist-reveal,
+  .my-wishlist-load-retry {
     border-radius: 11px;
     padding: 13px;
   }

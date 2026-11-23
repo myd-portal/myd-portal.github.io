@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
 import { doc, onSnapshot } from "firebase/firestore";
 import type { AccountRole } from "@/lib/user-roles";
-import { db, functions } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import "./my-wishlist.css";
 
 type WishlistItem = {
@@ -42,11 +41,66 @@ type WishlistStatus = {
 };
 
 const emptyWishlist: WishlistItem[] = [];
+const droppedWishlistRequestMessage = "The myWishlist service is unavailable. Please try again later or contact the administrator.";
 
-async function callGetWishlistState() {
-  if (!functions) throw new Error("Wishlist storage is unavailable.");
-  const callable = httpsCallable<void, WishlistState>(functions, "getMyWishlistState");
-  return (await callable()).data;
+type WishlistApiError = Error & { code?: string };
+
+function isRetryableWishlistRequest(cause: unknown) {
+  const error = cause as WishlistApiError | null;
+  return (error?.code === "functions/internal" && /^internal \[0\]$/i.test(error.message))
+    || error?.code === "wishlist/unavailable"
+    || error?.code === "functions/unavailable";
+}
+
+function wishlistErrorMessage(cause: unknown, fallback: string) {
+  if (!(cause instanceof Error)) return fallback;
+  if (isRetryableWishlistRequest(cause)) {
+    return droppedWishlistRequestMessage;
+  }
+  return cause.message || fallback;
+}
+
+async function callWishlistApi<Request, ResponseData>(user: User, name: string, request?: Request): Promise<ResponseData> {
+  const apiUrl = process.env.NEXT_PUBLIC_WISHLIST_API_URL?.replace(/\/+$/, "");
+  if (!apiUrl) throw new Error("The myWishlist service is not configured.");
+  const token = await user.getIdToken();
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      let response: Response;
+      try {
+        response = await fetch(`${apiUrl}/${encodeURIComponent(name)}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(request ?? {}),
+        });
+      } catch {
+        const cause = new Error(droppedWishlistRequestMessage) as WishlistApiError;
+        cause.code = "wishlist/unavailable";
+        throw cause;
+      }
+
+      const payload = await response.json().catch(() => null) as { data?: ResponseData; error?: { code?: string; message?: string } } | null;
+      if (!response.ok) {
+        const cause = new Error(payload?.error?.message || "The myWishlist service could not complete the request.") as WishlistApiError;
+        cause.code = payload?.error?.code ? `functions/${payload.error.code}` : "functions/internal";
+        throw cause;
+      }
+      if (!payload || !Object.prototype.hasOwnProperty.call(payload, "data")) {
+        throw new Error("The myWishlist service returned an invalid response.");
+      }
+      return payload.data as ResponseData;
+    } catch (cause) {
+      if (attempt > 0 || !isRetryableWishlistRequest(cause)) throw cause;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
+async function callGetWishlistState(user: User) {
+  return callWishlistApi<void, WishlistState>(user, "getMyWishlistState");
 }
 
 export function canAccessMyWishlist(role: AccountRole, office: string, division: string, unit: string, designation: string) {
@@ -83,22 +137,22 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
   const [message, setMessage] = useState("");
 
   const refreshState = useCallback(async () => {
-    const currentState = await callGetWishlistState();
+    const currentState = await callGetWishlistState(user);
     setState(currentState);
     setNickname(currentState.nickname ?? "");
     setWishlist(currentState.wishlist ?? emptyWishlist);
     return currentState;
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let active = true;
-    void callGetWishlistState().then((currentState) => {
+    void callGetWishlistState(user).then((currentState) => {
       if (!active) return;
       setState(currentState);
       setNickname(currentState.nickname ?? "");
       setWishlist(currentState.wishlist ?? emptyWishlist);
     }).catch((cause: unknown) => {
-      if (active) setError(cause instanceof Error ? cause.message : "Could not load your wishlist.");
+      if (active) setError(wishlistErrorMessage(cause, "Could not load your wishlist."));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -109,7 +163,19 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
       if (active) setError(cause instanceof Error ? cause.message : "Could not load the Elfster status.");
     });
     return () => { active = false; stopStatus(); };
-  }, []);
+  }, [user]);
+
+  async function retryLoadState() {
+    setLoading(true);
+    setError("");
+    try {
+      await refreshState();
+    } catch (cause) {
+      setError(wishlistErrorMessage(cause, "Could not load your wishlist."));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function saveNickname(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,20 +184,15 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
       setError("Add your nickname before entering a wishlist.");
       return;
     }
-    if (!functions) {
-      setError("Wishlist storage is unavailable.");
-      return;
-    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const save = httpsCallable<{ nickname: string }, { saved: boolean }>(functions, "saveMyWishlist");
-      await save({ nickname: cleanNickname });
+      await callWishlistApi<{ nickname: string }, { saved: boolean }>(user, "saveMyWishlist", { nickname: cleanNickname });
       await refreshState();
       setMessage("Nickname saved. You can now add one or more wishlist items.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save your nickname.");
+      setError(wishlistErrorMessage(cause, "Could not save your nickname."));
     } finally {
       setBusy(false);
     }
@@ -159,10 +220,6 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
   }
 
   async function saveWishlist() {
-    if (!functions) {
-      setError("Wishlist storage is unavailable.");
-      return;
-    }
     if (!nickname.trim()) {
       setError("Save your nickname before saving a wishlist.");
       return;
@@ -175,34 +232,28 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
     setError("");
     setMessage("");
     try {
-      const save = httpsCallable<{ nickname: string; wishlist: WishlistItem[] }, { saved: boolean }>(functions, "saveMyWishlist");
-      await save({ nickname: nickname.trim(), wishlist });
+      await callWishlistApi<{ nickname: string; wishlist: WishlistItem[] }, { saved: boolean }>(user, "saveMyWishlist", { nickname: nickname.trim(), wishlist });
       await refreshState();
       setMessage("Your wishlist is saved.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save your wishlist.");
+      setError(wishlistErrorMessage(cause, "Could not save your wishlist."));
     } finally {
       setBusy(false);
     }
   }
 
   async function revealElfster() {
-    if (!functions) {
-      setError("Wishlist storage is unavailable.");
-      return;
-    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const reveal = httpsCallable<void, RevealedWishlist & { alreadyRevealed: boolean }>(functions, "revealElfster");
-      const result = await reveal();
-      const revealed = { nickname: result.data.nickname, wishlist: result.data.wishlist, cycleId: result.data.cycleId };
+      const result = await callWishlistApi<void, RevealedWishlist & { alreadyRevealed: boolean }>(user, "revealElfster");
+      const revealed = { nickname: result.nickname, wishlist: result.wishlist, cycleId: result.cycleId };
       setState((current) => current ? { ...current, revealed, drawActive: true } : current);
       await refreshState();
-      setMessage(result.data.alreadyRevealed ? "Your Elfster reveal is ready." : "Your Elfster reveal is ready. This nickname has been removed from the available draw.");
+      setMessage(result.alreadyRevealed ? "Your Elfster reveal is ready." : "Your Elfster reveal is ready. This nickname has been removed from the available draw.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not reveal your Elfster match.");
+      setError(wishlistErrorMessage(cause, "Could not reveal your Elfster match."));
     } finally {
       setBusy(false);
     }
@@ -226,7 +277,10 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
       <p className="muted">Add your nickname first, then save one or more gift ideas for your Elfster match.</p>
     </header>
 
-    {error && <p className="my-wishlist-message is-error" role="alert">{error}</p>}
+    {error && <>
+      <p className="my-wishlist-message is-error" role="alert">{error}</p>
+      {state && error === droppedWishlistRequestMessage && <button className="my-wishlist-error-retry" type="button" onClick={() => void retryLoadState()} disabled={loading || busy}>Reload myWishlist</button>}
+    </>}
     {message && <p className="my-wishlist-message is-success" role="status">{message}</p>}
 
     {loading ? <p className="muted">Loading myWishlist...</p> : <>
@@ -241,6 +295,7 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
               : "Reveal Elfster opens after at least two specified users have entered a wishlist."}</p>
       </section>
 
+      {state ? <>
       {state?.isParticipant === false && <p className="my-wishlist-message is-error" role="status">A draw is already active, and your account was not part of the participants who entered before it began.</p>}
 
       {!drawActive && <>
@@ -313,6 +368,10 @@ export function MyWishlist({ user, role, office, division, unit, designation }: 
         <div><h3>Reveal Elfster</h3><p className="muted">Once you reveal your Elfster match, you cannot change it. For the best experience, wait until at least 15 users have saved their wishlists before revealing.</p></div>
         <button type="button" onClick={() => void revealElfster()} disabled={busy || !ready || availableNicknameCount <= 0 || !state?.isParticipant || !state?.nickname || state.wishlist.length === 0}>{busy ? "Revealing..." : "Reveal Elfster"}</button>
       </section>}
+      </> : <div className="my-wishlist-load-retry">
+        <p className="muted">Your wishlist details are unavailable until the server responds.</p>
+        <button type="button" onClick={() => void retryLoadState()}>Retry</button>
+      </div>}
     </>}
   </section>;
 }
