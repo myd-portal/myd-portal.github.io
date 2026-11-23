@@ -507,6 +507,10 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   }
 
   const recordTotals = totalsForRecord(itineraries, rates);
+  const previouslyAddedPersonnel = (initialRecord?.sharedWith ?? []).map((userId) => ({
+    userId,
+    name: personnel.find((person) => person.userId === userId)?.profile.name || "Previously added personnel",
+  }));
 
   return <section className="content-section mytev-form-section">
     <div className="section-heading"><div><p className="eyebrow">{initialRecord ? "Edit record · myTEV" : "New record · myTEV"}</p><h2>{initialRecord ? "Edit Travel Expense Voucher" : "Create Travel Expense Voucher"}</h2><p className="muted">Complete the trip details, then add itinerary lines. Long entries continue onto additional A4 pages automatically.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
@@ -520,6 +524,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       </div></section>
       <section className="mytev-form-group mytev-personnel-group">
         <div className="mytev-form-group-heading"><div><h3>Personnel for this TEV</h3><p>Add regular and admin personnel from your Division. Each person receives a separate myTEV record with their own profile and Travel Order references.</p></div><button type="button" className="ghost-button" disabled={selectedPersonnelEntries.length >= maxTevPersonnel - (initialRecord?.sharedWith?.length ?? 0)} onClick={addPersonnelSlot}>+ Add another personnel</button></div>
+        {previouslyAddedPersonnel.length > 0 && <div className="mytev-existing-personnel"><strong>Already included on this TEV</strong><ul>{previouslyAddedPersonnel.map((person) => <li key={person.userId}>{person.name}</li>)}</ul><p>These personnel and their records will stay attached when you save this TEV.</p></div>}
         {selectedPersonnelEntries.length > 0 && <div className="mytev-personnel-list">{selectedPersonnelEntries.map((entry, index) => {
           const selectedPerson = personnel.find((person) => person.userId === entry.userId);
           return <div className="mytev-personnel-entry" key={entry.key}>
