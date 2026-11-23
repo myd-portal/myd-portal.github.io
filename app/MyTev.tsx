@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import NameSearchSelect from "./NameSearchSelect";
@@ -279,7 +279,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   }
 
   function addPersonnelSlot() {
-    setSelectedPersonnelEntries((current) => current.length >= maxTevPersonnel ? current : [...current, { key: documentId(), userId: "", travelReferences: [blankTevTravelReference()] }]);
+    const availableSlots = maxTevPersonnel - (initialRecord?.sharedWith?.length ?? 0);
+    setSelectedPersonnelEntries((current) => current.length >= availableSlots ? current : [...current, { key: documentId(), userId: "", travelReferences: [blankTevTravelReference()] }]);
   }
 
   function removePersonnelSlot(index: number) {
@@ -428,6 +429,15 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       setMessage("Each selected person must complete their name, address, Tax Identification No., and position in Profile first.");
       return;
     }
+    const selectedUserIds = selectedPersonnel.map((entry) => entry.person!.userId);
+    if (new Set(selectedUserIds).size !== selectedUserIds.length || selectedUserIds.some((userId) => initialRecord?.sharedWith?.includes(userId))) {
+      setMessage("Each personnel can receive only one record for this TEV.");
+      return;
+    }
+    if (selectedUserIds.length + (initialRecord?.sharedWith?.length ?? 0) > maxTevPersonnel) {
+      setMessage(`A TEV can include up to ${maxTevPersonnel} personnel records.`);
+      return;
+    }
     if (selectedPersonnel.some((entry) => entry.travelReferences.some((reference) => reference.dateFrom && reference.dateTo && reference.dateTo < reference.dateFrom))) {
       setMessage("Each selected personnel's Travel Order end date must be on or after its start date.");
       return;
@@ -447,44 +457,47 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       certificationOfTravel: certification,
       divisionName,
       itineraries: result.itineraries,
-      ...(initialRecord?.sharedWith?.length ? { sharedWith: initialRecord.sharedWith } : {}),
       ...(initialRecord?.createdById && initialRecord.sourceRecordId ? { createdById: initialRecord.createdById, sourceRecordId: initialRecord.sourceRecordId } : {}),
     };
     setSaving(true);
     try {
-      if (initialRecord) {
-        await updateDoc(doc(firestore, "myTevRecords", initialRecord.id), recordData);
-        onSaved({ ...initialRecord, ...recordData });
-      } else {
-        const reference = doc(collection(firestore, "myTevRecords"));
-        const selectedUserIds = selectedPersonnel.map((entry) => entry.person!.userId);
-        const batch = writeBatch(firestore);
-        batch.set(reference, { ...recordData, ...(selectedUserIds.length ? { sharedWith: selectedUserIds } : {}), createdAt: serverTimestamp() });
-        selectedPersonnel.forEach((entry) => {
-          const person = entry.person!;
-          const personnelRecord = doc(collection(firestore, "myTevRecords"));
-          batch.set(personnelRecord, {
-            ...recordData,
-            ownerId: person.userId,
-            profile: person.recordProfile,
-            travelReferences: entry.travelReferences.map((travelReference) => ({ ...travelReference, travelOrderNo: travelReference.travelOrderNo.trim() })),
-            createdById: ownerId,
-            sourceRecordId: reference.id,
-            createdAt: serverTimestamp(),
-          });
-          const notification = makeDocumentNotification(firestore, {
-            recipientId: person.userId,
-            ownerId,
-            documentId: reference.id,
-            documentType: "Travel Expense Voucher",
-            travelMonth: month,
-            totalAmount,
-          });
-          batch.set(notification.reference, notification.data);
+      const reference = initialRecord
+        ? doc(firestore, "myTevRecords", initialRecord.id)
+        : doc(collection(firestore, "myTevRecords"));
+      const sharedWith = [...new Set([...(initialRecord?.sharedWith ?? []), ...selectedUserIds])];
+      const sharedRecordData = { ...recordData, ...(sharedWith.length ? { sharedWith } : {}) };
+      const batch = writeBatch(firestore);
+      if (initialRecord) batch.update(reference, sharedRecordData);
+      else batch.set(reference, { ...sharedRecordData, createdAt: serverTimestamp() });
+      selectedPersonnel.forEach((entry) => {
+        const person = entry.person!;
+        const personnelRecord = doc(collection(firestore, "myTevRecords"));
+        batch.set(personnelRecord, {
+          ...recordData,
+          ownerId: person.userId,
+          profile: person.recordProfile,
+          travelReferences: entry.travelReferences.map((travelReference) => ({ ...travelReference, travelOrderNo: travelReference.travelOrderNo.trim() })),
+          createdById: ownerId,
+          sourceRecordId: reference.id,
+          createdAt: serverTimestamp(),
         });
-        await batch.commit();
-        onSaved({ ...recordData, ...(selectedUserIds.length ? { sharedWith: selectedUserIds } : {}), id: reference.id, createdAt: undefined });
-      }
+        const notification = makeDocumentNotification(firestore, {
+          recipientId: person.userId,
+          ownerId,
+          documentId: reference.id,
+          documentType: "Travel Expense Voucher",
+          travelMonth: month,
+          totalAmount,
+        });
+        batch.set(notification.reference, notification.data);
+      });
+      await batch.commit();
+      onSaved({
+        ...initialRecord,
+        ...sharedRecordData,
+        id: reference.id,
+        ...(initialRecord ? {} : { createdAt: undefined }),
+      });
     } catch (cause) {
       const code = (cause as { code?: string }).code;
       setMessage(code ? `Could not save myTEV (${code}).` : "Could not save myTEV. Try again.");
@@ -505,14 +518,14 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         <label>Month and Year<input type="month" value={month} onChange={(event) => updateMonth(event.target.value)} required /></label>
         <label className="mytev-division-field">Division<select value={divisionName} disabled={Boolean(initialRecord) || profileDivision !== null} onChange={(event) => setDivisionName(event.target.value as TevDivision)} required>{tevDivisions.map((division) => <option key={division}>{division}</option>)}</select></label>
       </div></section>
-      {!initialRecord && <section className="mytev-form-group mytev-personnel-group">
-        <div className="mytev-form-group-heading"><div><h3>Personnel for this TEV</h3><p>Add regular and admin personnel from your Division. Each person receives a separate myTEV record with their own profile and Travel Order references.</p></div><button type="button" className="ghost-button" disabled={selectedPersonnelEntries.length >= maxTevPersonnel} onClick={addPersonnelSlot}>+ Add another personnel</button></div>
+      <section className="mytev-form-group mytev-personnel-group">
+        <div className="mytev-form-group-heading"><div><h3>Personnel for this TEV</h3><p>Add regular and admin personnel from your Division. Each person receives a separate myTEV record with their own profile and Travel Order references.</p></div><button type="button" className="ghost-button" disabled={selectedPersonnelEntries.length >= maxTevPersonnel - (initialRecord?.sharedWith?.length ?? 0)} onClick={addPersonnelSlot}>+ Add another personnel</button></div>
         {selectedPersonnelEntries.length > 0 && <div className="mytev-personnel-list">{selectedPersonnelEntries.map((entry, index) => {
           const selectedPerson = personnel.find((person) => person.userId === entry.userId);
           return <div className="mytev-personnel-entry" key={entry.key}>
           <div className="name-search-field"><span>Add a Personnel for this TEV</span><NameSearchSelect aria-label={`Personnel for this TEV ${index + 1}`} value={entry.userId} onChange={(userId) => updateSelectedPersonnel(index, userId)} disabled={saving}>
             <option value="">Select a personnel</option>
-            {personnel.filter((person) => person.userId === entry.userId || !selectedPersonnelEntries.some((selectedEntry, selectedIndex) => selectedIndex !== index && selectedEntry.userId === person.userId)).map((person) => <option key={person.userId} value={person.userId} disabled={!person.profileComplete}>{person.profile.name}</option>)}
+            {personnel.filter((person) => person.userId === entry.userId || (!initialRecord?.sharedWith?.includes(person.userId) && !selectedPersonnelEntries.some((selectedEntry, selectedIndex) => selectedIndex !== index && selectedEntry.userId === person.userId))).map((person) => <option key={person.userId} value={person.userId} disabled={!person.profileComplete}>{person.profile.name}</option>)}
           </NameSearchSelect></div>
           <button type="button" className="mytev-remove-personnel remove-action" aria-label={`Remove personnel ${index + 1}`} disabled={saving} onClick={() => removePersonnelSlot(index)}>Remove</button>
           {entry.userId && <div className="mytev-personnel-references"><TravelReferenceEditor
@@ -529,7 +542,7 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         </div>;
         })}</div>}
         {personnel.length === 0 && <p className="mytev-personnel-empty">No other personnel accounts are available.</p>}
-      </section>}
+      </section>
       <section className="mytev-form-group"><TravelReferenceEditor
         references={references}
         month={month}
