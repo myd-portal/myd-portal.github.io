@@ -248,6 +248,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
     ? initialRecord.itineraries.map((itinerary) => ({ ...itinerary, rows: itinerary.rows.map((row) => ({ ...row, still: Boolean(row.still) && !row.stillWithPerDiem, stillWithPerDiem: Boolean(row.stillWithPerDiem), meansOfTransportation: normalizeTevTransportationMeansForEditor(row.meansOfTransportation), otherTransportation: row.otherTransportation ?? "", claims: [...row.claims] })) }))
     : [initialItinerary()]);
   const [selectedPersonnelEntries, setSelectedPersonnelEntries] = useState<TevPersonnelDraft[]>([]);
+  const [removedPersonnelIds, setRemovedPersonnelIds] = useState<string[]>([]);
+  const [personnelRemovalTarget, setPersonnelRemovalTarget] = useState<{ userId: string; name: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -279,7 +281,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   }
 
   function addPersonnelSlot() {
-    const availableSlots = maxTevPersonnel - (initialRecord?.sharedWith?.length ?? 0);
+    const retainedPersonnelCount = (initialRecord?.sharedWith ?? []).filter((userId) => !removedPersonnelIds.includes(userId)).length;
+    const availableSlots = maxTevPersonnel - retainedPersonnelCount;
     setSelectedPersonnelEntries((current) => current.length >= availableSlots ? current : [...current, { key: documentId(), userId: "", travelReferences: [blankTevTravelReference()] }]);
   }
 
@@ -434,7 +437,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       setMessage("Each personnel can receive only one record for this TEV.");
       return;
     }
-    if (selectedUserIds.length + (initialRecord?.sharedWith?.length ?? 0) > maxTevPersonnel) {
+    const retainedPersonnelIds = (initialRecord?.sharedWith ?? []).filter((userId) => !removedPersonnelIds.includes(userId));
+    if (selectedUserIds.length + retainedPersonnelIds.length > maxTevPersonnel) {
       setMessage(`A TEV can include up to ${maxTevPersonnel} personnel records.`);
       return;
     }
@@ -464,11 +468,29 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       const reference = initialRecord
         ? doc(firestore, "myTevRecords", initialRecord.id)
         : doc(collection(firestore, "myTevRecords"));
-      const sharedWith = [...new Set([...(initialRecord?.sharedWith ?? []), ...selectedUserIds])];
-      const sharedRecordData = { ...recordData, ...(sharedWith.length ? { sharedWith } : {}) };
+      const sharedWith = [...new Set([...retainedPersonnelIds, ...selectedUserIds])];
+      const hasExistingSharedWith = Array.isArray(initialRecord?.sharedWith);
+      const sharedRecordData = { ...recordData, ...(hasExistingSharedWith || sharedWith.length ? { sharedWith } : {}) };
       const batch = writeBatch(firestore);
       if (initialRecord) batch.update(reference, sharedRecordData);
       else batch.set(reference, { ...sharedRecordData, createdAt: serverTimestamp() });
+
+      const removedIds = removedPersonnelIds.filter((userId) => initialRecord?.sharedWith?.includes(userId));
+      if (initialRecord && removedIds.length) {
+        const removedIdSet = new Set(removedIds);
+        const [createdRecordsSnapshot, notificationsSnapshot] = await Promise.all([
+          getDocs(query(collection(firestore, "myTevRecords"), where("createdById", "==", ownerId))),
+          getDocs(query(collection(firestore, "documentNotifications"), where("ownerId", "==", ownerId), where("documentId", "==", reference.id))),
+        ]);
+        createdRecordsSnapshot.docs.forEach((createdRecord) => {
+          const createdRecordData = createdRecord.data();
+          if (createdRecordData.sourceRecordId === reference.id && removedIdSet.has(createdRecordData.ownerId)) batch.delete(createdRecord.ref);
+        });
+        notificationsSnapshot.docs.forEach((notification) => {
+          const notificationData = notification.data();
+          if (notificationData.documentType === "Travel Expense Voucher" && removedIdSet.has(notificationData.recipientId)) batch.delete(notification.ref);
+        });
+      }
       selectedPersonnel.forEach((entry) => {
         const person = entry.person!;
         const personnelRecord = doc(collection(firestore, "myTevRecords"));
@@ -507,10 +529,11 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
   }
 
   const recordTotals = totalsForRecord(itineraries, rates);
-  const previouslyAddedPersonnel = (initialRecord?.sharedWith ?? []).map((userId) => ({
+  const previouslyAddedPersonnel = (initialRecord?.sharedWith ?? []).filter((userId) => !removedPersonnelIds.includes(userId)).map((userId) => ({
     userId,
     name: personnel.find((person) => person.userId === userId)?.profile.name || "Previously added personnel",
   }));
+  const retainedPersonnelCount = previouslyAddedPersonnel.length;
 
   return <section className="content-section mytev-form-section">
     <div className="section-heading"><div><p className="eyebrow">{initialRecord ? "Edit record · myTEV" : "New record · myTEV"}</p><h2>{initialRecord ? "Edit Travel Expense Voucher" : "Create Travel Expense Voucher"}</h2><p className="muted">Complete the trip details, then add itinerary lines. Long entries continue onto additional A4 pages automatically.</p></div><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button></div>
@@ -523,8 +546,8 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
         <label className="mytev-division-field">Division<select value={divisionName} disabled={Boolean(initialRecord) || profileDivision !== null} onChange={(event) => setDivisionName(event.target.value as TevDivision)} required>{tevDivisions.map((division) => <option key={division}>{division}</option>)}</select></label>
       </div></section>
       <section className="mytev-form-group mytev-personnel-group">
-        <div className="mytev-form-group-heading"><div><h3>Personnel for this TEV</h3><p>Add regular and admin personnel from your Division. Each person receives a separate myTEV record with their own profile and Travel Order references.</p></div><button type="button" className="ghost-button" disabled={selectedPersonnelEntries.length >= maxTevPersonnel - (initialRecord?.sharedWith?.length ?? 0)} onClick={addPersonnelSlot}>+ Add another personnel</button></div>
-        {previouslyAddedPersonnel.length > 0 && <div className="mytev-existing-personnel"><strong>Already included on this TEV</strong><ul>{previouslyAddedPersonnel.map((person) => <li key={person.userId}>{person.name}</li>)}</ul><p>These personnel and their records will stay attached when you save this TEV.</p></div>}
+        <div className="mytev-form-group-heading"><div><h3>Personnel for this TEV</h3><p>Add regular and admin personnel from your Division. Each person receives a separate myTEV record with their own profile and Travel Order references.</p></div><button type="button" className="ghost-button" disabled={selectedPersonnelEntries.length >= maxTevPersonnel - retainedPersonnelCount} onClick={addPersonnelSlot}>+ Add another personnel</button></div>
+        {previouslyAddedPersonnel.length > 0 && <div className="mytev-existing-personnel"><strong>Already included on this TEV</strong><ul>{previouslyAddedPersonnel.map((person) => <li key={person.userId}><span>{person.name}</span><button type="button" className="mytev-remove-personnel remove-action" aria-label={`Remove ${person.name} from this TEV`} disabled={saving} onClick={() => setPersonnelRemovalTarget(person)}>Remove</button></li>)}</ul><p>These personnel and their records stay attached unless you confirm removal and save this TEV.</p></div>}
         {selectedPersonnelEntries.length > 0 && <div className="mytev-personnel-list">{selectedPersonnelEntries.map((entry, index) => {
           const selectedPerson = personnel.find((person) => person.userId === entry.userId);
           return <div className="mytev-personnel-entry" key={entry.key}>
@@ -617,6 +640,18 @@ function MyTevForm({ profile, profileDivision, ownerId, initialRecord, personnel
       <div className="mytev-record-totals"><span>Per Diem Grand Total<strong>₱{formatTevAmount(recordTotals.perDiem)}</strong></span><span>Transportation Grand Total<strong>₱{formatTevAmount(recordTotals.transportation)}</strong></span><span>Itinerary Grand Total<strong>₱{formatTevAmount(recordTotals.grandTotal)}</strong></span></div>
       <div className="mytev-form-actions"><button type="button" className="ghost-button" onClick={() => { setMessage(""); setStep("details"); }}>Back to Trip Details</button><button type="button" className="ghost-button" onClick={onCancel}>Cancel</button><button className="primary-button" disabled={saving}>{saving ? "Saving..." : initialRecord ? "Save changes" : "Save"}</button></div>
     </form>}
+    <DeleteConfirmation
+      open={Boolean(personnelRemovalTarget)}
+      title={`Remove ${personnelRemovalTarget?.name ?? "this personnel"} from this TEV?`}
+      description="Their separate myTEV record and its notification will be deleted when you save your changes. This cannot be undone after saving."
+      confirmLabel="Remove personnel"
+      onCancel={() => setPersonnelRemovalTarget(null)}
+      onConfirm={() => {
+        if (personnelRemovalTarget) setRemovedPersonnelIds((current) => current.includes(personnelRemovalTarget.userId) ? current : [...current, personnelRemovalTarget.userId]);
+        setMessage("");
+        setPersonnelRemovalTarget(null);
+      }}
+    />
   </section>;
 }
 

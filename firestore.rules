@@ -2334,6 +2334,21 @@ service cloud.firestore {
           && recordData.divisionName == getAfter(sourcePath).data.divisionName
           && recordData.itineraries == getAfter(sourcePath).data.itineraries;
       }
+      function isAuthorizedSharedMyTevCopyRemoval() {
+        let sourcePath = /databases/$(database)/documents/myTevRecords/$(resource.data.sourceRecordId);
+        return resource.data.ownerId is string
+          && resource.data.ownerId != request.auth.uid
+          && resource.data.createdById == request.auth.uid
+          && resource.data.sourceRecordId is string
+          && exists(sourcePath)
+          && existsAfter(sourcePath)
+          && get(sourcePath).data.ownerId == request.auth.uid
+          && get(sourcePath).data.sharedWith is list
+          && resource.data.ownerId in get(sourcePath).data.sharedWith
+          && getAfter(sourcePath).data.ownerId == request.auth.uid
+          && getAfter(sourcePath).data.sharedWith is list
+          && !(resource.data.ownerId in getAfter(sourcePath).data.sharedWith);
+      }
       function isValidMyTevRecord(recordData) {
         return recordData.keys().hasAll(["ownerId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "divisionName", "itineraries", "createdAt"])
           && recordData.keys().hasOnly(["ownerId", "sharedWith", "createdById", "sourceRecordId", "profile", "month", "officialStation", "travelReferences", "evidenceOfTravel", "evidenceOfTravelOptions", "evidenceOfTravelAdditional", "certificationOfTravel", "divisionName", "itineraries", "createdAt"])
@@ -2372,13 +2387,15 @@ service cloud.firestore {
           && recordData.itineraries.size() <= 8
           && recordData.createdAt is timestamp;
       }
-      allow read: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+      allow read: if isVerifiedUser()
+        && (resource.data.ownerId == request.auth.uid || resource.data.createdById == request.auth.uid);
       allow create: if isVerifiedUser() && isValidMyTevRecord(request.resource.data);
       allow update: if isVerifiedUser()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.createdAt == resource.data.createdAt
         && isValidMyTevRecord(request.resource.data);
-      allow delete: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
+      allow delete: if isVerifiedUser()
+        && (resource.data.ownerId == request.auth.uid || isAuthorizedSharedMyTevCopyRemoval());
     }
     match /myDriveFiles/{fileId} {
       allow read: if isVerifiedUser() && resource.data.ownerId == request.auth.uid;
