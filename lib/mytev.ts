@@ -341,7 +341,7 @@ export function totalsForRecord(itineraries: TevItinerary[], rates: TevRegionRat
 export function cenrrRows(itineraries: TevItinerary[]) {
   return itineraries.flatMap((itinerary) => itinerary.rows
     .map((row) => ({ ...row, amount: transportationForRow(row) }))
-    .filter((row) => row.meansOfTransportation === "MCH"
+    .filter((row) => ["MCH", "Boat", "PUB", "PUV", "Taxi"].includes(row.meansOfTransportation)
       && Boolean(row.dateFrom || row.dateTo || row.visitedPlaces || row.amount)
       && row.amount >= 1
       && row.amount <= 300));
