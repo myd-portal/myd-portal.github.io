@@ -38,7 +38,7 @@ import {
 } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "@/lib/firebase";
 import { filterPersonnelForAccount, filterPersonnelForDivisionRecipients, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
-import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
+import { isFieldOperationsAdminPermitOwner, isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
 import { accountRoleForEmail, isSuperadminRole, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
 import { accountOffice, accountAssignment, accountDesignation, accountDesignationOptions, accountOfficeOptions, accountPositionOptions, accountProfileSelection, assignmentsForOffice, divisionsForOffice, unitsForOfficeDivision, fieldOperationsAssignments, fieldOperationsCombinedAssignment } from "@/lib/account-profile";
 import { isFieldOperationsAppearanceApprover } from "@/lib/certificate-signatory";
@@ -805,8 +805,10 @@ function permitApprovalRoute(ownerOffice: string, ownerDivision: string, ownerUn
 }
 
 function permitNotificationAccountMatches(owner: PermitNotificationAccount, reviewer: PermitNotificationAccount) {
-  if (owner.accountRole !== "regular" || reviewer.accountRole !== "admin") return false;
+  if (reviewer.accountRole !== "admin") return false;
   const ownerProfile = { ownerRole: owner.accountRole, ownerOffice: owner.office, ownerDivision: owner.division, ownerUnit: owner.unit };
+  if (isFieldOperationsAdminPermitOwner(ownerProfile)) return isFieldOperationsChiefPermitSignatory(reviewer);
+  if (owner.accountRole !== "regular") return false;
   const isChiefScopeOwner = isFieldOperationsPermitOwner(ownerProfile);
   const isProjectLeaderScopeOwner = isFieldOperationsProjectLeaderPermitOwner(ownerProfile);
   if (isChiefScopeOwner || isProjectLeaderScopeOwner) {

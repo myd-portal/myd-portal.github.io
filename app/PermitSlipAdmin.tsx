@@ -6,7 +6,7 @@ import type { User } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import { ADMIN_EMAIL, SUPERADMIN_EMAIL, normalizeAccountRole, type AccountRole } from "@/lib/user-roles";
 import { accountProfileSelection } from "@/lib/account-profile";
-import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
+import { isFieldOperationsAdminPermitOwner, isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
 import { loadPersonnel, type PersonnelEntry } from "@/lib/personnel";
 import { normalizeWorkflowStatus, type WorkflowStatus } from "./workflow-status";
 import { assignApprovedPermitNumbers, displayPermitNumber, highestApprovedPermitSequence, permitNumberYear } from "./permit-number";
@@ -143,7 +143,10 @@ export default function PermitSlipAdmin({ user, mode, focusNotificationKey, canM
   }))), [permits]);
   const statusScopeEntries = useMemo(() => {
     if (mode !== "status") return entries;
-    if (isScopedFieldOperationsChief) return entries.filter((entry) => isFieldOperationsPermitOwner(permitOwnerScope(entry.permit, permitOwnerAccounts[entry.permit.ownerId ?? ""])));
+    if (isScopedFieldOperationsChief) return entries.filter((entry) => {
+      const owner = permitOwnerScope(entry.permit, permitOwnerAccounts[entry.permit.ownerId ?? ""]);
+      return isFieldOperationsPermitOwner(owner) || isFieldOperationsAdminPermitOwner(owner);
+    });
     if (isScopedFieldOperationsProjectLeader) return entries.filter((entry) => isFieldOperationsProjectLeaderPermitOwner(permitOwnerScope(entry.permit, permitOwnerAccounts[entry.permit.ownerId ?? ""])));
     return entries;
   }, [entries, isScopedFieldOperationsChief, isScopedFieldOperationsProjectLeader, mode, permitOwnerAccounts]);

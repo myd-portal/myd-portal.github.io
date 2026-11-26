@@ -49,6 +49,19 @@ export function isFieldOperationsPermitOwner(profile: {
   return isRegularFieldOperationsPermitOwner(profile, fieldOperationsPermitOwnerUnits);
 }
 
+export function isFieldOperationsAdminPermitOwner(profile: {
+  ownerRole?: unknown;
+  ownerOffice?: unknown;
+  ownerDivision?: unknown;
+  ownerUnit?: unknown;
+}) {
+  const ownerRole = typeof profile.ownerRole === "string" ? profile.ownerRole.trim().toLowerCase() : "";
+  return ownerRole === "admin"
+    && profile.ownerOffice === "Division"
+    && profile.ownerDivision === "Field Operations Division"
+    && profile.ownerUnit === "Field Operations Division";
+}
+
 export function isFieldOperationsProjectLeaderPermitOwner(profile: {
   ownerRole?: unknown;
   ownerOffice?: unknown;
