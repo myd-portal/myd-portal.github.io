@@ -16,7 +16,6 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
 import {
   addDoc,
   arrayUnion,
@@ -37,7 +36,7 @@ import {
   writeBatch,
   type QuerySnapshot,
 } from "firebase/firestore";
-import { auth, db, functions, isFirebaseConfigured } from "@/lib/firebase";
+import { auth, db, isFirebaseConfigured } from "@/lib/firebase";
 import { filterPersonnelForAccount, filterPersonnelForDivisionRecipients, loadPersonnel as loadAccountPersonnel, loadPermitAdminSignatories, personnelDisplayName, type PersonnelEntry, type PermitAdminSignatory } from "@/lib/personnel";
 import { isFieldOperationsChiefPermitSignatory, isFieldOperationsPermitOwner, isFieldOperationsProjectLeaderPermitOwner, isFieldOperationsProjectLeaderPermitSignatory } from "@/lib/permit-signatory";
 import { accountRoleForEmail, isSuperadminRole, normalizeAccountRole, normalizeAccountStatus, SUPERADMIN_EMAIL, type AccountRole, type AccountStatus } from "@/lib/user-roles";
@@ -1523,51 +1522,15 @@ function SpecialOrderForm({ user, ownerRole, ownerOffice, ownerDivision, ownerUn
       const firestore = db;
       const orderRef = doc(collection(firestore, "specialOrders"));
       const baseRecord = { subject: subject.trim(), activityTitle: activityTitle.trim(), organizer: organizer.trim(), dateFrom, dateTo: dateTo || dateFrom, timeFrom, timeTo, venue: venue.trim(), attachmentLink: attachmentLink.trim(), participants: participantList, participantPositions, participantUnits, participantUserIds, participantIds, recipientIds: participantIds.filter((id) => id !== user.uid), ...signatory, ownerId: user.uid, ownerOffice, ownerDivision: ownerDivision ?? "", ownerUnit };
-      let initialSignerId = saveWorkflowAccounts?.head?.userId;
       let record: Omit<SpecialOrder, "id">;
       if (workflowScope) {
-        if (!functions) throw new Error("Special Order service is unavailable.");
-        saveStage = "create FOD Special Order";
-        const createFodSpecialOrder = httpsCallable<{
-          orderId: string;
-          subject: string;
-          activityTitle: string;
-          organizer: string;
-          dateFrom: string;
-          dateTo: string;
-          timeFrom: string;
-          timeTo: string;
-          venue: string;
-          attachmentLink: string;
-          participants: string[];
-          participantPositions: string[];
-          participantUnits: string[];
-          participantUserIds: string[];
-          signatoryName: string;
-          signatoryDesignation: string;
-        }, { orderId: string; initialSignerId: string; chiefSignerId: string }>(functions, "createFodSpecialOrder");
-        const response = await createFodSpecialOrder({
-          orderId: orderRef.id,
-          subject: baseRecord.subject,
-          activityTitle: baseRecord.activityTitle,
-          organizer: baseRecord.organizer,
-          dateFrom: baseRecord.dateFrom,
-          dateTo: baseRecord.dateTo,
-          timeFrom: baseRecord.timeFrom,
-          timeTo: baseRecord.timeTo,
-          venue: baseRecord.venue,
-          attachmentLink: baseRecord.attachmentLink,
-          participants: baseRecord.participants,
-          participantPositions: baseRecord.participantPositions,
-          participantUnits: baseRecord.participantUnits,
-          participantUserIds: baseRecord.participantUserIds,
-          signatoryName: baseRecord.signatoryName,
-          signatoryDesignation: baseRecord.signatoryDesignation,
-        });
-        if (response.data.orderId !== orderRef.id) throw new Error("Special Order service returned an unexpected record ID.");
-        initialSignerId = response.data.initialSignerId;
-        const chiefSignerId = response.data.chiefSignerId;
-        record = { ...baseRecord, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: isAccountlessRegionalSignatory, initialSignerId, chiefSignerId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: new Date() };
+        const projectLeader = saveWorkflowAccounts?.head;
+        const chief = saveWorkflowAccounts?.chief;
+        if (!projectLeader || !chief) throw new Error("An active Field Operations Project Leader and Field Operations Division Chief account are required to create this Special Order.");
+        if (projectLeader.userId === chief.userId || projectLeader.userId === user.uid || chief.userId === user.uid) throw new Error("The Special Order approval route must use distinct approver accounts.");
+        record = { ...baseRecord, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: isAccountlessRegionalSignatory, initialSignerId: projectLeader.userId, chiefSignerId: chief.userId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: serverTimestamp() };
+        saveStage = "create specialOrders document";
+        await setDoc(orderRef, record);
       } else {
         record = { ...baseRecord, createdAt: serverTimestamp() };
         saveStage = "create specialOrders document";
@@ -3322,35 +3285,17 @@ export default function Home() {
       const batch = writeBatch(firestore);
       let savedRecord: Omit<SpecialOrder, "id"> = record;
       if (workflowScope) {
-        if (!functions) throw new Error("Special Order service is unavailable.");
+        const profiles = await getDocs(collection(firestore, "users"));
+        const route = selectSpecialOrderWorkflowAccounts(profiles);
+        if (!route.head || !route.chief) throw new Error("The active Field Operations Project Leader and Chief accounts must be set up before copying this Special Order.");
+        if (route.head.userId === route.chief.userId || route.head.userId === user.uid || route.chief.userId === user.uid) throw new Error("The Special Order approval route must use distinct approver accounts.");
         const signatoryName = order.signatoryName?.trim() || specialOrderSignatories[0].name;
         const signatoryDesignation = order.signatoryDesignation?.trim() || specialOrderSignatories[0].designation;
         const participantPositions = order.participantPositions?.length === order.participants.length ? [...order.participantPositions] : order.participants.map(() => "");
         const participantUnits = order.participantUnits?.length === order.participants.length ? [...order.participantUnits] : order.participants.map(() => "");
         const alignedParticipantUserIds = participantUserIds.length === order.participants.length ? participantUserIds : order.participants.map(() => "");
-        const createFodSpecialOrder = httpsCallable<{
-          orderId: string; subject: string; activityTitle: string; organizer: string; dateFrom: string; dateTo: string; timeFrom: string; timeTo: string; venue: string; attachmentLink: string; participants: string[]; participantPositions: string[]; participantUnits: string[]; participantUserIds: string[]; signatoryName: string; signatoryDesignation: string;
-        }, { orderId: string; initialSignerId: string; chiefSignerId: string }>(functions, "createFodSpecialOrder");
-        const response = await createFodSpecialOrder({
-          orderId: copyRef.id,
-          subject: record.subject,
-          activityTitle: record.activityTitle,
-          organizer: record.organizer,
-          dateFrom: record.dateFrom,
-          dateTo: record.dateTo,
-          timeFrom: order.timeFrom || "08:00",
-          timeTo: order.timeTo || "17:00",
-          venue: record.venue,
-          attachmentLink: record.attachmentLink ?? "",
-          participants: record.participants,
-          participantPositions,
-          participantUnits,
-          participantUserIds: alignedParticipantUserIds,
-          signatoryName,
-          signatoryDesignation,
-        });
-        if (response.data.orderId !== copyRef.id) throw new Error("Special Order service returned an unexpected record ID.");
-        savedRecord = { ...record, signatoryName, signatoryDesignation, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: ["OIC - Regional Executive Director", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation), initialSignerId: response.data.initialSignerId, chiefSignerId: response.data.chiefSignerId, affixInitialSignature: "No", affixChiefInitialSignature: "No", createdAt: new Date() };
+        savedRecord = { ...record, ownerOffice: "Division", ownerDivision: "Field Operations Division", participantPositions, participantUnits, participantUserIds: alignedParticipantUserIds, signatoryName, signatoryDesignation, approvalWorkflow: "fod", approvalStage: "owner-send", externalSignatory: ["OIC - Regional Executive Director", "Regional Executive Director", "RTD for Operations", "RTD for Research and Regulations"].includes(signatoryDesignation), initialSignerId: route.head.userId, chiefSignerId: route.chief.userId, affixInitialSignature: "No", affixChiefInitialSignature: "No" };
+        batch.set(copyRef, savedRecord);
       } else {
         batch.set(copyRef, record);
       }

@@ -3,9 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 import type { User } from "firebase/auth";
-import { db, functions } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { accountDesignation, accountProfileSelection } from "@/lib/account-profile";
 import NameSearchSelect from "./NameSearchSelect";
 import { loadPdfTools } from "@/lib/pdf-tools";
@@ -87,17 +86,6 @@ const normalizePersonnelName = (value: string) => value.normalize("NFKC").trim()
 const initialBatch = (): NtaBatch => ({ number: "1", dateFrom: "", dateTo: "", timeFrom: "08:00", timeTo: "17:00", venueType: "physical", venue: "", link: "", attendees: [{ name: "", position: "", office: "", unit: "", userId: "", manual: false }] });
 type NtaWorkflowAccount = { userId: string; name: string; designation: string; unit: string; position: string; office: string; division: string };
 type NtaWorkflowAccounts = { head: NtaWorkflowAccount | null; chief: NtaWorkflowAccount | null; signatories: NtaWorkflowAccount[] };
-type FodNtaCreateResult = { ntaId: string; initialSignerId: string; chiefSignerId: string; signatoryName: string; signatoryDesignation: string; ownerOffice: string; ownerDivision: string; ownerUnit: string; recipientIds: string[] };
-
-async function createFodNtaDocument(ntaId: string, record: object): Promise<FodNtaCreateResult> {
-  if (!functions) throw new Error("Notice to Attend service is unavailable.");
-  const serializableRecord = { ...(record as Record<string, unknown>) };
-  delete serializableRecord.createdAt;
-  const create = httpsCallable<{ ntaId: string; record: Record<string, unknown> }, FodNtaCreateResult>(functions, "createFodNta");
-  const response = await create({ ntaId, record: serializableRecord });
-  if (response.data.ntaId !== ntaId) throw new Error("Notice to Attend service returned an unexpected record ID.");
-  return response.data;
-}
 
 const isFodNtaWorkflowScope = (ownerRole: string, office: string, division: string, unit: string) => ownerRole === "regular" && office === "Division" && division === "Field Operations Division" && ["AGRISTAT", "AMIA", "DRRM"].includes(unit);
 const hasNtaSignature = (record: Pick<NtaRecord, "affixInitialSignature" | "affixInitialSignatureURL" | "affixSignature" | "affixSignatureURL">) =>
@@ -265,30 +253,12 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
         : { ...common, batches: batches.map((batch) => ({ ...batch, venue: batch.venue.trim(), link: batch.venueType === "virtual" ? batch.link.trim() : "", attendees: batch.attendees.map((attendee) => { const selectedPerson = attendee.manual ? undefined : personnel.find((person) => person.userId === attendee.userId); return { ...attendee, userId: attendee.manual ? "" : attendee.userId ?? "", name: attendee.manual ? attendee.name.trim() : selectedPerson?.name ?? attendee.name.trim(), position: attendee.manual ? attendee.position?.trim() ?? "" : selectedPerson?.position ?? attendee.position?.trim() ?? "", unit: attendee.manual ? attendee.unit?.trim() ?? "" : selectedPerson?.unit ?? attendee.unit?.trim() ?? "" }; }) })) };
       const firestore = db;
       const recordRef = doc(collection(firestore, "ntaRecords"));
-      let savedData: Record<string, unknown> = data;
-      let savedRecipientIds = recipientIds;
-      if (workflowScope) {
-        const routed = await createFodNtaDocument(recordRef.id, data);
-        savedRecipientIds = routed.recipientIds;
-        savedData = {
-          ...data,
-          signatoryName: routed.signatoryName,
-          signatoryDesignation: routed.signatoryDesignation,
-          ownerOffice: routed.ownerOffice,
-          ownerDivision: routed.ownerDivision,
-          ownerUnit: routed.ownerUnit,
-          initialSignerId: routed.initialSignerId,
-          chiefSignerId: routed.chiefSignerId,
-          recipientIds: routed.recipientIds,
-        };
-      } else {
-        const recordBatch = writeBatch(firestore);
-        recordBatch.set(recordRef, data);
-        await recordBatch.commit();
-      }
+      const recordBatch = writeBatch(firestore);
+      recordBatch.set(recordRef, data);
+      await recordBatch.commit();
       const notificationBatch = writeBatch(firestore);
       let notificationCount = 0;
-      savedRecipientIds.forEach((recipientId) => {
+      recipientIds.forEach((recipientId) => {
         const schedules = schedulesByRecipient.get(recipientId) ?? [];
         const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: data.activityTitle, schedules });
         notificationBatch.set(notification.reference, notification.data);
@@ -302,7 +272,7 @@ function NtaForm({ user, ownerRole, office, division, unit, onSaved, onCancel }:
           console.error("NTA saved, but its notifications could not be queued.", notificationError);
         }
       }
-      onSaved({ id: recordRef.id, ...savedData, createdAt: undefined } as NtaRecord, notificationWarning);
+      onSaved({ id: recordRef.id, ...data, createdAt: undefined } as NtaRecord, notificationWarning);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save Notice to Attend.");
     } finally { setBusy(false); }
@@ -1071,30 +1041,12 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
         ? { ...common, to: record.to ?? "", toUserId: record.toUserId ?? "", positionDesignation: record.positionDesignation ?? "", dateFrom: record.dateFrom ?? "", dateTo: record.dateTo ?? record.dateFrom ?? "", timeFrom: record.timeFrom ?? "", timeTo: record.timeTo ?? "", venueType: record.venueType ?? "physical", venue: record.venue ?? "", link: record.link ?? "" }
         : { ...common, batches: (record.batches ?? []).map((batch) => ({ ...batch, attendees: batch.attendees.map((attendee) => ({ ...attendee })) })) };
       const recordRef = doc(collection(firestore, "ntaRecords"));
-      let savedData: Record<string, unknown> = data;
-      let savedRecipientIds = recipientIds;
-      if (workflowScope) {
-        const routed = await createFodNtaDocument(recordRef.id, data);
-        savedRecipientIds = routed.recipientIds;
-        savedData = {
-          ...data,
-          signatoryName: routed.signatoryName,
-          signatoryDesignation: routed.signatoryDesignation,
-          ownerOffice: routed.ownerOffice,
-          ownerDivision: routed.ownerDivision,
-          ownerUnit: routed.ownerUnit,
-          initialSignerId: routed.initialSignerId,
-          chiefSignerId: routed.chiefSignerId,
-          recipientIds: routed.recipientIds,
-        };
-      } else {
-        const recordBatch = writeBatch(firestore);
-        recordBatch.set(recordRef, data);
-        await recordBatch.commit();
-      }
+      const recordBatch = writeBatch(firestore);
+      recordBatch.set(recordRef, data);
+      await recordBatch.commit();
       const notificationBatch = writeBatch(firestore);
       let notificationCount = 0;
-      savedRecipientIds.forEach((recipientId) => {
+      recipientIds.forEach((recipientId) => {
         const notification = makeDocumentNotification(firestore, { recipientId, ownerId: user.uid, documentId: recordRef.id, documentType: "Notice to Attend", activityTitle: record.activityTitle, schedules: schedulesByRecipient.get(recipientId) ?? [] });
         notificationBatch.set(notification.reference, notification.data);
         notificationCount += 1;
@@ -1107,7 +1059,7 @@ export default function NtaModule({ user, ownerRole = "", office, division, unit
           console.error("NTA copied, but its notifications could not be queued.", notificationError);
         }
       }
-      setRecords((current) => prependNtaRecord(current, { id: recordRef.id, ...savedData, createdAt: undefined } as NtaRecord));
+      setRecords((current) => prependNtaRecord(current, { id: recordRef.id, ...data, createdAt: undefined } as NtaRecord));
       if (notificationFailed) setLoadError("The NTA was copied, but one or more notifications could not be sent. The copy is in your NTA list.");
     } catch (cause) {
       const code = (cause as { code?: string }).code;
